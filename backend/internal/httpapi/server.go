@@ -14,30 +14,50 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/SIDED00R/seoul-route/backend/internal/auth"
+	"github.com/SIDED00R/seoul-route/backend/internal/route"
 )
 
 type Server struct {
-	DB     *pgxpool.Pool
-	JWT    *auth.JWT
-	Google auth.GoogleVerifier // nil 이면 /auth/google 은 503
-	OTPURL string
-	HTTP   *http.Client
-	Log    *slog.Logger
+	DB      *pgxpool.Pool
+	JWT     *auth.JWT
+	Google  auth.GoogleVerifier // nil 이면 /auth/google 은 503
+	OTPURL  string
+	HTTP    *http.Client
+	Log     *slog.Logger
+	Planner *route.Planner
+	GBFS    http.Handler // nil 이면 /gbfs/* 은 503
 }
 
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer, middleware.Timeout(30*time.Second))
+	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer)
 	r.Use(s.logRequests)
-	r.Get("/health", s.handleHealth)
-	r.Post("/auth/google", s.handleAuthGoogle)
+	// chi Timeout 은 부모 컨텍스트 데드라인을 늘릴 수 없으므로 전역에 걸지 않고 라우트별로 건다.
+	short := middleware.Timeout(DefaultTimeout)
+	r.With(short).Get("/health", s.handleHealth)
+	r.With(short).Post("/auth/google", s.handleAuthGoogle)
+	r.With(short).Get("/gbfs/*", func(w http.ResponseWriter, req *http.Request) {
+		if s.GBFS == nil {
+			writeError(w, http.StatusServiceUnavailable, "GBFS 미설정")
+			return
+		}
+		s.GBFS.ServeHTTP(w, req)
+	})
 	r.Group(func(r chi.Router) {
 		r.Use(s.requireAuth)
-		r.Get("/users/me", s.handleGetMe)
-		r.Delete("/users/me", s.handleDeleteMe)
+		r.With(short).Get("/users/me", s.handleGetMe)
+		r.With(short).Delete("/users/me", s.handleDeleteMe)
+		// via 대중교통 탐색이 OTP 에서 15~37초 걸린다(실측) → 이 경로만 상한이 길다.
+		r.With(middleware.Timeout(PlanTimeout)).Post("/routes/plan", s.handlePlan)
 	})
 	return r
 }
+
+const (
+	DefaultTimeout = 30 * time.Second
+	// PlanTimeout: /routes/plan 의 요청 상한. OTP 클라이언트 타임아웃도 이 값 이상이어야 한다(main.go).
+	PlanTimeout = 60 * time.Second
+)
 
 type ctxKey int
 
