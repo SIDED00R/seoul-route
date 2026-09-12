@@ -16,6 +16,7 @@ import (
 	"github.com/SIDED00R/seoul-route/backend/internal/config"
 	"github.com/SIDED00R/seoul-route/backend/internal/db"
 	"github.com/SIDED00R/seoul-route/backend/internal/gbfs"
+	"github.com/SIDED00R/seoul-route/backend/internal/headway"
 	"github.com/SIDED00R/seoul-route/backend/internal/httpapi"
 	"github.com/SIDED00R/seoul-route/backend/internal/otp"
 	"github.com/SIDED00R/seoul-route/backend/internal/realtime"
@@ -54,6 +55,13 @@ func main() {
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	otpClient := &otp.Client{URL: cfg.OTPURL, HTTP: &http.Client{Timeout: httpapi.PlanTimeout}}
 	planner := &route.Planner{OTP: otpClient}
+	// 버스 배차간격(앱 "배차 약 N분")은 생성 GTFS 의 frequencies.txt 에서. 없으면 표시만 빠진다.
+	if hw, err := headway.Load(cfg.GTFSZip); err != nil {
+		log.Warn("headways disabled", "path", cfg.GTFSZip, "err", err)
+	} else {
+		planner.Headways = hw
+		log.Info("headways loaded", "routes", len(hw))
+	}
 	// 첫 탑승 실시간 보정. 키가 있는 수단만 켠다. 외부 API 는 응답이 느릴 수 있어 짧은 타임아웃.
 	rt := &realtime.Corrector{Log: log}
 	rtHTTP := &http.Client{Timeout: 5 * time.Second}
