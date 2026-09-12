@@ -50,10 +50,29 @@ func main() {
 		log.Warn("google login disabled", "reason", err.Error())
 	}
 	httpClient := &http.Client{Timeout: 30 * time.Second}
+	otpClient := &otp.Client{URL: cfg.OTPURL, HTTP: &http.Client{Timeout: httpapi.PlanTimeout}}
+	planner := &route.Planner{OTP: otpClient}
+	// 부모역 목록은 OTP 에서 한 번 받는다. Compose 에서는 OTP 가 그래프 로드에 1~2분 걸려 api 보다 늦게 뜨므로
+	// 될 때까지 30초마다 재시도하고, 그동안은 앵커링 없이(좌표로) 동작한다.
+	go func() {
+		for {
+			sts, err := otpClient.Stations(ctx)
+			if err == nil {
+				planner.SetStations(sts)
+				log.Info("stations loaded", "n", len(sts))
+				return
+			}
+			log.Warn("stations load failed, retrying in 30s", "err", err)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(30 * time.Second):
+			}
+		}
+	}()
 	srv := &httpapi.Server{
 		DB: pool, JWT: auth.NewJWT(cfg.JWTSecret), Google: google, OTPURL: cfg.OTPURL, HTTP: httpClient, Log: log,
-		Planner: &route.Planner{OTP: &otp.Client{URL: cfg.OTPURL, HTTP: &http.Client{Timeout: httpapi.PlanTimeout}}},
-		KakaoKey: cfg.KakaoRESTKey, VWorldKey: cfg.VWorldKey,
+		Planner: planner, KakaoKey: cfg.KakaoRESTKey, VWorldKey: cfg.VWorldKey,
 	}
 	if cfg.KakaoRESTKey == "" {
 		log.Warn("places search disabled", "reason", "KAKAO_REST_API_KEY 없음")

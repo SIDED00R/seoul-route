@@ -33,7 +33,7 @@ func readTable(t *testing.T, zr *zip.ReadCloser, name string) [][]string {
 
 func sampleRoute() BusRoute {
 	return BusRoute{
-		Route: seoulbus.Route{ID: "100100047", Name: "271", StartName: "용마문화복지센터", EndName: "월드컵파크7단지",
+		Route: seoulbus.Route{ID: "100100047", Name: "271", Type: "3", StartName: "용마문화복지센터", EndName: "월드컵파크7단지",
 			FirstBus: "20260912041000", LastBus: "20260912003000", TermMin: "6"},
 		Stops: []seoulbus.Stop{
 			{Seq: "1", StationID: "106000101", Name: "A", Lon: "127.095", Lat: "37.586", SectDist: "0", SectSpd: "0"},
@@ -60,8 +60,8 @@ func TestBuildBusOnly(t *testing.T) {
 	defer zr.Close()
 
 	st := readTable(t, zr, "stop_times.txt")
-	// 360m@36km/h = 36s, 500m@18km/h(fallback) = 100s → 누적 0, 36, 136
-	want := []string{"00:00:00", "00:00:36", "00:02:16"}
+	// 360m@36km/h = 36s, 500m@18km/h(fallback) = 100s, 간선 정차 38s/구간 → 누적 0, 74, 212
+	want := []string{"00:00:00", "00:01:14", "00:03:32"}
 	var got []string
 	for _, row := range st[1:] {
 		if row[0] == "B_100100047_T" {
@@ -86,7 +86,7 @@ func TestBuildBusOnly(t *testing.T) {
 			lastTimes = append(lastTimes, row[1])
 		}
 	}
-	if strings.Join(lastTimes, ",") != "24:30:00,24:30:36,24:32:16" {
+	if strings.Join(lastTimes, ",") != "24:30:00,24:31:14,24:33:32" {
 		t.Errorf("막차 trip stop_times=%v (막차 24:30:00 + 누적 소요)", lastTimes)
 	}
 	rt := readTable(t, zr, "routes.txt")
@@ -97,8 +97,26 @@ func TestBuildBusOnly(t *testing.T) {
 	if len(sp) != 4 || !strings.HasPrefix(sp[1][0], "BS_") {
 		t.Errorf("stops=%v", sp)
 	}
-	if rep.Routes[0].TravelSec != 136 {
+	if rep.Routes[0].TravelSec != 212 {
 		t.Errorf("report route=%+v", rep.Routes[0])
+	}
+}
+
+// 정차시간은 노선유형별: 간선 38, 지선·미측정 유형 30, 마을·광역·공항 0.
+func TestDwellSecByRouteType(t *testing.T) {
+	cases := map[string]int{
+		"3": DwellTrunkSec, "4": DwellBranchSec, "2": 0, "6": 0, "1": 0, " 8 ": DwellBranchSec, "": DwellBranchSec,
+	}
+	for typ, want := range cases {
+		if got := dwellSec(typ); got != want {
+			t.Errorf("routeType %q: got %d want %d", typ, got, want)
+		}
+	}
+	b := sampleRoute()
+	b.Route.Type = "2"
+	rep, err := Build(filepath.Join(t.TempDir(), "m.zip"), []BusRoute{b}, nil)
+	if err != nil || rep.Routes[0].TravelSec != 136 {
+		t.Fatalf("마을버스는 정차 0 → 136 이어야: %v %+v", err, rep.Routes)
 	}
 }
 

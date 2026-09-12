@@ -27,19 +27,28 @@ type Modes struct {
 }
 
 type Transit struct {
-	Access   []string `json:"access"`
-	Egress   []string `json:"egress"`
-	Transfer []string `json:"transfer"`
+	Access   []string      `json:"access"`
+	Egress   []string      `json:"egress"`
+	Transfer []string      `json:"transfer"`
+	Modes    []TransitMode `json:"transit,omitempty"` // 비면 전 수단. 지하철만·버스만 탐색에 쓴다
+}
+
+type TransitMode struct {
+	Mode string `json:"mode"` // SUBWAY, BUS, RAIL ...
 }
 
 type Request struct {
 	Origin, Destination Coord
-	Via                 []Coord
-	Modes               Modes
-	WalkSpeed           float64    // m/s, 0 이면 OTP 기본
-	BikeSpeed           float64    // m/s
-	Depart              *time.Time // nil = 지금 출발(OTP 가 대여소 실시간 잔여대수를 반영하는 유일한 경우)
-	First               int
+	// OriginStop/DestStop 이 있으면 좌표 대신 역(gtfsId, 예 "seoul:ST_서울")으로 요청한다. OTP 가 역 안에서
+	// 여정에 맞는 stop 을 고르므로 역사 좌표가 엉뚱한 도로에 붙는 문제를 피한다(이슈 #12).
+	OriginStop, DestStop string
+	Via                  []Coord
+	ViaStops             []string // Via 와 같은 길이. 비어 있지 않은 항목은 좌표 대신 그 역 ID 로 경유한다
+	Modes                Modes
+	WalkSpeed            float64    // m/s, 0 이면 OTP 기본
+	BikeSpeed            float64    // m/s
+	Depart               *time.Time // nil = 지금 출발(OTP 가 대여소 실시간 잔여대수를 반영하는 유일한 경우)
+	First                int
 }
 
 type Leg struct {
@@ -96,15 +105,19 @@ var ErrNoRoute = errors.New("경로 없음")
 // Plan 은 planConnection 을 호출해 itinerary 목록을 돌려준다. 경로가 없으면 ErrNoRoute(원인 포함).
 func (c *Client) Plan(ctx context.Context, r Request) ([]Itinerary, error) {
 	vars := map[string]any{
-		"origin":      loc(r.Origin),
-		"destination": loc(r.Destination),
+		"origin":      loc(r.Origin, r.OriginStop),
+		"destination": loc(r.Destination, r.DestStop),
 		"modes":       r.Modes, // 생략하면 via 처리에서 OTP NPE(실측) — 항상 보낸다
 		"first":       r.First,
 	}
 	if len(r.Via) > 0 {
 		via := make([]map[string]any, 0, len(r.Via))
-		for _, v := range r.Via {
-			via = append(via, map[string]any{"visit": map[string]any{"coordinate": v, "minimumWaitTime": "PT0S"}})
+		for i, v := range r.Via {
+			visit := map[string]any{"coordinate": v, "minimumWaitTime": "PT0S"}
+			if i < len(r.ViaStops) && r.ViaStops[i] != "" {
+				visit = map[string]any{"stopLocationIds": []string{r.ViaStops[i]}, "minimumWaitTime": "PT0S"}
+			}
+			via = append(via, map[string]any{"visit": visit})
 		}
 		vars["via"] = via
 	}
@@ -153,8 +166,57 @@ func (c *Client) Plan(ctx context.Context, r Request) ([]Itinerary, error) {
 	return its, nil
 }
 
-func loc(c Coord) map[string]any {
+func loc(c Coord, stop string) map[string]any {
+	if stop != "" {
+		return map[string]any{"location": map[string]any{"stopLocation": map[string]any{"stopLocationId": stop}}}
+	}
 	return map[string]any{"location": map[string]any{"coordinate": c}}
+}
+
+// Station 은 GTFS 부모역(location_type=1). Name 은 괄호 없는 기준명("서울").
+type Station struct {
+	ID   string // gtfsId, 예 "seoul:ST_서울"
+	Name string
+	Lat  float64
+	Lon  float64
+}
+
+const stationsQuery = `{ stations { gtfsId name lat lon } }`
+
+// Stations 는 그래프의 부모역 전부를 돌려준다. 기동 시 한 번 불러 앵커링에 쓴다.
+func (c *Client) Stations(ctx context.Context) ([]Station, error) {
+	body, _ := json.Marshal(map[string]any{"query": stationsQuery})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.URL+"/otp/gtfs/v1", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("otp: %w", err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Errors []struct{ Message string } `json:"errors"`
+		Data   struct {
+			Stations []struct {
+				GtfsID   string `json:"gtfsId"`
+				Name     string
+				Lat, Lon float64
+			}
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&out); err != nil {
+		return nil, fmt.Errorf("otp: stations 응답 파싱 실패 (HTTP %d)", resp.StatusCode)
+	}
+	if len(out.Errors) > 0 {
+		return nil, fmt.Errorf("otp: %s", out.Errors[0].Message)
+	}
+	sts := make([]Station, 0, len(out.Data.Stations))
+	for _, s := range out.Data.Stations {
+		sts = append(sts, Station{ID: s.GtfsID, Name: s.Name, Lat: s.Lat, Lon: s.Lon})
+	}
+	return sts, nil
 }
 
 type response struct {
