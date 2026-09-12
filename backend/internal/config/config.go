@@ -23,6 +23,7 @@ type Config struct {
 	BusArrivalKey       string // 공공데이터포털 키(DATA_GO_KR_KEY). 비면 버스 첫 탑승 실시간 보정 없음
 	SubwayRealtimeKey   string // 열린데이터광장 지하철 실시간 키. 비면 지하철 첫 탑승 실시간 보정 없음
 	GTFSZip             string // 생성 GTFS zip(배차간격 표시용). 기본 <레포>/otp/data/seoul-gtfs.zip, 없으면 배차 표시 없음
+	ODsayKey            string // ODsay Lab 키. cmd/odcompare(정확도 대조)에서만 쓴다. 서버는 안 쓴다
 }
 
 // Load 는 .env(있으면)를 읽고 환경변수로 덮어쓴 뒤 필수값을 검사한다.
@@ -54,6 +55,7 @@ func Load() (Config, error) {
 		BusArrivalKey:       get("DATA_GO_KR_KEY", ""),
 		SubwayRealtimeKey:   get("SEOUL_SUBWAY_REALTIME_KEY", ""),
 		GTFSZip:             get("GTFS_ZIP", defaultGTFS),
+		ODsayKey:            get("ODSAY_API_KEY", ""),
 	}
 	c.PublicURL = strings.TrimRight(get("PUBLIC_URL", "http://localhost:"+c.Port), "/")
 	var missing []string
