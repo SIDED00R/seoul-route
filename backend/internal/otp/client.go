@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -70,6 +71,13 @@ type Leg struct {
 	RentedBike bool    `json:"rented_bike,omitempty"`
 	TransitLeg bool    `json:"transit_leg"`
 	Polyline   string  `json:"polyline,omitempty"` // Google encoded polyline
+	// 앞뒤 차: 같은 탑승·하차 정류장의 이전/다음 출발(RFC3339). 시간표 기반(지하철)에서만 채운다 — 배차간격 기반
+	// 버스는 OTP 가 막차 trip 만 돌려줘(실측) 비워 두고 HeadwaySec 을 쓴다. leg 출발 ±3시간 밖과, 소요시간이
+	// 현재 leg 의 0.5~2배 밖인 것(순환선 반대 방향 열차)은 버린다.
+	PrevDepartures   []string `json:"prev_departures,omitempty"`
+	NextDepartures   []string `json:"next_departures,omitempty"`
+	HeadwaySec       int      `json:"headway_sec,omitempty"`           // 생성 GTFS frequencies 의 배차간격(버스)
+	RealtimeArrivals []int    `json:"realtime_arrivals_sec,omitempty"` // 첫 탑승 정류장의 실시간 다음 차(초, 지금 기준)
 }
 
 type Itinerary struct {
@@ -104,7 +112,9 @@ query Plan($origin: PlanLabeledLocationInput!, $destination: PlanLabeledLocation
       legs { mode duration distance rentedBike transitLeg
              start { scheduledTime } end { scheduledTime }
              from { name lat lon stop { gtfsId } } to { name lat lon } route { shortName gtfsId }
-             intermediateStops { name } legGeometry { points } }
+             intermediateStops { name } legGeometry { points }
+             previousLegs(numberOfLegs: 5) { start { scheduledTime } duration }
+             nextLegs(numberOfLegs: 7) { start { scheduledTime } duration } }
     } }
   }
 }`
@@ -268,7 +278,39 @@ type node struct {
 		}
 		IntermediateStops []struct{ Name string }
 		LegGeometry       *struct{ Points string }
+		PreviousLegs      []legTime
+		NextLegs          []legTime
 	}
+}
+
+type legTime struct {
+	Start    struct{ ScheduledTime string }
+	Duration float64
+}
+
+// nearbyDepartures 는 앞뒤 차 중 기준 시각 ±3시간 안이고 소요시간이 현재 leg 의 0.5~2배인 것만 돌려준다.
+// ±3시간은 배차 기반 trip 의 막차 sentinel 제거. 소요시간 조건은 순환선(2호선)에서 같은 두 역을 반대 방향으로
+// 한 바퀴 돌아 잇는 열차(9분 구간에 81분짜리, 실측)를 빼기 위한 것이다. 노선 ID 로 거르면 1호선처럼
+// 계열 노선(1U·7U·2U)이 같은 구간을 같은 시간에 달리는 정상 항목까지 빠진다(실측).
+func nearbyDepartures(legs []legTime, ref string, refDuration float64) []string {
+	base, err := time.Parse(time.RFC3339, ref)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, l := range legs {
+		t, err := time.Parse(time.RFC3339, l.Start.ScheduledTime)
+		if err != nil {
+			continue
+		}
+		if refDuration > 0 && (l.Duration < refDuration*0.5 || l.Duration > refDuration*2) {
+			continue
+		}
+		if d := t.Sub(base); d > -3*time.Hour && d < 3*time.Hour && d != 0 {
+			out = append(out, l.Start.ScheduledTime)
+		}
+	}
+	return out
 }
 
 func (n node) itinerary() Itinerary {
@@ -281,6 +323,10 @@ func (n node) itinerary() Itinerary {
 		if l.Route != nil {
 			leg.Route = l.Route.ShortName
 			leg.RouteID = l.Route.GtfsID
+		}
+		if l.TransitLeg && !strings.HasPrefix(leg.RouteID, "seoul:B_") { // 버스(배차 기반)는 HeadwaySec 으로
+			leg.PrevDepartures = nearbyDepartures(l.PreviousLegs, leg.Start, leg.Duration)
+			leg.NextDepartures = nearbyDepartures(l.NextLegs, leg.Start, leg.Duration)
 		}
 		if l.From.Stop != nil {
 			leg.FromStopID = l.From.Stop.GtfsID

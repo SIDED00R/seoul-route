@@ -61,6 +61,7 @@ type Planner struct {
 		Adjust(context.Context, []otp.Itinerary) []otp.Itinerary
 	}
 	Now      func() time.Time // 테스트용 현재 시각. nil 이면 time.Now
+	Headways map[string]int   // GTFS route_id(예 "B_100100063") → 배차간격(초). 버스 leg 의 "배차 약 N분" 표시용
 	mu       sync.RWMutex
 	stations []otp.Station // 앵커링용 부모역 목록(SetStations). 비면 항상 좌표로 요청한다
 }
@@ -124,7 +125,31 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) ([]otp.Itinerary, e
 		its = p.Realtime.Adjust(ctx, its)
 		setDepartIn(its, nil, now)
 	}
-	return rank(its), nil
+	its = rank(its)
+	p.annotateHeadways(its)
+	return its, nil
+}
+
+// annotateHeadways 는 대중교통 leg 에 노선 배차간격을 붙인다. RouteID "seoul:B_100100063" → "B_100100063".
+func (p *Planner) annotateHeadways(its []otp.Itinerary) {
+	if len(p.Headways) == 0 {
+		return
+	}
+	for i := range its {
+		for j := range its[i].Legs {
+			l := &its[i].Legs[j]
+			if !l.TransitLeg {
+				continue
+			}
+			id := l.RouteID
+			if _, after, ok := strings.Cut(id, ":"); ok {
+				id = after
+			}
+			if h, ok := p.Headways[id]; ok {
+				l.HeadwaySec = h
+			}
+		}
+	}
 }
 
 func sortByScore(its []otp.Itinerary) {

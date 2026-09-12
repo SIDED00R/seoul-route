@@ -43,8 +43,11 @@ services:
       VWORLD_API_KEY: ${VWORLD_API_KEY:-}         # 비면 /tiles 503
       DATA_GO_KR_KEY: ${DATA_GO_KR_KEY:-}                     # 비면 버스 첫 탑승 실시간 보정 없음
       SEOUL_SUBWAY_REALTIME_KEY: ${SEOUL_SUBWAY_REALTIME_KEY:-} # 비면 지하철 첫 탑승 실시간 보정 없음
+      GTFS_ZIP: /data/seoul-gtfs.zip                          # 버스 배차간격 표시용(아래 마운트)
       PUBLIC_URL: http://api:8081               # OTP 컨테이너가 GBFS 하위 feed URL 을 이 주소로 받는다
       PORT: "8081"
+    volumes:
+      - ../otp/data/seoul-gtfs.zip:/data/seoul-gtfs.zip:ro
     depends_on:
       postgres:
         condition: service_healthy
