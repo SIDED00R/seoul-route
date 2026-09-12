@@ -1,4 +1,6 @@
-# 로컬·VM 공용 스택. 레포 루트에서 `docker compose -f deploy/compose.yml up -d`.
+# 로컬·VM 공용 스택. 레포 루트에서 `docker compose --env-file .env -f deploy/compose.yml up -d`.
+# compose 는 기본으로 compose 파일이 있는 deploy/ 의 .env 를 찾으므로 루트 .env 를 --env-file 로 넘겨야
+# ${JWT_SECRET}·${SEOUL_OPENAPI_KEY} 가 채워진다.
 # 그래프(otp/graph.obj)는 로컬 PC 에서 빌드해 넣는다(VM 에서 빌드하지 않는다 — peak RSS 4.1GB).
 services:
   postgres:
@@ -22,7 +24,7 @@ services:
       JAVA_TOOL_OPTIONS: "-Xmx4G"
     volumes:
       - ../otp/graph.obj:/var/opentripplanner/graph.obj:ro
-      - ../otp/router-config.json:/var/opentripplanner/router-config.json:ro
+      - ./otp/router-config.json:/var/opentripplanner/router-config.json:ro # GBFS url 이 api 서비스명인 Compose 전용본
       - ../otp/otp-config.json:/var/opentripplanner/otp-config.json:ro
     ports:
       - "127.0.0.1:8080:8080" # 호스트 loopback 만. Phase 5 에서 Caddy(TLS) 뒤로 붙일 때 그대로 둔다
@@ -36,6 +38,8 @@ services:
       OTP_URL: http://otp:8080
       JWT_SECRET: ${JWT_SECRET}
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      SEOUL_OPENAPI_KEY: ${SEOUL_OPENAPI_KEY:-} # 비면 GBFS 비활성(/gbfs 503) — 따릉이 라우팅이 죽는다
+      PUBLIC_URL: http://api:8081               # OTP 컨테이너가 GBFS 하위 feed URL 을 이 주소로 받는다
       PORT: "8081"
     depends_on:
       postgres:
