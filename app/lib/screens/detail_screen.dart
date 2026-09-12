@@ -76,6 +76,9 @@ class DetailScreen extends StatelessWidget {
                   urlTemplate: api.tileUrlTemplate,
                   tileProvider: NetworkTileProvider(headers: api.tileHeaders),
                   userAgentPackageName: 'kr.seoulroute.seoul_route',
+                  // VWorld 는 256px 래스터라 560dpi 화면에서 흐리다. 템플릿에 {r} 이 없으면 flutter_map 이
+                  // 한 단계 높은 줌 타일을 받아 절반 크기로 그리는 시뮬레이션 모드로 동작한다(글자는 작아진다).
+                  retinaMode: true,
                 ),
                 PolylineLayer(polylines: polylines),
                 MarkerLayer(markers: markers),
@@ -96,8 +99,17 @@ class DetailScreen extends StatelessWidget {
                   leading: Icon(modeIcon(leg), color: modeColor(leg)),
                   title: Text('${leg.label} · ${(leg.durationSec / 60).round()}분 · '
                       '${(leg.distanceM / 1000).toStringAsFixed(1)}km'),
-                  subtitle: Text('${_name(leg.fromName, leg.fromLat, leg.fromLon)} → '
-                      '${_name(leg.toName, leg.toLat, leg.toLon)}'),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${_name(leg.fromName, leg.fromLat, leg.fromLon)} → '
+                          '${_name(leg.toName, leg.toLat, leg.toLon)}'),
+                      // 앞뒤 차·배차: 실시간 다음 차 / 시간표 앞·뒤 열차 / 배차간격
+                      if (leg.scheduleLabel != null)
+                        Text(leg.scheduleLabel!, style: TextStyle(color: Colors.teal.shade700)),
+                    ],
+                  ),
+                  isThreeLine: leg.scheduleLabel != null,
                 );
               },
             ),

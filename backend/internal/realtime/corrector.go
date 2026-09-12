@@ -31,9 +31,8 @@ func (c *Corrector) Adjust(ctx context.Context, its []otp.Itinerary) []otp.Itine
 		if i >= MaxItineraries {
 			break
 		}
-		if it, ok := c.adjustOne(ctx, now, out[i]); ok {
-			out[i] = it
-		}
+		it, _ := c.adjustOne(ctx, now, out[i]) // 보정 실패라도 실시간 다음 차 목록은 실릴 수 있다
+		out[i] = it
 	}
 	return out
 }
@@ -50,6 +49,7 @@ func (c *Corrector) adjustOne(ctx context.Context, now time.Time, it otp.Itinera
 		return it, false
 	}
 	leg := it.Legs[k]
+	it.Legs = append([]otp.Leg(nil), it.Legs...) // 입력 슬라이스를 건드리지 않도록 복사한 뒤 수정한다
 	sched, err := time.Parse(time.RFC3339, leg.Start)
 	if err != nil {
 		return it, false
@@ -74,6 +74,12 @@ func (c *Corrector) adjustOne(ctx context.Context, now time.Time, it otp.Itinera
 		if !t.Before(earliest) {
 			board = t
 			break
+		}
+	}
+	// 앱의 "다음 차 N분 후" 표시용. 이미 지나간 차(음수)는 뺀다.
+	for _, s := range eta {
+		if s >= 0 && len(it.Legs[k].RealtimeArrivals) < 3 {
+			it.Legs[k].RealtimeArrivals = append(it.Legs[k].RealtimeArrivals, s)
 		}
 	}
 	if board.IsZero() {
