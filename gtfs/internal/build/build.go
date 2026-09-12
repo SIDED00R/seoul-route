@@ -41,10 +41,11 @@ type BusRoute struct {
 }
 
 type RouteReport struct {
-	RouteID, Name string
-	NStops        int
-	TravelSec     int // 구간거리÷속도 합
-	Skipped       string
+	RouteID, Name     string
+	NStops            int
+	TravelSec         int // 구간거리÷속도(+정차) 합, 왕복 전체
+	Skipped           string
+	DroppedDirections int // bbox 안 정류장이 2개 미만이라 뺀 방향 수
 }
 
 type Report struct {
@@ -160,7 +161,8 @@ type busResult struct {
 }
 
 // busRoute 는 노선 하나를 routes/trips/stop_times/frequencies 행으로 바꾼다.
-// trip 은 둘이다: (1) `_T` — 첫 정류장 00:00:00 기준 상대시각 + frequencies(첫차~막차, exact_times=1).
+// 회차 지점이 있으면 상행(`_T0`/`_LAST0`)·하행(`_T1`/`_LAST1`)으로 나누고, 없으면 접미사 없이 한 방향이다.
+// 방향마다 trip 은 둘이다: (1) `_T` — 방향 첫 정류장 00:00:00 기준 상대시각 + frequencies(첫차~막차, exact_times=1).
 // exact_times=0 이면 OTP 2.10 이 승차마다 배차간격 전체를 대기로 더한다(출발 위상과 무관, 실측 2026-09-12).
 // exact_times=1 은 첫차부터 배차간격 격자로 출발하는 고정 시간표로 다뤄 대기가 위상에 따라 0~배차간격이 된다.
 // GTFS 의 frequencies end_time 은 배타적이고 OTP 2.10 도 `< end` 로 비교하므로 막차 시각 자체의 출발은 생성되지 않는다.
@@ -189,34 +191,94 @@ func busRoute(b BusRoute, routes [][]string, trips, stopTimes, freqs *[][]string
 		last += 24 * 3600
 	}
 	routeID := "B_" + r.ID
-	tripID := routeID + "_T"
-	lastTripID := routeID + "_LAST"
 	routes = append(routes, []string{routeID, BusAgencyID, r.Name, r.StartName + " ~ " + r.EndName, "3"})
-	*trips = append(*trips, []string{routeID, "ALL", tripID, r.EndName, "0"})
-	*trips = append(*trips, []string{routeID, "ALL", lastTripID, r.EndName, "0"})
-	*freqs = append(*freqs, []string{tripID, fmtTime(first), fmtTime(last), strconv.Itoa(term * 60), "1"})
 
-	t := 0
+	// 누적 소요(초)는 전 구간으로 계산한다. bbox 밖 정류장을 기록에서 빼도 그 구간의 주행시간은 이어져야 한다.
+	times := make([]int, len(b.Stops))
 	for i, s := range b.Stops {
-		if i > 0 {
-			dist, _ := strconv.Atoi(strings.TrimSpace(s.SectDist))
-			spd, _ := strconv.Atoi(strings.TrimSpace(s.SectSpd))
-			kmh := float64(spd)
-			if kmh <= 0 {
-				kmh = FallbackSpeedKmh
-			}
-			t += int(float64(dist)/(kmh*1000/3600)+0.5) + dwellSec(r.Type)
+		if i == 0 {
+			continue
 		}
-		stopID := "BS_" + strings.TrimSpace(s.StationID)
-		if _, ok := stops[stopID]; !ok {
-			stops[stopID] = []string{stopID, s.Name, strings.TrimSpace(s.Lat), strings.TrimSpace(s.Lon)}
+		dist, _ := strconv.Atoi(strings.TrimSpace(s.SectDist))
+		spd, _ := strconv.Atoi(strings.TrimSpace(s.SectSpd))
+		kmh := float64(spd)
+		if kmh <= 0 {
+			kmh = FallbackSpeedKmh
 		}
-		seq := strconv.Itoa(i + 1)
-		*stopTimes = append(*stopTimes, []string{tripID, fmtTime(t), fmtTime(t), stopID, seq})
-		*stopTimes = append(*stopTimes, []string{lastTripID, fmtTime(last + t), fmtTime(last + t), stopID, seq})
+		times[i] = times[i-1] + int(float64(dist)/(kmh*1000/3600)+0.5) + dwellSec(r.Type)
 	}
-	rep.TravelSec = t
+	rep.TravelSec = times[len(times)-1]
+
+	// 회차 지점(transYn=Y)에서 상행(기점→회차)·하행(회차→종점) 두 trip 으로 나눈다. 한 trip 이면 OTP 가 회차지를
+	// 지나 반대 방향까지 하차 없이 타는 경로를 만든다. 회차가 없거나 양 끝이면 한 방향(접미사 없음).
+	k := -1
+	for i, s := range b.Stops {
+		if strings.TrimSpace(s.TransYn) == "Y" {
+			k = i
+			break
+		}
+	}
+	type direction struct {
+		from, to   int
+		suffix, id string
+		headsign   string
+	}
+	dirs := []direction{{0, len(b.Stops) - 1, "", "0", r.EndName}}
+	if k > 0 && k < len(b.Stops)-1 {
+		dirs = []direction{{0, k, "0", "0", b.Stops[k].Name}, {k, len(b.Stops) - 1, "1", "1", r.EndName}}
+	}
+	for _, d := range dirs {
+		var inside []int // 서울 bbox 안의 정류장만 기록한다(밖은 도로망이 없어 OTP 에서 고립 정류장이 된다)
+		for i := d.from; i <= d.to; i++ {
+			if insideBBox(b.Stops[i]) {
+				inside = append(inside, i)
+			}
+		}
+		if len(inside) < 2 {
+			rep.DroppedDirections++
+			continue
+		}
+		tripID := routeID + "_T" + d.suffix
+		lastTripID := routeID + "_LAST" + d.suffix
+		*trips = append(*trips, []string{routeID, "ALL", tripID, d.headsign, d.id})
+		*trips = append(*trips, []string{routeID, "ALL", lastTripID, d.headsign, d.id})
+		// 기점 출발 후 이 방향의 첫 기록 정류장까지 걸리는 시간. bbox 클리핑으로 앞이 잘리면 회차지가 아니라
+		// 첫 안쪽 정류장이 기준이다 — OTP 는 배차 trip 의 첫 stop_time 을 0 으로 정규화하므로(실측 441번: 누적
+		// 53분 18초가 사라져 04:20 출발) frequencies 시작도 그만큼 늦춰야 절대시각 `_LAST` 와 맞는다.
+		off := times[inside[0]]
+		*freqs = append(*freqs, []string{tripID, fmtTime(first + off), fmtTime(last + off), strconv.Itoa(term * 60), "1"})
+		for _, i := range inside {
+			s := b.Stops[i]
+			stopID := "BS_" + strings.TrimSpace(s.StationID)
+			if _, ok := stops[stopID]; !ok {
+				stops[stopID] = []string{stopID, s.Name, strings.TrimSpace(s.Lat), strings.TrimSpace(s.Lon)}
+			}
+			seq := strconv.Itoa(i + 1)
+			rel := times[i] - off
+			*stopTimes = append(*stopTimes, []string{tripID, fmtTime(rel), fmtTime(rel), stopID, seq})
+			abs := last + times[i]
+			*stopTimes = append(*stopTimes, []string{lastTripID, fmtTime(abs), fmtTime(abs), stopID, seq})
+		}
+	}
+	if rep.DroppedDirections == len(dirs) { // 전 방향이 빠지면 노선 자체를 제외(routes.txt 고아 행·노선 수 과계 방지)
+		rep.Skipped = "서울 bbox 안 정류장 2개 미만"
+	}
 	return busResult{routes, rep}
+}
+
+// 서울 OSM 추출 bbox(otp/extract_seoul.py, backend route.MinLon 등과 같은 값). 밖의 정류장은 도로망이 없어
+// OTP 빌드에서 IsolatedStop 이 되므로 stop_times 에 넣지 않는다(정류장 18.8%·504노선 실측 2026-09-13).
+const (
+	BBoxMinLon, BBoxMinLat, BBoxMaxLon, BBoxMaxLat = 126.70, 37.38, 127.25, 37.75
+)
+
+func insideBBox(s seoulbus.Stop) bool {
+	lon, e1 := strconv.ParseFloat(strings.TrimSpace(s.Lon), 64)
+	lat, e2 := strconv.ParseFloat(strings.TrimSpace(s.Lat), 64)
+	if e1 != nil || e2 != nil {
+		return false
+	}
+	return lon >= BBoxMinLon && lon <= BBoxMaxLon && lat >= BBoxMinLat && lat <= BBoxMaxLat
 }
 
 // dwellSec 은 노선유형(API routeType)별 정류장 정차시간. 근거는 파일 머리 상수 주석.
