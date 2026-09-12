@@ -65,6 +65,9 @@ func TestBusFirstBoardingUsesRealtime(t *testing.T) {
 	if got.Legs[1].Start != at(660) || got.End != at(660+1200) || got.Legs[0].Start != at(0) {
 		t.Fatalf("탑승 leg·종료는 delta 만큼, 접근 도보는 그대로: %+v", got)
 	}
+	if a := got.Legs[1].RealtimeArrivals; len(a) != 2 || a[0] != 120 || a[1] != 660 {
+		t.Fatalf("첫 탑승 leg 에 실시간 다음 차 목록(놓친 차 포함): %v", a)
+	}
 	// 예측 없는 정류장은 시간표 그대로. 같은 노선은 캐시라 HTTP 1회.
 	bus2 := bus
 	bus2.FromStopID = "seoul:BS_2"

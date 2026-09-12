@@ -16,6 +16,10 @@ class Leg {
     required this.polyline,
     required this.start,
     required this.end,
+    this.prevDepartures = const [],
+    this.nextDepartures = const [],
+    this.headwaySec = 0,
+    this.realtimeArrivalsSec = const [],
   });
 
   final String mode; // WALK / BICYCLE / BUS / SUBWAY ...
@@ -33,6 +37,10 @@ class Leg {
   final String polyline; // Google encoded polyline
   final String start; // RFC3339
   final String end;
+  final List<String> prevDepartures; // 같은 구간 이전 차 출발(RFC3339, 지하철)
+  final List<String> nextDepartures; // 다음 차 출발(RFC3339, 지하철)
+  final int headwaySec; // 배차간격(버스, 생성 GTFS)
+  final List<int> realtimeArrivalsSec; // 첫 탑승 정류장의 실시간 다음 차(초)
 
   factory Leg.fromJson(Map<String, dynamic> j) => Leg(
         mode: j['mode'] as String,
@@ -50,7 +58,26 @@ class Leg {
         polyline: (j['polyline'] as String?) ?? '',
         start: (j['start'] as String?) ?? '',
         end: (j['end'] as String?) ?? '',
+        prevDepartures: ((j['prev_departures'] as List<dynamic>?) ?? const []).cast<String>(),
+        nextDepartures: ((j['next_departures'] as List<dynamic>?) ?? const []).cast<String>(),
+        headwaySec: (j['headway_sec'] as num?)?.toInt() ?? 0,
+        realtimeArrivalsSec: ((j['realtime_arrivals_sec'] as List<dynamic>?) ?? const [])
+            .map((e) => (e as num).toInt())
+            .toList(),
       );
+
+  /// 앞뒤 차 안내 한 줄. 실시간 > 시간표 앞뒤 차 > 배차간격 순으로 있는 것만 보여준다. 없으면 null.
+  String? get scheduleLabel {
+    final parts = <String>[];
+    if (realtimeArrivalsSec.isNotEmpty) {
+      parts.add('실시간 다음 차 ${realtimeArrivalsSec.map((s) => '${(s / 60).round()}분').join(', ')} 후');
+    }
+    String hhmm(String rfc) => rfc.length >= 16 ? rfc.substring(11, 16) : rfc;
+    if (prevDepartures.isNotEmpty) parts.add('앞차 ${prevDepartures.map(hhmm).join(', ')}');
+    if (nextDepartures.isNotEmpty) parts.add('다음 ${nextDepartures.map(hhmm).join(', ')}');
+    if (headwaySec > 0) parts.add('배차 약 ${(headwaySec / 60).round()}분');
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
 
   /// 화면에 보여줄 수단 이름. 따릉이는 BICYCLE 에 rentedBike 가 붙는다.
   String get label {
