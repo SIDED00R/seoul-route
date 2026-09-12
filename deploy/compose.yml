@@ -19,7 +19,7 @@ services:
 
   otp:
     image: opentripplanner/opentripplanner:2.10.0
-    command: ["--load", "/var/opentripplanner"]
+    command: ["--load"] # 디렉터리는 이미지 entrypoint 가 /var/opentripplanner/ 로 붙인다. 다시 주면 "single directory" 오류
     environment:
       JAVA_TOOL_OPTIONS: "-Xmx4G"
     volumes:

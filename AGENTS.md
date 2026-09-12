@@ -30,7 +30,7 @@ docs/      스파이크 보고서·설계 문서
   - 엔드포인트: `GET /health` · `POST /auth/google` · `GET /gbfs/{gbfs,system_information,station_information,station_status}.json`(따릉이 60초 폴링, OTP 가 읽는다) · 인증 필요: `GET/DELETE /users/me`, `POST /routes/plan`(origin·destination·via[]·segment_modes[]·depart)
   - OTP 는 `otp/router-config.json` 의 GBFS url 로 이 서버(8081/gbfs)를 읽는다. 백엔드를 먼저 띄우고 OTP 를 띄우거나, OTP 가 1분마다 재시도하게 둔다.
   - 개발 토큰(Google 로그인 전): `cd backend && go run ./cmd/devtoken <이름>` → JWT 출력. 운영 이미지에는 넣지 않는다.
-- 전체 스택(Compose, WSL 필요): 레포 루트에서 `docker compose --env-file .env -f deploy/compose.yml up -d` (postgis·otp·api). 루트 `.env` 의 JWT_SECRET·SEOUL_OPENAPI_KEY 가 컨테이너로 들어간다. otp 컨테이너는 `deploy/otp/router-config.json`(GBFS url = `http://api:8081`)을 쓴다 — `otp/router-config.json` 의 routingDefaults 를 바꾸면 같이 맞춘다. 이 PC 에 docker 가 없어 Compose 는 아직 실기동 검증을 못 했다.
+- 전체 스택(Compose, WSL 필요): 레포 루트에서 `docker compose --env-file .env -f deploy/compose.yml up -d` (postgis·otp·api). 루트 `.env` 의 JWT_SECRET·SEOUL_OPENAPI_KEY 가 컨테이너로 들어간다. otp 컨테이너는 `deploy/otp/router-config.json`(GBFS url = `http://api:8081`)을 쓴다 — `otp/router-config.json` 의 routingDefaults 를 바꾸면 같이 맞춘다. 로컬 OTP·API 가 8080·8081 을 잡고 있으면 포트 충돌이므로 먼저 내린다. 2026-09-12 Docker Desktop(WSL2)에서 실기동 검증함. 주의: otp 이미지 entrypoint 가 디렉터리 인자를 붙이므로 command 는 `--load` 만, 그리고 OTP 는 설정 파일 주석 안의 달러-중괄호도 환경변수로 치환하므로 그 표기를 쓰지 않는다.
 
 ## 검증
 
