@@ -18,6 +18,8 @@ type Config struct {
 	GoogleOAuthClientID string // 비어 있으면 /auth/google 이 503 을 돌려준다
 	SeoulOpenAPIKey     string // 비어 있으면 따릉이 GBFS 어댑터를 띄우지 않는다
 	PublicURL           string // OTP 가 GBFS 를 읽어갈 이 서버의 주소
+	KakaoRESTKey        string // 비어 있으면 /places/search 가 503. 키는 서버에만 두고 앱에는 내려보내지 않는다
+	VWorldKey           string // 비어 있으면 /tiles/* 가 503
 }
 
 // Load 는 .env(있으면)를 읽고 환경변수로 덮어쓴 뒤 필수값을 검사한다.
@@ -42,6 +44,8 @@ func Load() (Config, error) {
 		JWTSecret:           get("JWT_SECRET", ""),
 		GoogleOAuthClientID: get("GOOGLE_OAUTH_CLIENT_ID", ""),
 		SeoulOpenAPIKey:     get("SEOUL_OPENAPI_KEY", ""),
+		KakaoRESTKey:        get("KAKAO_REST_API_KEY", ""),
+		VWorldKey:           get("VWORLD_API_KEY", ""),
 	}
 	c.PublicURL = strings.TrimRight(get("PUBLIC_URL", "http://localhost:"+c.Port), "/")
 	var missing []string
