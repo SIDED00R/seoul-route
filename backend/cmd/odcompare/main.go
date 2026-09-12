@@ -1,12 +1,13 @@
 // odcompare: 서울 대표 OD 를 우리 Planner(실시간 보정 포함)와 ODsay Lab API 로 한 실행에서 나란히 풀어 기록한다.
 // 카카오·네이버는 대중교통 경로 API 가 없어 ODsay(개인 무료 30콜/일)를 참조계로 쓴다. 정답이 아니라 편향 방향을
 // 보는 용도다. ODsay searchPubTransPathT 는 출발 시각 파라미터가 없어 시각 무관 대표값을 돌려주므로, 우리 쪽 출발
-// 시각(지금 또는 -at)과 기준이 같지 않다. 결과는 docs/eval/<시각>.md 와 .json 으로 남긴다. ODSAY_API_KEY 가 없으면
-// 안내하고 종료한다.
+// 시각(지금 또는 -at)과 기준이 같지 않다. 결과는 docs/eval/<시각>.md 와 .json 으로 남긴다. -ref 없이 ODSAY_API_KEY 도
+// 없으면 안내하고 종료한다.
 //
 //	cd backend && go run ./cmd/odcompare            # OD 20쌍 = ODsay 20콜, 지금 출발(실시간 보정 포함)
 //	cd backend && go run ./cmd/odcompare -n 5       # 앞 5쌍만
 //	cd backend && go run ./cmd/odcompare -at 08:30  # 오늘 08:30 출발(시간표만, 실시간 없음). 새벽·심야 실행 시 사용
+//	cd backend && go run ./cmd/odcompare -at 08:30 -ref ../docs/eval/2026-09-13-0541.json  # ODsay 값 재사용(0콜), 설정 전후 비교용
 package main
 
 import (
@@ -79,7 +80,39 @@ type row struct {
 func main() {
 	n := flag.Int("n", len(ods), "대조할 OD 수")
 	at := flag.String("at", "", "출발 시각 HH:MM(오늘). 비우면 지금 출발")
+	ref := flag.String("ref", "", "이전 결과 json. 주면 ODsay 를 호출하지 않고 그 파일의 ODsay 값을 재사용한다(0콜)")
 	flag.Parse()
+	refRows := map[string]row{}
+	if *ref != "" {
+		b, err := os.ReadFile(*ref)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		var rs []row
+		if err := json.Unmarshal(b, &rs); err != nil {
+			fmt.Fprintln(os.Stderr, "-ref 파싱 실패:", err)
+			os.Exit(2)
+		}
+		for _, r := range rs {
+			if r.Err == "" {
+				refRows[r.Name] = r
+			}
+		}
+		// 참조 모드는 0콜이 약속이다. 선택한 OD 가 하나라도 빠져 있으면(-n 5 산출물, 오류 행) 호출로 폴백하지 않고 끝낸다.
+		var missing []string
+		for i, o := range ods {
+			if i < *n {
+				if _, ok := refRows[o.Name]; !ok {
+					missing = append(missing, o.Name)
+				}
+			}
+		}
+		if len(missing) > 0 {
+			fmt.Fprintf(os.Stderr, "-ref 에 ODsay 값이 없는 OD %d개(호출하지 않고 종료): %s\n", len(missing), strings.Join(missing, ", "))
+			os.Exit(2)
+		}
+	}
 	var depart *time.Time
 	if *at != "" {
 		hm, err := time.Parse("15:04", *at)
@@ -96,7 +129,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if cfg.ODsayKey == "" {
+	if cfg.ODsayKey == "" && *ref == "" {
 		fmt.Fprintln(os.Stderr, "ODSAY_API_KEY 가 없다. lab.odsay.com 에서 키를 받아 .env 에 넣는다(개인 무료 30콜/일).")
 		os.Exit(2)
 	}
@@ -147,7 +180,13 @@ func main() {
 				r.OursTop3 = append(r.OursTop3, sigOurs(it))
 			}
 		}
-		om, osig, err := odsay(ctx, cfg.ODsayKey, o)
+		var om float64
+		var osig string
+		if rr, ok := refRows[o.Name]; ok {
+			om, osig, err = rr.OdsayMin, rr.OdsaySig, nil
+		} else {
+			om, osig, err = odsay(ctx, cfg.ODsayKey, o)
+		}
 		if err != nil {
 			r.Err += " odsay: " + err.Error()
 		} else {
@@ -164,7 +203,7 @@ func main() {
 		rows = append(rows, r)
 		time.Sleep(300 * time.Millisecond)
 	}
-	if err := write(rows, started, depart); err != nil {
+	if err := write(rows, started, depart, *ref); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -272,7 +311,7 @@ func trunc(s string, n int) string {
 }
 
 // write 는 docs/eval/<시각>.md·.json 을 쓴다(레포 루트는 AGENTS.md 로 찾는다).
-func write(rows []row, started time.Time, depart *time.Time) error {
+func write(rows []row, started time.Time, depart *time.Time, ref string) error {
 	root, err := repoRoot()
 	if err != nil {
 		return err
@@ -304,8 +343,12 @@ func write(rows []row, started time.Time, depart *time.Time) error {
 	if depart != nil {
 		when = depart.Format("15:04") + " 출발(시간표만)"
 	}
-	fmt.Fprintf(&b, "OD %d쌍, 유효 %d. 우리 쪽은 %s. ODsay 는 출발 시각 파라미터가 없어 시각 무관 대표값. "+
-		"소요 = 출발부터 도착(출발 대기 제외, ODsay totalTime 과 같은 기준). Δ = 우리 − ODsay(분).\n\n", len(rows), ok, when)
+	src := "ODsay 는 출발 시각 파라미터가 없어 시각 무관 대표값"
+	if ref != "" {
+		src = "ODsay 값은 " + filepath.Base(ref) + " 재사용(호출 없음)"
+	}
+	fmt.Fprintf(&b, "OD %d쌍, 유효 %d. 우리 쪽은 %s. %s. "+
+		"소요 = 출발부터 도착(출발 대기 제외, ODsay totalTime 과 같은 기준). Δ = 우리 − ODsay(분).\n\n", len(rows), ok, when, src)
 	if ok > 0 {
 		sort.Float64s(deltas)
 		abs := append([]float64(nil), deltas...)

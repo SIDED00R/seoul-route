@@ -112,10 +112,12 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) ([]otp.Itinerary, e
 		return nil, err
 	}
 	its = dedupe(its)
-	now := time.Now()
-	if p.Now != nil {
-		now = p.Now()
-	}
+	now := p.now()
+	// 역 ID 로 앵커링된 출발·도착지는 출입구↔승강장 진입·이탈 시간을 더한다(station_slack.go).
+	// 첫·끝 구간이 도보·따릉이 고정이면 extend 가 좌표로 요청하므로(anchorsSegment) 붙이지 않는다.
+	applyStationSlack(its,
+		anchorsSegment(req.Modes[0]) && p.anchor(req.Origin) != "",
+		anchorsSegment(req.Modes[len(req.Modes)-1]) && p.anchor(req.Destination) != "")
 	setDepartIn(its, req.Depart, now)
 	// 실시간은 점수순 상위 후보의 첫 탑승에만 적용한다. 그 전에는 정렬만 하고 컷은 걸지 않는다 — 최선이 실시간으로
 	// 늦어지면 컷 경계 밖에 있던 후보가 경쟁력을 얻는데, 먼저 잘라 버리면 되살릴 수 없다.
@@ -128,6 +130,13 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) ([]otp.Itinerary, e
 	its = rank(its)
 	p.annotateHeadways(its)
 	return its, nil
+}
+
+func (p *Planner) now() time.Time {
+	if p.Now != nil {
+		return p.Now()
+	}
+	return time.Now()
 }
 
 // annotateHeadways 는 대중교통 leg 에 노선 배차간격을 붙인다. RouteID "seoul:B_100100063" → "B_100100063".
@@ -343,6 +352,9 @@ func (p *Planner) single(ctx context.Context, req PlanRequest) ([]otp.Itinerary,
 	base := otp.Request{Origin: coord(req.Origin), Destination: coord(req.Destination),
 		WalkSpeed: req.WalkSpeed, BikeSpeed: req.BikeSpeed, Depart: req.Depart, First: DefaultFirst}
 	base.OriginStop, base.DestStop = p.anchor(req.Origin), p.anchor(req.Destination)
+	if base.OriginStop != "" {
+		base.Depart = entryDepart(req.Depart, p.now()) // 진입시간 안에 떠나는 차는 못 탄다
+	}
 	for _, v := range req.Via {
 		base.Via = append(base.Via, coord(v))
 		base.ViaStops = append(base.ViaStops, p.anchor(v)) // 경유 역도 역 ID 로(좌표면 역 구내 우회가 되살아난다)
@@ -432,11 +444,14 @@ func (p *Planner) extend(ctx context.Context, req PlanRequest, pts []Point, i in
 	// 빔 폭만큼만 받으면 중복 제거 뒤 후보가 1개로 줄어든다(실측).
 	r := otp.Request{Origin: coord(pts[i]), Destination: coord(pts[i+1]), Modes: modesFor(req.Modes[i]),
 		WalkSpeed: req.WalkSpeed, BikeSpeed: req.BikeSpeed, First: DefaultFirst}
-	if m := req.Modes[i]; m == "" || m == ModeAny || m == ModeTransit { // 도보·자전거 전용 구간은 좌표로
+	if anchorsSegment(req.Modes[i]) { // 도보·자전거 전용 구간은 좌표로
 		r.OriginStop, r.DestStop = p.anchor(pts[i]), p.anchor(pts[i+1])
 	}
 	if i == 0 {
 		r.Depart = req.Depart
+		if r.OriginStop != "" {
+			r.Depart = entryDepart(req.Depart, p.now())
+		}
 	} else {
 		t := b.end
 		r.Depart = &t
@@ -467,6 +482,9 @@ func (p *Planner) extend(ctx context.Context, req PlanRequest, pts []Point, i in
 	}
 	return out, nil
 }
+
+// anchorsSegment: 이 수단의 구간은 출발·도착지를 역 ID 로 앵커링한다. 도보·따릉이 고정 구간은 좌표로 요청한다.
+func anchorsSegment(m SegmentMode) bool { return m == "" || m == ModeAny || m == ModeTransit }
 
 // partial 은 구간 분할 탐색에서 앞 구간까지 이어 붙인 부분 경로.
 type partial struct {
