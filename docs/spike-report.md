@@ -63,14 +63,17 @@ GTFS 투입 후 재측정 필요. 도로망만으로는 8GB VM 여유가 충분�
 4. `direct: [BICYCLE_RENTAL]` 단독은 BadRequest — 같은 요청에 `WALK` 를 함께 넣어야 한다.
 5. OTP 2.10.0 은 Java 25 필수.
 
-## 외부 API 표본 (인증키 도착 후)
+## 외부 API 표본 실측 (2026-09-12, `otp/spike/probe_apis.py`, 원본 `otp/spike/results-apis.txt`)
 
-- bikeList: 총건수, 페이지 수, 응답 필드
-- T-data 10120: 응답 교차로 수, 단위, 좌표 매핑 자료 유무
-- 서울 버스 API: 노선·정류장·배차 응답 형식
+| API | 결과 | GTFS/GBFS 관점 |
+|---|---|---|
+| 따릉이 `bikeList` (열린데이터광장) | ✅ 대여소 **2,734곳**, 1,000행/콜 → **3콜**. 필드: stationId·stationName·stationLatitude/Longitude·rackTotCnt·parkingBikeTotCnt·shared | station_information + station_status 를 이 한 API 로 만들 수 있다(마스터 API 불필요). **`list_total_count` 는 요청 범위 건수**를 돌려주므로 짧은 페이지까지 넘겨 센다 |
+| 서울 버스 `busRouteInfo` (공공데이터포털) | ✅ `getBusRouteList`(노선 검색), `getRouteInfo`(첫차·막차·배차간격 `term`), `getStaionByRoute`(정류장 123개/271번: seq·gpsX/Y·fullSectDist·sectSpd·direction·transYn·**정류장별 beginTm/lastTm**), `getRoutePath`(좌표 1,633점) | routes/stops/stop_times(frequencies)/shapes 전부 확보 가능. 정류장별 첫막차가 있어 구간 소요 추정에 쓸 수 있다 |
+| TAGO 지하철 `SubwayInfo` (공공데이터포털) | ✅ 경로는 `/1613000/SubwayInfo/Get…`(2022-09 개편, 구 `SubwayInfoService/get…` 는 오류 12). 역 검색 20건, 역별 시간표(서울역 공항철도 평일 상행) 209건: depTime·arrTime·endSubwayStationId·subwayRouteId·dailyTypeCode(01/02/03)·upDownTypeCode(U/D) | stop_times 직접 생성 가능. **역 좌표 없음** → 좌표는 열린데이터광장 지하철역 좌표 또는 KTDB 파일럿 stops 에서 결합 |
+| T-data 신호 잔여시간 `v2xSignalPhaseTimingInformation/1.0` | ⚠️ 키 승인됨. 2026-09-12 14:27~14:28 호출 3회(numOfRows 1000/100/10) 모두 **서버 500** (`CannotGetJdbcConnectionException`, T-data 측 DB 장애). 게이트웨이는 통과했으므로 키는 유효 | 재시도 후 교차로 수·단위·신선도 실측. 엔드포인트는 `apig/apiman-gateway/tapi/…?apikey=` 형식 |
 
-## 게이트 판정
+## 게이트 판정 (부분)
 
-- (a) OTP 혼합 경로 실증:
-- (b) T-data 매핑 가능 여부:
-- (c) GTFS 생성기 착수 가능 여부:
+- (a) OTP 혼합 경로 실증: **도로망+GBFS 는 통과**. 대중교통 결합·`via` 는 GTFS 파일럿 도착 후 판정.
+- (b) T-data 매핑 가능 여부: 미판정(승인 대기).
+- (c) GTFS 생성기 착수 가능 여부: **가능**. 버스는 배차간격 기반 frequencies, 지하철은 역별 시간표 기반 정확 시각. 남은 확인 = 지하철 역 좌표 소스, 버스 정류장 간 소요시간 추정 방식(정류장별 첫막차 차이 또는 구간거리÷속도).
