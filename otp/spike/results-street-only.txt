@@ -1,0 +1,73 @@
+
+### walk_only
+1. 총 56.6분  환승 0  도보 3875m  cost 8838
+   WALK 56.6m/3.88km
+
+### walk_speed_1.0
+1. 총 68.0분  환승 0  도보 3875m  cost 10605
+   WALK 68.0m/3.88km
+
+### walk_speed_1.6
+1. 총 42.5분  환승 0  도보 3875m  cost 6629
+   WALK 42.5m/3.88km
+
+### rental_direct
+1. 총 44.6분  환승 0  도보 288m  cost 5382
+   WALK 5.8m/0.29km → BICYCLE(rent) 38.8m/7.19km → WALK 0.0m/0.00km
+
+### rental_direct_bike_speed_2.5
+GraphQL errors: [{"message": "For the time being, BIKE_RENTAL needs to be combined with WALK mode for the same leg.", "locations": [{"line": 5, "column": 3}], "path": ["planConnection"], "extensions": {"classification": "BadRequestError"}}]
+
+### rental_from_empty_station
+1. 총 8.9분  환승 0  도보 0m  cost 1131
+   WALK 1.0m/0.00km → BICYCLE(rent) 7.9m/1.18km → WALK 0.0m/0.00km
+
+### via_yeouido
+routingErrors: [{'code': 'NO_DIRECT_MODE_CONNECTION', 'description': 'No route found for the requested direct mode. The origin and destination may be too far apart or not connected by the requested mode of transport.'}]
+
+### transit_rental_access
+routingErrors: [{'code': 'OUTSIDE_SERVICE_PERIOD', 'description': 'No transit times available. The date may be past or too far in the future or there may not be transit service for your trip at the time you chose.'}]
+1. 총 147.3분  환승 0  도보 10129m  cost 20225
+   WALK 147.3m/10.13km
+
+### transit_rental_egress
+routingErrors: [{'code': 'OUTSIDE_SERVICE_PERIOD', 'description': 'No transit times available. The date may be past or too far in the future or there may not be transit service for your trip at the time you chose.'}]
+1. 총 147.3분  환승 0  도보 10129m  cost 20225
+   WALK 147.3m/10.13km
+
+### rental_direct
+1. 총 44.6분  환승 0  도보 288m  cost 5382
+   WALK 5.8m/0.29km → BICYCLE(rent) 38.8m/7.19km 서울역 1번출구 앞 (fixture)→여의도역 3번출구 (fixture) → WALK 0.0m/0.00km
+
+### rental_direct_bike_speed_2.5
+1. 총 59.5분  환승 0  도보 288m  cost 7118
+   WALK 5.8m/0.29km → BICYCLE(rent) 53.7m/7.19km 서울역 1번출구 앞 (fixture)→여의도역 3번출구 (fixture) → WALK 0.0m/0.00km
+
+### rental_from_empty_station
+1. 총 8.9분  환승 0  도보 0m  cost 1131
+   WALK 1.0m/0.00km → BICYCLE(rent) 7.9m/1.18km 신논현역 (fixture, 빈 대여소)→강남역 11번출구 (fixture) → WALK 0.0m/0.00km
+
+### via_yeouido_direct_only
+routingErrors: [{'code': 'NO_DIRECT_MODE_CONNECTION', 'description': 'No route found for the requested direct mode. The origin and destination may be too far apart or not connected by the requested mode of transport.'}]
+
+### via_yeouido_default_modes
+GraphQL errors: [{"message": "Exception while fetching data (/planConnection) : Cannot invoke \"java.util.Map.containsKey(Object)\" because \"modesArgs\" is null", "locations": [{"line": 5, "column": 3}], "path": ["planConnection"], "extensions": {"classification": "DataFetchingException"}}]
+
+### rental_from_empty_station
+1. 총 8.9분  환승 0  도보 0m  cost 1131
+   WALK 1.0m/0.00km → BICYCLE(rent) 7.9m/1.18km 신논현역 (fixture, 빈 대여소)→강남역 11번출구 (fixture) → WALK 0.0m/0.00km
+
+### rental_direct
+1. 총 44.6분  환승 0  도보 288m  cost 5382
+   WALK 5.8m/0.29km → BICYCLE(rent) 38.8m/7.19km 서울역 1번출구 앞 (fixture)→여의도역 3번출구 (fixture) → WALK 0.0m/0.00km
+
+### via_yeouido_transit
+routingErrors: [{'code': 'OUTSIDE_SERVICE_PERIOD', 'description': 'No transit times available. The date may be past or too far in the future or there may not be transit service for your trip at the time you chose.'}]
+
+### rental_from_empty_station
+1. 총 13.5분  환승 0  도보 909m  cost 1910
+   WALK 13.5m/0.91km
+
+### rental_direct
+1. 총 44.6분  환승 0  도보 288m  cost 5382
+   WALK 5.8m/0.29km → BICYCLE(rent) 38.8m/7.19km 서울역 1번출구 앞 (fixture)→여의도역 3번출구 (fixture) → WALK 0.0m/0.00km

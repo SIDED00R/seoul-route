@@ -6,9 +6,14 @@
 otp/data/*.pbf
 otp/data/*.zip
 otp/data/*.obj
+otp/*.obj
 otp/*.jar
 otp/graphs/
+otp/build.stats.txt
 gtfs/out/
+
+# python
+__pycache__/
 
 # go
 backend/bin/
