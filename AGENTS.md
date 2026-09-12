@@ -22,14 +22,17 @@ docs/      스파이크 보고서·설계 문서
   - GTFS 파일럿: 국가교통DB(ktdb.go.kr) 로그인 → 정보공개 > 자료신청 > 교통분석자료 신청 > 교통망 GIS DB > 대중교통 > 대중교통 GTFS(2025-03) 신청·다운로드 → zip 을 풀어 `otp/data/202503_GTFS_DataSet/` 에 배치 → `python otp/filter_gtfs_seoul.py` 로 `otp/data/gtfs-ktdb.zip` 생성(서울 bbox 필터 + route_type 표준 변환)
   - 운영 GTFS: `cd gtfs && go run ./cmd/gtfsgen fetch && go run ./cmd/gtfsgen build` → `gtfs/out/seoul-gtfs.zip` 을 `otp/data/seoul-gtfs.zip` 으로 복사. build-config 의 transitFeeds 는 이 파일을 가리킨다. 상세 `docs/gtfs-generator.md`
   - GTFS zip 이 없으면 빌드는 **실패하지 않고** 종료코드 0 으로 `|Stops|=0` 그래프가 나온다(실측 2026-09-12). 빌드 로그의 `Transit built. |Stops|=` 를 확인한다.
-- OTP 그래프 빌드: `cd otp && java -Xmx8G -jar otp-shaded-2.10.0.jar --build --save .` (운영 GTFS 기준 peak RSS 5.3GB 실측, 로컬 PC 에서만)
+- OTP 그래프 빌드: `cd otp && java -Xmx8G -jar otp-shaded-2.10.0.jar --build --save .` (운영 GTFS 최종본 기준 peak RSS 4.1GB 실측, 로컬 PC 에서만)
 - OTP 서빙: `cd otp && java -Xmx4G -jar otp-shaded-2.10.0.jar --load .` → GraphQL `http://localhost:8080/otp/gtfs/v1` (운영 GTFS 그래프 서빙 RSS 2.2GB, 질의 3건 후 실측)
 - GBFS fixture 서버(스파이크용): `python -m http.server 8090 -d otp/fixtures/gbfs`
-- 백엔드: `cd backend && go run ./cmd/api` (Phase 1부터)
+- PostgreSQL 17(로컬, WSL 없이): EDB 포터블 바이너리 `C:\Users\SAMSUNG\tools\pg17\pgsql`, 데이터 `..\pg17\data`, 포트 5432, 역할 `seoul/seoul`, DB `seoul_route`·`seoul_route_test`. 기동은 PowerShell `Start-Process postgres.exe -ArgumentList '-D',<data>,'-p','5432' -WindowStyle Hidden` (셸 자식으로 띄우면 셸 종료 시 같이 죽는다 — 실측). PostGIS 는 없다 → Phase 4 부터 Compose 의 `postgis/postgis:17-3.5` 를 쓴다.
+- 백엔드: `cd backend && go run ./cmd/api` → `http://localhost:8081`. 설정은 `.env`(DATABASE_URL·OTP_URL·JWT_SECRET 필수, GOOGLE_OAUTH_CLIENT_ID 없으면 `/auth/google` 503). 기동 시 `internal/db/migrations/*.sql` 을 자동 적용한다.
+- 전체 스택(Compose, WSL 필요): `docker compose -f deploy/compose.yml up -d` (postgis·otp·api)
 
 ## 검증
 
-- Go: `cd gtfs && go vet ./... && go test ./...` (backend 는 Phase 1b 부터)
+- Go: `cd gtfs && go vet ./... && go test ./...` / `cd backend && go vet ./... && TEST_DATABASE_URL=postgres://seoul:seoul@localhost:5432/seoul_route_test?sslmode=disable go test ./...` (DB 없으면 httpapi 테스트는 skip 된다 — 통과가 아니다)
+- API 실행 검증: 서버 기동 후 `curl localhost:8081/health`(db·otp 둘 다 ok 인지 본문 확인), 미인증 `/users/me` 401, `/auth/google` 미설정 503
 - Flutter: `cd app && flutter analyze && flutter test`
 - 기능 완료 판정은 테스트 통과가 아니라 실제 실행이다: OTP에 curl로 plan 요청을 보내 응답 본문을 읽고, 앱은 실기기에서 흐름을 태운다.
 
