@@ -64,6 +64,9 @@ type Leg struct {
 	ToLat      float64 `json:"to_lat"`
 	ToLon      float64 `json:"to_lon"`
 	Route      string  `json:"route,omitempty"`
+	RouteID    string  `json:"route_id,omitempty"`     // gtfsId, 예 "seoul:B_100100063" / "seoul:RR_…"
+	FromStopID string  `json:"from_stop_id,omitempty"` // 탑승 정류장 gtfsId, 예 "seoul:BS_123000354"
+	NextStop   string  `json:"next_stop,omitempty"`    // 탑승 후 첫 정차역 이름(지하철 방면 판별용)
 	RentedBike bool    `json:"rented_bike,omitempty"`
 	TransitLeg bool    `json:"transit_leg"`
 	Polyline   string  `json:"polyline,omitempty"` // Google encoded polyline
@@ -76,6 +79,12 @@ type Itinerary struct {
 	Transfers int     `json:"transfers"`
 	WalkM     float64 `json:"walk_distance_m"`
 	Legs      []Leg   `json:"legs"`
+	// DepartIn: 요청 시각부터 이 여정의 출발(Start)까지 기다리는 초. "지금 출발" 요청에서만 채우고,
+	// 순위와 앱의 총 소요 표시는 Duration+DepartIn 을 쓴다(OTP 의 Duration 은 Start 부터라 출발 전 대기가 빠져 있다).
+	DepartIn float64 `json:"depart_in_sec,omitempty"`
+	// Realtime: 첫 탑승 대기를 실시간 도착정보로 바꿨을 때 true. RealtimeDelta 는 시간표 대비 보정(초, 음수 가능).
+	Realtime      bool    `json:"realtime,omitempty"`
+	RealtimeDelta float64 `json:"realtime_delta_sec,omitempty"`
 }
 
 type Client struct {
@@ -94,7 +103,8 @@ query Plan($origin: PlanLabeledLocationInput!, $destination: PlanLabeledLocation
       start end duration numberOfTransfers walkDistance
       legs { mode duration distance rentedBike transitLeg
              start { scheduledTime } end { scheduledTime }
-             from { name lat lon } to { name lat lon } route { shortName } legGeometry { points } }
+             from { name lat lon stop { gtfsId } } to { name lat lon } route { shortName gtfsId }
+             intermediateStops { name } legGeometry { points } }
     } }
   }
 }`
@@ -241,12 +251,23 @@ type node struct {
 		RentedBike bool
 		TransitLeg bool
 		Start, End struct{ ScheduledTime string }
-		From, To   struct {
+		From       struct {
+			Name     string
+			Lat, Lon float64
+			Stop     *struct {
+				GtfsID string `json:"gtfsId"`
+			}
+		}
+		To struct {
 			Name     string
 			Lat, Lon float64
 		}
-		Route       *struct{ ShortName string }
-		LegGeometry *struct{ Points string }
+		Route *struct {
+			ShortName string
+			GtfsID    string `json:"gtfsId"`
+		}
+		IntermediateStops []struct{ Name string }
+		LegGeometry       *struct{ Points string }
 	}
 }
 
@@ -259,6 +280,15 @@ func (n node) itinerary() Itinerary {
 			ToName: l.To.Name, ToLat: l.To.Lat, ToLon: l.To.Lon, RentedBike: l.RentedBike, TransitLeg: l.TransitLeg}
 		if l.Route != nil {
 			leg.Route = l.Route.ShortName
+			leg.RouteID = l.Route.GtfsID
+		}
+		if l.From.Stop != nil {
+			leg.FromStopID = l.From.Stop.GtfsID
+		}
+		if len(l.IntermediateStops) > 0 {
+			leg.NextStop = l.IntermediateStops[0].Name
+		} else if l.TransitLeg {
+			leg.NextStop = l.To.Name
 		}
 		if l.LegGeometry != nil {
 			leg.Polyline = l.LegGeometry.Points

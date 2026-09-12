@@ -36,6 +36,17 @@ func TestRankPenalizesRental(t *testing.T) {
 	}
 }
 
+// 지금 출발이면 출발 전 대기(DepartIn)도 총 소요에 들어간다: 5분 뒤 출발 40분보다 지금 출발 43분이 앞이다.
+func TestRankCountsDepartureWait(t *testing.T) {
+	later := mk(40*60, 0, otp.Leg{Mode: "SUBWAY", Route: "a"})
+	later.DepartIn = 5 * 60
+	nowIt := mk(43*60, 0, otp.Leg{Mode: "SUBWAY", Route: "b"})
+	out := rank([]otp.Itinerary{later, nowIt})
+	if out[0].Legs[0].Route != "b" {
+		t.Fatalf("대기 포함 43분 < 45분: %+v", out)
+	}
+}
+
 // 최선보다 30분 넘게 느린 후보는 뺀다(따릉이 직행 122분 vs 지하철 38분).
 func TestRankDropsFarSlower(t *testing.T) {
 	out := rank([]otp.Itinerary{

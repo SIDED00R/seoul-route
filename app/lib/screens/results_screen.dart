@@ -39,11 +39,21 @@ class ResultsScreen extends StatelessWidget {
                 final it = its[i];
                 return ListTile(
                   leading: CircleAvatar(child: Text('${i + 1}')),
-                  title: Text('${it.minutes}분 · 환승 ${it.transfers}회 · 도보 ${(it.walkM / 1000).toStringAsFixed(1)}km'),
+                  title: Text('${it.minutes}분 · 환승 ${it.transfers}회 · '
+                      '도보 ${(it.walkM / 1000).toStringAsFixed(1)}km'),
                   subtitle: Wrap(
                     spacing: 4,
                     runSpacing: 4,
                     children: [
+                      // 출발 대기·실시간 배지는 수단 칩 앞에 둔다(제목 줄이 꺾이지 않게).
+                      for (final label in [it.departLabel, it.realtimeLabel])
+                        if (label != null)
+                          Chip(
+                            label: Text(label, style: const TextStyle(fontSize: 12)),
+                            backgroundColor: Colors.teal.shade50,
+                            padding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                          ),
                       for (final leg in it.legs)
                         Chip(
                           avatar: Icon(modeIcon(leg), size: 16, color: modeColor(leg)),
