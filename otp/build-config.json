@@ -3,7 +3,7 @@
     { "source": "data/seoul.osm.pbf", "osmTagMapping": "default" }
   ],
   "transitFeeds": [
-    { "type": "gtfs", "feedId": "ktdb", "source": "data/gtfs-ktdb.zip" }
+    { "type": "gtfs", "feedId": "seoul", "source": "data/seoul-gtfs.zip" }
   ],
   "transitServiceStart": "-P2Y",
   "transitServiceEnd": "P3Y",

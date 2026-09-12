@@ -31,3 +31,4 @@ Thumbs.db
 
 # API 표본 응답 (키 없음, 크기 때문에 제외)
 otp/spike/samples/
+gtfs/cache/
