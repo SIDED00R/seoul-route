@@ -1,0 +1,96 @@
+
+### transit_rental_access
+1. 총 35.3분  환승 1  도보 441m  cost 4115
+   WALK 6.1m/0.37km → BUS[421] 22.6m/9.26km → BUS[640] 3.0m/1.10km → WALK 1.1m/0.07km
+2. 총 38.8분  환승 0  도보 779m  cost 4289
+   WALK 6.1m/0.37km → BUS[421] 26.1m/10.63km → WALK 6.5m/0.41km
+3. 총 39.8분  환승 1  도보 799m  cost 4744
+   WALK 6.1m/0.37km → BUS[401] 17.3m/7.69km → BUS[643] 6.9m/2.14km → WALK 7.0m/0.43km
+4. 총 37.1분  환승 1  도보 375m  cost 4315
+   WALK 3.9m/0.23km → BUS[9007] 16.5m/7.58km → WALK 0.3m/0.02km → BUS[360] 9.6m/3.03km → WALK 1.8m/0.13km
+5. 총 40.2분  환승 0  도보 779m  cost 4375
+   WALK 6.1m/0.37km → BUS[402] 27.6m/9.38km → WALK 6.5m/0.41km
+
+### transit_rental_egress
+1. 총 35.3분  환승 1  도보 441m  cost 4115
+   WALK 6.1m/0.37km → BUS[421] 22.6m/9.26km → BUS[640] 3.0m/1.10km → WALK 1.1m/0.07km
+2. 총 38.8분  환승 0  도보 779m  cost 4289
+   WALK 6.1m/0.37km → BUS[421] 26.1m/10.63km → WALK 6.5m/0.41km
+3. 총 39.8분  환승 1  도보 799m  cost 4744
+   WALK 6.1m/0.37km → BUS[401] 17.3m/7.69km → BUS[643] 6.9m/2.14km → WALK 7.0m/0.43km
+4. 총 37.1분  환승 1  도보 375m  cost 4315
+   WALK 3.9m/0.23km → BUS[9007] 16.5m/7.58km → WALK 0.3m/0.02km → BUS[360] 9.6m/3.03km → WALK 1.8m/0.13km
+5. 총 40.2분  환승 0  도보 779m  cost 4375
+   WALK 6.1m/0.37km → BUS[402] 27.6m/9.38km → WALK 6.5m/0.41km
+
+### via_yeouido_transit
+1. 총 57.6분  환승 1  도보 1436m  cost 6633
+   WALK 6.1m/0.37km → BUS[162] 11.8m/6.63km → WALK 1.2m/0.08km → WALK 2.1m/0.01km → SUBWAY[서울9호선] 14.0m/9.40km → WALK 16.3m/0.97km
+2. 총 60.5분  환승 2  도보 590m  cost 6516
+   WALK 6.1m/0.37km → BUS[162] 11.8m/6.63km → WALK 1.2m/0.08km → WALK 2.1m/0.01km → SUBWAY[서울9호선] 10.8m/7.53km → WALK 3.0m/0.06km → BUS[640] 7.7m/3.01km → WALK 1.1m/0.07km
+3. 총 60.3분  환승 2  도보 654m  cost 6747
+   WALK 6.1m/0.37km → BUS[162] 11.8m/6.63km → WALK 1.2m/0.08km → WALK 1.2m/0.08km → BUS[361] 27.2m/11.99km → BUS[145] 3.0m/1.22km → WALK 1.6m/0.11km
+4. 총 60.6분  환승 1  도보 1436m  cost 6812
+   WALK 6.1m/0.37km → BUS[162] 11.8m/6.63km → WALK 1.2m/0.08km → WALK 2.1m/0.01km → SUBWAY[서울9호선] 14.0m/9.40km → WALK 16.3m/0.97km
+5. 총 59.4분  환승 2  도보 1436m  cost 7339
+   WALK 6.1m/0.37km → BUS[505] 6.5m/2.95km → BUS[5012] 6.2m/3.90km → WALK 1.2m/0.08km → WALK 2.1m/0.01km → SUBWAY[서울9호선] 14.0m/9.40km → WALK 16.3m/0.97km
+
+### transit_rental_access_only
+GraphQL errors: [{"message": "For the time being, BIKE_RENTAL needs to be combined with WALK mode for the same leg.", "locations": [{"line": 5, "column": 3}], "path": ["planConnection"], "extensions": {"classification": "BadRequestError"}}]
+
+### transit_rental_egress_only
+GraphQL errors: [{"message": "For the time being, BIKE_RENTAL needs to be combined with WALK mode for the same leg.", "locations": [{"line": 5, "column": 3}], "path": ["planConnection"], "extensions": {"classification": "BadRequestError"}}]
+
+### transit_rental_access_slow_walker
+1. 총 42.8분  환승 1  도보 365m  cost 11746
+   WALK 7.9m/0.23km → BUS[9007] 16.5m/7.58km → WALK 2.4m/0.08km → BUS[서초10] 11.5m/3.21km → WALK 1.6m/0.06km
+2. 총 43.5분  환승 2  도보 227m  cost 10355
+   WALK 5.8m/0.16km → BUS[7016] 1.1m/0.62km → BUS[421] 21.6m/8.59km → BUS[640] 2.9m/1.10km → WALK 2.1m/0.07km
+3. 총 43.1분  환승 1  도보 311m  cost 11011
+   WALK 7.9m/0.23km → BUS[9007] 16.5m/7.58km → WALK 0.5m/0.02km → BUS[640] 8.0m/3.01km → WALK 2.1m/0.07km
+4. 총 42.0분  환승 2  도보 227m  cost 10262
+   WALK 5.8m/0.16km → BUS[1711] 1.1m/0.62km → BUS[421] 21.8m/8.59km → BUS[640] 2.7m/1.10km → WALK 2.1m/0.07km
+5. 총 41.0분  환승 1  도보 311m  cost 10886
+   WALK 7.9m/0.23km → BUS[9007] 16.6m/7.58km → WALK 0.5m/0.02km → BUS[640] 7.8m/3.01km → WALK 2.1m/0.07km
+6. 총 48.5분  환승 1  도보 505m  cost 15056
+   WALK 12.3m/0.37km → BUS[402] 24.6m/8.01km → BUS[360] 4.4m/1.13km → WALK 3.6m/0.13km
+7. 총 64.9분  환승 3  도보 174m  cost 9901
+   WALK 0.2m/0.01km → RAIL[[일반]1경부서울부산] 10.0m/7.08km → WALK 2.3m/0.01km → SUBWAY[서울1호선] 6.0m/3.14km → WALK 4.4m/0.09km → BUS[동작01] 5.0m/2.04km → BUS[640] 22.2m/9.34km → WALK 2.1m/0.07km
+8. 총 44.1분  환승 2  도보 227m  cost 10388
+   WALK 5.8m/0.16km → BUS[7016] 1.1m/0.62km → BUS[421] 21.9m/8.59km → BUS[640] 2.6m/1.10km → WALK 2.1m/0.07km
+
+### transit_rental_egress_slow_walker
+1. 총 42.8분  환승 1  도보 365m  cost 11746
+   WALK 7.9m/0.23km → BUS[9007] 16.5m/7.58km → WALK 2.4m/0.08km → BUS[서초10] 11.5m/3.21km → WALK 1.6m/0.06km
+2. 총 43.5분  환승 2  도보 227m  cost 10355
+   WALK 5.8m/0.16km → BUS[7016] 1.1m/0.62km → BUS[421] 21.6m/8.59km → BUS[640] 2.9m/1.10km → WALK 2.1m/0.07km
+3. 총 43.1분  환승 1  도보 311m  cost 11011
+   WALK 7.9m/0.23km → BUS[9007] 16.5m/7.58km → WALK 0.5m/0.02km → BUS[640] 8.0m/3.01km → WALK 2.1m/0.07km
+4. 총 42.0분  환승 2  도보 227m  cost 10262
+   WALK 5.8m/0.16km → BUS[1711] 1.1m/0.62km → BUS[421] 21.8m/8.59km → BUS[640] 2.7m/1.10km → WALK 2.1m/0.07km
+5. 총 41.0분  환승 1  도보 311m  cost 10886
+   WALK 7.9m/0.23km → BUS[9007] 16.6m/7.58km → WALK 0.5m/0.02km → BUS[640] 7.8m/3.01km → WALK 2.1m/0.07km
+6. 총 62.8분  환승 2  도보 185m  cost 9846
+   WALK 0.2m/0.01km → RAIL[[일반]1경부서울부산] 10.0m/7.08km → WALK 2.3m/0.01km → SUBWAY[서울1호선] 3.5m/1.77km → WALK 3.8m/0.06km → BUS[361] 21.2m/9.55km → WALK 4.0m/0.10km → BICYCLE(rent) 7.5m/1.16km 신논현역 (fixture, 빈 대여소)→강남역 11번출구 (fixture) → WALK 0.0m/0.00km
+7. 총 48.5분  환승 1  도보 505m  cost 15056
+   WALK 12.3m/0.37km → BUS[402] 24.6m/8.01km → BUS[360] 4.4m/1.13km → WALK 3.6m/0.13km
+8. 총 44.1분  환승 2  도보 227m  cost 10388
+   WALK 5.8m/0.16km → BUS[7016] 1.1m/0.62km → BUS[421] 21.9m/8.59km → BUS[640] 2.6m/1.10km → WALK 2.1m/0.07km
+
+### transit_rental_both_slow_walker_yongsan
+1. 총 40.1분  환승 1  도보 345m  cost 10793
+   SUBWAY[서울1호선] 3.0m/2.63km → WALK 8.2m/0.21km → BUS[360] 23.2m/8.83km → WALK 3.6m/0.13km
+2. 총 46.2분  환승 2  도보 319m  cost 10009
+   SUBWAY[서울1호선] 3.0m/2.63km → WALK 8.2m/0.21km → BUS[360] 11.7m/4.95km → WALK 1.5m/0.05km → BUS[서초10] 13.0m/3.98km → WALK 1.6m/0.06km
+3. 총 41.3분  환승 1  도보 345m  cost 10863
+   SUBWAY[서울1호선] 3.0m/2.63km → WALK 8.2m/0.21km → BUS[360] 23.3m/8.83km → WALK 3.6m/0.13km
+4. 총 46.5분  환승 2  도보 154m  cost 8047
+   SUBWAY[서울1호선] 3.0m/2.63km → WALK 4.4m/0.09km → BUS[동작01] 4.0m/1.42km → BUS[640] 23.6m/9.96km → WALK 2.1m/0.07km
+5. 총 41.5분  환승 2  도보 221m  cost 8811
+   SUBWAY[서울1호선] 3.0m/2.63km → WALK 6.9m/0.15km → BUS[504] 0.9m/0.62km → BUS[640] 21.1m/8.36km → WALK 2.1m/0.07km
+6. 총 41.5분  환승 1  도보 281m  cost 8874
+   SUBWAY[서울1호선] 3.0m/2.63km → WALK 8.2m/0.21km → BUS[640] 21.8m/8.81km → WALK 2.1m/0.07km
+7. 총 42.7분  환승 2  도보 244m  cost 9768
+   SUBWAY[경의중앙선] 6.0m/2.49km → WALK 5.7m/0.13km → BUS[400] 16.0m/7.11km → BUS[145] 5.5m/2.03km → WALK 3.2m/0.11km
+8. 총 47.5분  환승 1  도보 165m  cost 8180
+   SUBWAY[서울1호선] 5.5m/4.00km → WALK 3.8m/0.06km → BUS[361] 21.3m/9.55km → WALK 4.0m/0.10km → BICYCLE(rent) 7.5m/1.16km 신논현역 (fixture, 빈 대여소)→강남역 11번출구 (fixture) → WALK 0.0m/0.00km
