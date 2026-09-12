@@ -16,6 +16,8 @@ type Config struct {
 	OTPURL              string
 	JWTSecret           string
 	GoogleOAuthClientID string // 비어 있으면 /auth/google 이 503 을 돌려준다
+	SeoulOpenAPIKey     string // 비어 있으면 따릉이 GBFS 어댑터를 띄우지 않는다
+	PublicURL           string // OTP 가 GBFS 를 읽어갈 이 서버의 주소
 }
 
 // Load 는 .env(있으면)를 읽고 환경변수로 덮어쓴 뒤 필수값을 검사한다.
@@ -39,7 +41,9 @@ func Load() (Config, error) {
 		OTPURL:              strings.TrimRight(get("OTP_URL", "http://localhost:8080"), "/"),
 		JWTSecret:           get("JWT_SECRET", ""),
 		GoogleOAuthClientID: get("GOOGLE_OAUTH_CLIENT_ID", ""),
+		SeoulOpenAPIKey:     get("SEOUL_OPENAPI_KEY", ""),
 	}
+	c.PublicURL = strings.TrimRight(get("PUBLIC_URL", "http://localhost:"+c.Port), "/")
 	var missing []string
 	if c.DatabaseURL == "" {
 		missing = append(missing, "DATABASE_URL")

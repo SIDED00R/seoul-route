@@ -21,8 +21,12 @@
       "type": "vehicle-rental",
       "network": "ttareungi",
       "sourceType": "gbfs",
-      "url": "http://localhost:8090/gbfs.json",
-      "frequency": "1m"
+      // 백엔드 GBFS 어댑터(실제 따릉이). 스파이크 fixture 는 otp/fixtures/gbfs 를 8090 에 띄우고 이 URL 을 바꾼다.
+      // Compose 에서는 deploy/otp/router-config.json(url 이 http://api:8081)을 쓴다. routingDefaults 를 고치면 그쪽도 맞춘다.
+      "url": "http://localhost:8081/gbfs/gbfs.json",
+      "frequency": "1m",
+      // 따릉이는 만차여도 반납이 된다 → 빈 거치대 0 이어도 반납 허용.
+      "overloadingAllowed": true
     }
   ]
 }
