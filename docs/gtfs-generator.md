@@ -1,0 +1,45 @@
+# 운영 GTFS 생성기 (Phase 1a) — 결과 보고
+
+작성일 2026-09-12. 이슈 #3. 코드 `gtfs/` (Go 1.27, 표준 라이브러리만).
+
+## 무엇을 만들었나
+
+| 단계 | 명령 | 내용 |
+|---|---|---|
+| 수집 | `cd gtfs && go run ./cmd/gtfsgen fetch` | 서울시 버스 노선정보조회 API. 노선 목록은 노선명에 0~9 를 검색한 합집합(1,357개, 누락 0), 노선별 정류장 1,357회. 응답은 `gtfs/cache/*.json` 에 저장되고 있으면 건너뛴다 |
+| 생성 | `cd gtfs && go run ./cmd/gtfsgen build` | 캐시 + 국가교통DB 파일럿 도시철도(`otp/data/202503_GTFS_DataSet`, route_type 1 만) → `gtfs/out/seoul-gtfs.zip` |
+| 검증 | `java -jar gtfs-validator-8.0.1-cli.jar -i gtfs/out/seoul-gtfs.zip -o gtfs/out/validation -c kr` | MobilityData 검증기 |
+
+## 버스 변환 규칙
+
+- `routes.txt`: `B_{busRouteId}`, route_type 3. 노선 유형(간선·지선·마을·광역·경기·인천) 모두 포함.
+- `stops.txt`: `BS_{station}` (정류소 고유 ID), 좌표는 API 의 gpsX/gpsY.
+- `trips.txt` + `frequencies.txt`: 노선당 trip 2개. `B_{id}_T` 는 기점→회차→기점 전 구간을 첫차~막차 사이 배차간격(`term`분)으로 `exact_times=0`. GTFS 의 `end_time` 은 배타적이고 OTP 2.10 도 `< end` 로 비교해(바이트코드 확인) 막차 시각 출발이 생성되지 않으므로, 막차 1회는 `B_{id}_LAST` 로 절대시각 stop_times 를 따로 둔다. 막차가 자정을 넘기면 24:xx 로 표기.
+- `stop_times.txt`: `_T` 는 첫 정류장 00:00:00 기준 상대시각, `_LAST` 는 막차 시각 기준 절대시각. 정류장 간 소요 = `fullSectDist`(m) ÷ `sectSpd`(km/h). `sectSpd` 가 0 이면 18 km/h(placeholder).
+- `calendar.txt`: 서비스 `ALL` 하나, 전 요일. **API 가 요일별 배차를 주지 않아 평일·주말이 같다** — 알려진 한계.
+- 제외: 배차간격 없음 · 첫차·막차 파싱 실패 · 첫차==막차(API 가 시각을 모르면 둘 다 자정을 준다, 24시간 운행 아님) · 정류장 2개 미만. 2026-09-12 실행에서 333개. 그중 첫차==막차 82개에는 서울 노선 51개(지선 21·간선 18·광역 6·마을 3·순환 2·심야 1)가 포함되며, 이들만 지나던 서울 bbox 안 정류장 124곳이 그래프에서 빠진다. 유령 운행(새벽 3시 출근버스 안내)이 결측보다 해롭다고 보고 제외를 택했다. 나머지 251개는 대부분 경기·인천 진입 노선(245개)이고, 서울 노선 6개(자율주행 새벽A160·A504·A148·A741, 시티투어 TOUR04, 지선 8772)도 배차간격 결측으로 빠진다.
+
+## 실행 결과 (2026-09-12)
+
+| 항목 | 값 |
+|---|---|
+| fetch | 1,367콜, 5분 (개발계정 일 1,000건 한도에 걸리지 않음 — 실측) |
+| build | 21초 (파일럿 stop_times 1.4GB 2회 스캔 포함) |
+| 산출 | 버스 노선 1,024 · 정류장 22,681 · 버스 trip 2,048(배차 1,024 + 막차 1,024) · 도시철도 trip 8,684 · 역 762 · stop_times 376,682 · zip **3.7 MB** (파일럿 서울 절단본 85.6 MB) |
+| gtfs-validator 8.0.1 | **ERROR 0**. WARNING: mixed_case_recommended_field 11,670(정류장명 대문자 권고, 무해) · fast_travel_between_consecutive_stops 53 · route_long_name_contains_short_name 31 · missing_recommended_file 1(feed_info.txt) |
+| OTP 2.10 빌드 (최종본, 16:27) | 60초, peak RSS 4.1 GB (파일럿 8.7 GB), graph.obj 180.6 MB (파일럿 329 MB), 정류장 23,443 · 패턴 1,478 |
+| OTP 서빙 (-Xmx4G, 최종본) | **RSS 2.6 GB** (질의 3건 후, 파일럿 5.1 GB) → e2-standard-2(8 GB) 에 PostgreSQL 과 공존 가능 |
+| 라우팅 실증 (최종본) | 서울역→강남 버스 402 38.9분 · 여의도 경유 via 정상(58.9분) · 대중교통+따릉이 결합(버스402→따릉이) 정상. 원본 `otp/spike/results-seoul-gtfs.txt`. 271번 `_LAST` trip 이 기점 22:20 출발·123정류장·24:27 종점으로 그래프에 존재함을 GraphQL `trip` 조회로 확인 |
+
+## 소요시간 모델 정확도 (미보정, 알려진 한계)
+
+- 정류장별 첫차 통과시각(`beginTm`)으로 교차검증하려 했으나 같은 차량 궤적이 아니라(마을버스 span 1,400분) 폐기.
+- 파일럿 시간표와 노선명으로 604개 노선을 짝지어 비교한 결과 모델/시간표 비율 중앙값 1.21, 사분위 1.02~1.80. 매칭이 거칠고(정류장 수 불일치, 파일럿은 아침 1회차 기준) 방향이 일정하지 않아 보정 계수를 정할 근거가 못 된다.
+- 결론: v1 은 `sectSpd` 기반 미보정. 오차는 ±25% 수준으로 본다. 보정은 Phase 3 이후 버스 실시간 위치(`getBusPosByRtid`)로 구간별 실측 속도를 쌓아 한다.
+
+## 그 밖의 한계
+
+- 도시철도는 국가교통DB 파일럿(2025-03 평일 1일)을 그대로 쓴다. 역 좌표·시간표 모두 파일럿 값. 갱신하려면 TAGO 역별 시간표 + 역 좌표(열린데이터광장 역사마스터 OA-21232) 결합 작업이 필요하다.
+- `shapes.txt` 없음(getRoutePath 미사용). 지도 표시용이라 라우팅에는 영향 없다.
+- frequencies 기반이라 같은 경로가 출발시각만 다르게 여러 개 반환된다(1분 간격 실측). 백엔드가 leg 서명으로 중복 제거해야 한다.
+- 수집 클라이언트는 네트워크 오류(`*url.Error`)에서 키가 든 URL 을 벗겨 원인만 남긴다. 캐시·산출물·로그에 키 포함 0건 실측(2026-09-12).

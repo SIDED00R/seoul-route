@@ -20,15 +20,16 @@ docs/      스파이크 보고서·설계 문서
   - OTP 실행파일: GitHub `opentripplanner/OpenTripPlanner` 릴리스 v2.10.0 의 `otp-shaded-2.10.0.jar` → `otp/`
   - OSM: Geofabrik `asia/south-korea-latest.osm.pbf` → `otp/data/` → `python otp/extract_seoul.py` 로 `otp/data/seoul.osm.pbf`
   - GTFS 파일럿: 국가교통DB(ktdb.go.kr) 로그인 → 정보공개 > 자료신청 > 교통분석자료 신청 > 교통망 GIS DB > 대중교통 > 대중교통 GTFS(2025-03) 신청·다운로드 → zip 을 풀어 `otp/data/202503_GTFS_DataSet/` 에 배치 → `python otp/filter_gtfs_seoul.py` 로 `otp/data/gtfs-ktdb.zip` 생성(서울 bbox 필터 + route_type 표준 변환)
-  - `gtfs-ktdb.zip` 이 없으면 빌드는 **실패하지 않고** 종료코드 0 으로 `|Stops|=0` 그래프가 나온다(실측 2026-09-12). 빌드 로그의 `Transit built. |Stops|=` 를 확인한다.
-- OTP 그래프 빌드: `cd otp && java -Xmx12G -jar otp-shaded-2.10.0.jar --build --save .` (GTFS 포함 시 peak RSS 8.7GB 실측, 로컬 PC 에서만)
-- OTP 서빙: `cd otp && java -Xmx6G -jar otp-shaded-2.10.0.jar --load .` → GraphQL `http://localhost:8080/otp/gtfs/v1` (GTFS 포함 그래프 서빙 RSS 5.1GB, 기동 직후 실측)
+  - 운영 GTFS: `cd gtfs && go run ./cmd/gtfsgen fetch && go run ./cmd/gtfsgen build` → `gtfs/out/seoul-gtfs.zip` 을 `otp/data/seoul-gtfs.zip` 으로 복사. build-config 의 transitFeeds 는 이 파일을 가리킨다. 상세 `docs/gtfs-generator.md`
+  - GTFS zip 이 없으면 빌드는 **실패하지 않고** 종료코드 0 으로 `|Stops|=0` 그래프가 나온다(실측 2026-09-12). 빌드 로그의 `Transit built. |Stops|=` 를 확인한다.
+- OTP 그래프 빌드: `cd otp && java -Xmx8G -jar otp-shaded-2.10.0.jar --build --save .` (운영 GTFS 기준 peak RSS 5.3GB 실측, 로컬 PC 에서만)
+- OTP 서빙: `cd otp && java -Xmx4G -jar otp-shaded-2.10.0.jar --load .` → GraphQL `http://localhost:8080/otp/gtfs/v1` (운영 GTFS 그래프 서빙 RSS 2.2GB, 질의 3건 후 실측)
 - GBFS fixture 서버(스파이크용): `python -m http.server 8090 -d otp/fixtures/gbfs`
 - 백엔드: `cd backend && go run ./cmd/api` (Phase 1부터)
 
 ## 검증
 
-- Go: `cd backend && go test ./... && golangci-lint run`
+- Go: `cd gtfs && go vet ./... && go test ./...` (backend 는 Phase 1b 부터)
 - Flutter: `cd app && flutter analyze && flutter test`
 - 기능 완료 판정은 테스트 통과가 아니라 실제 실행이다: OTP에 curl로 plan 요청을 보내 응답 본문을 읽고, 앱은 실기기에서 흐름을 태운다.
 
