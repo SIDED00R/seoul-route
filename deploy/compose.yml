@@ -41,6 +41,8 @@ services:
       SEOUL_OPENAPI_KEY: ${SEOUL_OPENAPI_KEY:-} # 비면 GBFS 비활성(/gbfs 503) — 따릉이 라우팅이 죽는다
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-} # 비면 /places/search 503
       VWORLD_API_KEY: ${VWORLD_API_KEY:-}         # 비면 /tiles 503
+      DATA_GO_KR_KEY: ${DATA_GO_KR_KEY:-}                     # 비면 버스 첫 탑승 실시간 보정 없음
+      SEOUL_SUBWAY_REALTIME_KEY: ${SEOUL_SUBWAY_REALTIME_KEY:-} # 비면 지하철 첫 탑승 실시간 보정 없음
       PUBLIC_URL: http://api:8081               # OTP 컨테이너가 GBFS 하위 feed URL 을 이 주소로 받는다
       PORT: "8081"
     depends_on:

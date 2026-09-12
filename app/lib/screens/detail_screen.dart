@@ -56,7 +56,10 @@ class DetailScreen extends StatelessWidget {
       ]);
     }
     return Scaffold(
-      appBar: AppBar(title: Text('후보 $index · ${itinerary.minutes}분')),
+      appBar: AppBar(
+        title: Text('후보 $index · ${itinerary.minutes}분'
+            '${itinerary.realtimeLabel == null ? '' : ' · ${itinerary.realtimeLabel}'}'),
+      ),
       body: Column(
         children: [
           Expanded(

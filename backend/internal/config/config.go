@@ -20,6 +20,8 @@ type Config struct {
 	PublicURL           string // OTP 가 GBFS 를 읽어갈 이 서버의 주소
 	KakaoRESTKey        string // 비어 있으면 /places/search 가 503. 키는 서버에만 두고 앱에는 내려보내지 않는다
 	VWorldKey           string // 비어 있으면 /tiles/* 가 503
+	BusArrivalKey       string // 공공데이터포털 키(DATA_GO_KR_KEY). 비면 버스 첫 탑승 실시간 보정 없음
+	SubwayRealtimeKey   string // 열린데이터광장 지하철 실시간 키. 비면 지하철 첫 탑승 실시간 보정 없음
 }
 
 // Load 는 .env(있으면)를 읽고 환경변수로 덮어쓴 뒤 필수값을 검사한다.
@@ -46,6 +48,8 @@ func Load() (Config, error) {
 		SeoulOpenAPIKey:     get("SEOUL_OPENAPI_KEY", ""),
 		KakaoRESTKey:        get("KAKAO_REST_API_KEY", ""),
 		VWorldKey:           get("VWORLD_API_KEY", ""),
+		BusArrivalKey:       get("DATA_GO_KR_KEY", ""),
+		SubwayRealtimeKey:   get("SEOUL_SUBWAY_REALTIME_KEY", ""),
 	}
 	c.PublicURL = strings.TrimRight(get("PUBLIC_URL", "http://localhost:"+c.Port), "/")
 	var missing []string
