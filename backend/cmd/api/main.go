@@ -53,6 +53,13 @@ func main() {
 	srv := &httpapi.Server{
 		DB: pool, JWT: auth.NewJWT(cfg.JWTSecret), Google: google, OTPURL: cfg.OTPURL, HTTP: httpClient, Log: log,
 		Planner: &route.Planner{OTP: &otp.Client{URL: cfg.OTPURL, HTTP: &http.Client{Timeout: httpapi.PlanTimeout}}},
+		KakaoKey: cfg.KakaoRESTKey, VWorldKey: cfg.VWorldKey,
+	}
+	if cfg.KakaoRESTKey == "" {
+		log.Warn("places search disabled", "reason", "KAKAO_REST_API_KEY 없음")
+	}
+	if cfg.VWorldKey == "" {
+		log.Warn("map tiles disabled", "reason", "VWORLD_API_KEY 없음")
 	}
 	if cfg.SeoulOpenAPIKey != "" {
 		poller := gbfs.NewPoller(cfg.SeoulOpenAPIKey, log)

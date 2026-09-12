@@ -1,0 +1,71 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:seoul_route/screens/place_search_screen.dart';
+import 'package:seoul_route/screens/plan_screen.dart';
+import 'package:seoul_route/screens/settings_screen.dart';
+import 'package:seoul_route/settings/settings_store.dart';
+
+void main() {
+  testWidgets('서버 주소 끝의 / 는 저장값과 현재 세션 양쪽에서 지워진다', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    await tester.pumpWidget(const MaterialApp(
+      home: PlanScreen(settings: Settings(baseUrl: 'http://10.0.2.2:8081', token: 'tok')),
+    ));
+    await tester.tap(find.byIcon(Icons.settings));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'http://10.0.2.2:8081/');
+    await tester.tap(find.text('저장'));
+    await tester.pumpAndSettle();
+
+    final saved = await SettingsStore().load();
+    expect(saved.baseUrl, 'http://10.0.2.2:8081');
+
+    await tester.tap(find.text('출발지 선택'));
+    await tester.pumpAndSettle();
+    final api = tester.widget<PlaceSearchScreen>(find.byType(PlaceSearchScreen)).api;
+    expect(api.baseUrl, 'http://10.0.2.2:8081', reason: '재시작 전 세션도 정규화된 값을 써야 //places 가 안 생긴다');
+    expect(Uri.parse('${api.baseUrl}/places/search').path, '/places/search');
+  });
+
+  testWidgets('연결 확인 중 화면을 나가도 폐기된 State 에서 setState 하지 않는다', (tester) async {
+    await http.runWithClient(() async {
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (ctx) => Scaffold(
+            body: ElevatedButton(
+              onPressed: () => Navigator.push<Settings>(
+                ctx,
+                MaterialPageRoute(
+                  builder: (_) => const SettingsScreen(
+                    initial: Settings(baseUrl: 'http://10.0.2.2:8081', token: 'tok'),
+                  ),
+                ),
+              ),
+              child: const Text('설정으로'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('설정으로'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('연결 확인'));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('확인 중…'), findsOneWidget);
+
+      tester.state<NavigatorState>(find.byType(Navigator)).pop();
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 3)); // 500 도착 → on ApiException → finally
+      expect(tester.takeException(), isNull);
+    }, () => MockClient((req) async {
+          await Future<void>.delayed(const Duration(seconds: 2));
+          // charset 을 안 주면 http 패키지가 본문을 latin1 로 인코딩해 한글에서 ArgumentError 가 나고
+          // 500 이 도달하지 않는다(일반 catch 로 빠짐).
+          return http.Response('{"error":"서버 죽음"}', 500,
+              headers: const {'content-type': 'application/json; charset=utf-8'});
+        }));
+  });
+}
