@@ -56,6 +56,11 @@ type Planner struct {
 	OTP interface {
 		Plan(context.Context, otp.Request) ([]otp.Itinerary, error)
 	}
+	// Realtime 은 "지금 출발" 후보의 첫 탑승 대기를 실시간 도착으로 바꾼다(realtime.Corrector). nil 이면 시간표 값 그대로.
+	Realtime interface {
+		Adjust(context.Context, []otp.Itinerary) []otp.Itinerary
+	}
+	Now      func() time.Time // 테스트용 현재 시각. nil 이면 time.Now
 	mu       sync.RWMutex
 	stations []otp.Station // 앵커링용 부모역 목록(SetStations). 비면 항상 좌표로 요청한다
 }
@@ -105,42 +110,78 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) ([]otp.Itinerary, e
 	if err != nil {
 		return nil, err
 	}
-	return rank(dedupe(its)), nil
+	its = dedupe(its)
+	now := time.Now()
+	if p.Now != nil {
+		now = p.Now()
+	}
+	setDepartIn(its, req.Depart, now)
+	// 실시간은 점수순 상위 후보의 첫 탑승에만 적용한다. 그 전에는 정렬만 하고 컷은 걸지 않는다 — 최선이 실시간으로
+	// 늦어지면 컷 경계 밖에 있던 후보가 경쟁력을 얻는데, 먼저 잘라 버리면 되살릴 수 없다.
+	// 미래 출발(Depart 지정)은 실시간과 무관하므로 건너뛴다.
+	if p.Realtime != nil && req.Depart == nil {
+		sortByScore(its)
+		its = p.Realtime.Adjust(ctx, its)
+		setDepartIn(its, nil, now)
+	}
+	return rank(its), nil
+}
+
+func sortByScore(its []otp.Itinerary) {
+	sort.SliceStable(its, func(i, j int) bool { return score(its[i]) < score(its[j]) })
+}
+
+// setDepartIn 은 "지금 출발" 요청에서 요청 시각부터 여정 출발까지의 대기(초)를 채운다. 미래 출발이면 0.
+func setDepartIn(its []otp.Itinerary, depart *time.Time, now time.Time) {
+	for i := range its {
+		its[i].DepartIn = 0
+		if depart != nil {
+			continue
+		}
+		if st, err := time.Parse(time.RFC3339, its[i].Start); err == nil && st.After(now) {
+			its[i].DepartIn = st.Sub(now).Seconds()
+		}
+	}
 }
 
 // 순위 상수(제품 결정 2026-09-12: 환승·수단 전환이 잦은 후보는 뒤로, 도보·따릉이를 우대하지 않는다).
 //   - TransferPenaltySec 240: 환승 1회를 4분 손해로 친다. 카카오·구글이 쓰는 값은 비공개라 초기값이며 실사용 후 조정.
 //   - RentalPenaltySec 300: 따릉이 대여·반납 수고를 5분으로 친다(OTP 의 대여·반납 1분씩은 소요시간에 이미 포함).
 //   - MaxSlowerSec 1800: 최선보다 30분 넘게 느린 후보는 목록에서 뺀다(홍대입구→잠실 따릉이 122분 vs 지하철 38분).
+//     기준은 실시간 보정을 거친 뒤의 최선이다(보정 전에 자르면 최선이 늦어져도 후보를 되살릴 수 없다).
 const (
 	TransferPenaltySec = 240.0
 	RentalPenaltySec   = 300.0
 	MaxSlowerSec       = 1800.0
 )
 
-// rank 는 소요시간에 환승·대여 페널티를 더한 점수순으로 정렬하고, 최선보다 MaxSlowerSec 넘게 느린 후보를 뺀다.
+// rank 는 총 소요(출발 대기 DepartIn + Duration)에 환승·대여 페널티를 더한 점수순으로 정렬하고,
+// 최선보다 MaxSlowerSec 넘게 느린 후보를 뺀다.
 func rank(its []otp.Itinerary) []otp.Itinerary {
 	if len(its) == 0 {
 		return its
 	}
-	best := its[0].Duration
+	best := total(its[0])
 	for _, it := range its[1:] {
-		if it.Duration < best {
-			best = it.Duration
+		if total(it) < best {
+			best = total(it)
 		}
 	}
 	kept := its[:0:0]
 	for _, it := range its {
-		if it.Duration <= best+MaxSlowerSec {
+		if total(it) <= best+MaxSlowerSec {
 			kept = append(kept, it)
 		}
 	}
-	sort.SliceStable(kept, func(i, j int) bool { return score(kept[i]) < score(kept[j]) })
+	sortByScore(kept)
 	return kept
 }
 
+// total 은 요청 시각부터 도착까지(초). 지금 출발이면 출발 대기가 포함된다.
+func total(it otp.Itinerary) float64 { return it.DepartIn + it.Duration }
+
 func score(it otp.Itinerary) float64 {
-	s := it.Duration + TransferPenaltySec*float64(it.Transfers)
+	s := total(it) + TransferPenaltySec*float64(it.Transfers)
 	for _, l := range it.Legs {
 		if l.RentedBike {
 			s += RentalPenaltySec
