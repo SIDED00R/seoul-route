@@ -1,0 +1,27 @@
+# secrets
+.env
+*.key
+
+# data (large, downloaded/generated)
+otp/data/*.pbf
+otp/data/*.zip
+otp/data/*.obj
+otp/*.jar
+otp/graphs/
+gtfs/out/
+
+# go
+backend/bin/
+backend/tmp/
+
+# flutter
+app/.dart_tool/
+app/build/
+app/.flutter-plugins*
+app/android/.gradle/
+app/ios/Pods/
+
+# misc
+*.log
+.DS_Store
+Thumbs.db
