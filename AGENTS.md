@@ -16,9 +16,13 @@ docs/      스파이크 보고서·설계 문서
 ## 실행
 
 - OTP 2.10.0 은 **Java 25** 가 필요하다(class file 69, Java 21 은 UnsupportedClassVersionError).
-- OTP 그래프 빌드: `cd otp && java -Xmx6G -jar otp-shaded-2.10.0.jar --build --save .`
-- OTP 서빙: `cd otp && java -Xmx4G -jar otp-shaded-2.10.0.jar --load .` → GraphQL `http://localhost:8080/otp/gtfs/v1`
-- OSM 서울 추출: `python otp/extract_seoul.py` (입력 `otp/data/south-korea-latest.osm.pbf` → 출력 `otp/data/seoul.osm.pbf`)
+- 입력 데이터 준비(jar 은 `otp/`, 나머지는 `otp/data/` — 전부 git 무시):
+  - OTP 실행파일: GitHub `opentripplanner/OpenTripPlanner` 릴리스 v2.10.0 의 `otp-shaded-2.10.0.jar` → `otp/`
+  - OSM: Geofabrik `asia/south-korea-latest.osm.pbf` → `otp/data/` → `python otp/extract_seoul.py` 로 `otp/data/seoul.osm.pbf`
+  - GTFS 파일럿: 국가교통DB(ktdb.go.kr) 로그인 → 정보공개 > 자료신청 > 교통분석자료 신청 > 교통망 GIS DB > 대중교통 > 대중교통 GTFS(2025-03) 신청·다운로드 → zip 을 풀어 `otp/data/202503_GTFS_DataSet/` 에 배치 → `python otp/filter_gtfs_seoul.py` 로 `otp/data/gtfs-ktdb.zip` 생성(서울 bbox 필터 + route_type 표준 변환)
+  - `gtfs-ktdb.zip` 이 없으면 빌드는 **실패하지 않고** 종료코드 0 으로 `|Stops|=0` 그래프가 나온다(실측 2026-09-12). 빌드 로그의 `Transit built. |Stops|=` 를 확인한다.
+- OTP 그래프 빌드: `cd otp && java -Xmx12G -jar otp-shaded-2.10.0.jar --build --save .` (GTFS 포함 시 peak RSS 8.7GB 실측, 로컬 PC 에서만)
+- OTP 서빙: `cd otp && java -Xmx6G -jar otp-shaded-2.10.0.jar --load .` → GraphQL `http://localhost:8080/otp/gtfs/v1` (GTFS 포함 그래프 서빙 RSS 5.1GB, 기동 직후 실측)
 - GBFS fixture 서버(스파이크용): `python -m http.server 8090 -d otp/fixtures/gbfs`
 - 백엔드: `cd backend && go run ./cmd/api` (Phase 1부터)
 

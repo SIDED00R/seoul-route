@@ -2,6 +2,9 @@
   "osm": [
     { "source": "data/seoul.osm.pbf", "osmTagMapping": "default" }
   ],
+  "transitFeeds": [
+    { "type": "gtfs", "feedId": "ktdb", "source": "data/gtfs-ktdb.zip" }
+  ],
   "transitServiceStart": "-P2Y",
   "transitServiceEnd": "P3Y",
   "transitModelTimeZone": "Asia/Seoul",
