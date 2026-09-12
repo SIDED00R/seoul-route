@@ -1,0 +1,14 @@
+{
+  "last_updated": 1757650000,
+  "ttl": 60,
+  "version": "2.3",
+  "data": {
+    "stations": [
+      { "station_id": "ST-1", "name": "서울역 1번출구 앞 (fixture)", "lat": 37.5562, "lon": 126.9723, "capacity": 20 },
+      { "station_id": "ST-2", "name": "여의도역 3번출구 (fixture)", "lat": 37.5216, "lon": 126.9243, "capacity": 20 },
+      { "station_id": "ST-3", "name": "강남역 11번출구 (fixture)", "lat": 37.4979, "lon": 127.0276, "capacity": 20 },
+      { "station_id": "ST-4", "name": "용산역 앞 (fixture)", "lat": 37.5299, "lon": 126.9648, "capacity": 20 },
+      { "station_id": "ST-5", "name": "신논현역 (fixture, 빈 대여소)", "lat": 37.5045, "lon": 127.0250, "capacity": 20 }
+    ]
+  }
+}

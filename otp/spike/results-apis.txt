@@ -1,0 +1,26 @@
+## 따릉이 bikeList (열린데이터광장)
+  list_total_count=5  1페이지 row=5  RESULT={'CODE': 'INFO-000', 'MESSAGE': '정상 처리되었습니다.'}
+  필드: ['parkingBikeTotCnt', 'rackTotCnt', 'shared', 'stationId', 'stationLatitude', 'stationLongitude', 'stationName']
+  예시: {'rackTotCnt': '15', 'stationName': '102. 망원역 1번출구 앞', 'parkingBikeTotCnt': '15', 'shared': '100', 'stationLatitude': '37.55564880', 'stationLongitude': '126.91062927', 'stationId': 'ST-4'}
+  → 전체 row=2734 고유 stationId=2734 (3콜)
+
+## 서울 버스 노선정보 (공공데이터포털, ws.bus.go.kr)
+  getBusRouteList(strSrch=271): headerCd=0 정상적으로 처리되었습니다.  건수=1
+  필드: ['busRouteAbrv', 'busRouteId', 'busRouteNm', 'corpNm', 'edStationNm', 'firstBusTm', 'firstLowTm', 'lastBusTm', 'lastBusYn', 'lastLowTm', 'length', 'routeType', 'stStationNm', 'term']
+  예시: {'busRouteId': '100100047', 'busRouteNm': '271', 'busRouteAbrv': '271', 'length': '52.99', 'routeType': '3', 'stStationNm': '용마문화복지센터', 'edStationNm': '월드컵파크7단지', 'term': '6', 'lastBusYn': ' ', 'lastBusTm': '20260912222000', 'firstBusTm': '20260912041000', 'lastLowTm': '20191106000000', 'firstLowTm': '              ', 'corpNm': '경성여객  02-435-5158'}
+  getRouteInfo: 첫차=20260912041000 막차=20260912222000 배차=6분 저상첫차=               노선길이=52.99km
+  getStaionByRoute: 정류장 123개  필드: ['arsId', 'beginTm', 'busRouteAbrv', 'busRouteId', 'busRouteNm', 'direction', 'fullSectDist', 'gpsX', 'gpsY', 'lastTm', 'posX', 'posY', 'routeType', 'sectSpd', 'section', 'seq', 'station', 'stationNm', 'stationNo', 'transYn', 'trnstnid']
+  예시: seq=1 용마문화복지센터.서일대후문 gps=(37.586485,127.09538) sectSpd=0 fullSectDist=0 trnstnid=113000181
+  getRoutePath: 좌표점 1633개 (shapes.txt 용)
+
+## TAGO 지하철정보 (공공데이터포털)
+  역 검색(서울): resultCode=00 NORMAL SERVICE.  totalCount=20 건수=20
+  필드: ['subwayRouteName', 'subwayStationId', 'subwayStationName']  ← 좌표 없음: 역 좌표는 별도 소스 필요
+   - {'subwayStationId': 'MTRARA1A01', 'subwayStationName': '서울역', 'subwayRouteName': '공항'}
+   - {'subwayStationId': 'MTRDXD1D013', 'subwayStationName': '미금(분당서울대병원)', 'subwayRouteName': '신분당'}
+   - {'subwayStationId': 'MTRGXAX106', 'subwayStationName': '서울역', 'subwayRouteName': 'GTX-A'}
+   - {'subwayStationId': 'MTRKRK1K211', 'subwayStationName': '서울숲', 'subwayRouteName': '수인분당'}
+   - {'subwayStationId': 'MTRKRK1K222', 'subwayStationName': '복정(동서울대학)', 'subwayRouteName': '수인분당'}
+  역별 시간표(MTRARA1A01, 평일, 상행): totalCount=209 건수=209
+  필드: ['arrTime', 'dailyTypeCode', 'depTime', 'endSubwayStationId', 'endSubwayStationNm', 'subwayRouteId', 'subwayStationId', 'subwayStationNm', 'upDownTypeCode']
+  예시: {'subwayStationId': 'MTRARA1A01', 'subwayStationNm': '서울역', 'subwayRouteId': 'MTRARA1', 'endSubwayStationId': 'MTRARA1A01', 'endSubwayStationNm': '서울역', 'depTime': '0', 'arrTime': '000330', 'dailyTypeCode': '01', 'upDownTypeCode': 'U'}

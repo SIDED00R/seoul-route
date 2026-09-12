@@ -15,9 +15,14 @@ docs/      스파이크 보고서·설계 문서
 
 ## 실행
 
-- OTP 그래프 빌드: `cd otp && java -Xmx6G -jar otp-shaded-2.10.0.jar --build --save .`
-- OTP 서빙: `cd otp && java -Xmx4G -jar otp-shaded-2.10.0.jar --load .` → GraphQL `http://localhost:8080/otp/gtfs/v1`
-- OSM 서울 추출: `python otp/extract_seoul.py` (입력 `otp/data/south-korea-latest.osm.pbf` → 출력 `otp/data/seoul.osm.pbf`)
+- OTP 2.10.0 은 **Java 25** 가 필요하다(class file 69, Java 21 은 UnsupportedClassVersionError).
+- 입력 데이터 준비(jar 은 `otp/`, 나머지는 `otp/data/` — 전부 git 무시):
+  - OTP 실행파일: GitHub `opentripplanner/OpenTripPlanner` 릴리스 v2.10.0 의 `otp-shaded-2.10.0.jar` → `otp/`
+  - OSM: Geofabrik `asia/south-korea-latest.osm.pbf` → `otp/data/` → `python otp/extract_seoul.py` 로 `otp/data/seoul.osm.pbf`
+  - GTFS 파일럿: 국가교통DB(ktdb.go.kr) 로그인 → 정보공개 > 자료신청 > 교통분석자료 신청 > 교통망 GIS DB > 대중교통 > 대중교통 GTFS(2025-03) 신청·다운로드 → zip 을 풀어 `otp/data/202503_GTFS_DataSet/` 에 배치 → `python otp/filter_gtfs_seoul.py` 로 `otp/data/gtfs-ktdb.zip` 생성(서울 bbox 필터 + route_type 표준 변환)
+  - `gtfs-ktdb.zip` 이 없으면 빌드는 **실패하지 않고** 종료코드 0 으로 `|Stops|=0` 그래프가 나온다(실측 2026-09-12). 빌드 로그의 `Transit built. |Stops|=` 를 확인한다.
+- OTP 그래프 빌드: `cd otp && java -Xmx12G -jar otp-shaded-2.10.0.jar --build --save .` (GTFS 포함 시 peak RSS 8.7GB 실측, 로컬 PC 에서만)
+- OTP 서빙: `cd otp && java -Xmx6G -jar otp-shaded-2.10.0.jar --load .` → GraphQL `http://localhost:8080/otp/gtfs/v1` (GTFS 포함 그래프 서빙 RSS 5.1GB, 기동 직후 실측)
 - GBFS fixture 서버(스파이크용): `python -m http.server 8090 -d otp/fixtures/gbfs`
 - 백엔드: `cd backend && go run ./cmd/api` (Phase 1부터)
 
@@ -32,7 +37,8 @@ docs/      스파이크 보고서·설계 문서
 - 인증키는 `.env`(gitignore)에만 둔다. `.env.example`에 변수명이 있다. 채팅·로그·URL 출력에 키를 남기지 않는다.
 - 국가교통DB GTFS 파일럿(2025-03 평일 1일)은 엔진 스파이크용이다. 운영 시간표는 `gtfs/` 생성기가 만든다.
 - T-data 신호 잔여시간 API는 개발자 한도 하루 1,000건, 잔여시간 단위 1/10초, 좌표 없음.
-- 열린데이터광장 `bikeList`는 1콜 최대 1,000행. 총건수는 `list_total_count`로 읽어 동적 페이징한다.
+- 열린데이터광장 `bikeList`는 1콜 최대 1,000행. `list_total_count`는 전체가 아니라 요청 범위 건수를 돌려주므로(실측) 짧은 페이지가 나올 때까지 넘긴다. 2026-09-12 실측 2,734곳 = 3콜.
+- 공공데이터포털 키는 계정당 1개이며 API마다 활용신청이 필요하다. 서울 버스 = `ws.bus.go.kr/api/rest/busRouteInfo/*`(노선별 정류장에 좌표·구간거리·정류장별 첫막차 포함). TAGO 지하철 = `apis.data.go.kr/1613000/SubwayInfo/Get*`(2022-09 개편, 구 `SubwayInfoService/get*` 경로는 오류). 역 검색 응답에 좌표가 없다.
 
 ## 규칙
 
