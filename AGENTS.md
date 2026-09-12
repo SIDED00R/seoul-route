@@ -39,6 +39,7 @@ docs/      스파이크 보고서·설계 문서
 - API 실행 검증: 서버 기동 후 `curl localhost:8081/health`(db·otp 둘 다 ok 인지 본문 확인), 미인증 `/users/me` 401, `/auth/google` 미설정 503, `/gbfs/station_status.json` 에 대여소 2,700여 곳, devtoken 으로 `POST /routes/plan` 서울역→강남 정상 응답(legs 본문 확인)·부산 좌표 400
 - Flutter: `cd app && flutter analyze && flutter test`. 실행 검증은 에뮬레이터(s23ultra) 또는 실기기에서 설정→검색→경로 목록→상세 지도까지 실제로 눌러 보고 `flutter run` 콘솔에 예외 0건인지 본다. 스크린샷은 `docs/app/` 에 남긴다.
 - 기능 완료 판정은 테스트 통과가 아니라 실제 실행이다: OTP에 curl로 plan 요청을 보내 응답 본문을 읽고, 앱은 실기기에서 흐름을 태운다.
+- 경로 정확도 대조: OTP 가 떠 있는 상태에서 `cd backend && go run ./cmd/odcompare -at 08:30`(대표 OD 20쌍 = ODsay 20콜, `-n 5` 로 줄임, `-at` 을 빼면 지금 출발·실시간 보정 포함). 결과 `docs/eval/<시각>.md` 의 Δ 중앙값·top3 일치율을 직전 파일과 비교한다. 시간표·순위를 바꾼 PR 은 전후 실행 결과를 `docs/routing-accuracy.md` 에 적는다. `ODSAY_API_KEY` 가 없으면 종료코드 2.
 
 ## 데이터·키
 
@@ -46,6 +47,7 @@ docs/      스파이크 보고서·설계 문서
 - 국가교통DB GTFS 파일럿(2025-03 평일 1일)은 엔진 스파이크용이다. 운영 시간표는 `gtfs/` 생성기가 만든다.
 - T-data 신호 잔여시간 API는 개발자 한도 하루 1,000건, 잔여시간 단위 1/10초, 좌표 없음.
 - 열린데이터광장 `bikeList`는 1콜 최대 1,000행. `list_total_count`는 전체가 아니라 요청 범위 건수를 돌려주므로(실측) 짧은 페이지가 나올 때까지 넘긴다. 2026-09-12 실측 2,734곳 = 3콜.
+- ODsay Lab(lab.odsay.com) 키는 개인 무료 하루 30콜. `cmd/odcompare` 만 쓰고 서버는 읽지 않는다. 카카오·네이버는 대중교통 경로 API 가 없다.
 - 공공데이터포털 키는 계정당 1개이며 API마다 활용신청이 필요하다. 서울 버스 = `ws.bus.go.kr/api/rest/busRouteInfo/*`(노선별 정류장에 좌표·구간거리·정류장별 첫막차 포함). TAGO 지하철 = `apis.data.go.kr/1613000/SubwayInfo/Get*`(2022-09 개편, 구 `SubwayInfoService/get*` 경로는 오류). 역 검색 응답에 좌표가 없다.
 
 ## 규칙
