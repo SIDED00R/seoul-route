@@ -1,0 +1,47 @@
+# 로컬·VM 공용 스택. 레포 루트에서 `docker compose -f deploy/compose.yml up -d`.
+# 그래프(otp/graph.obj)는 로컬 PC 에서 빌드해 넣는다(VM 에서 빌드하지 않는다 — peak RSS 4.1GB).
+services:
+  postgres:
+    image: postgis/postgis:17-3.5
+    environment:
+      POSTGRES_USER: seoul
+      POSTGRES_PASSWORD: seoul
+      POSTGRES_DB: seoul_route
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U seoul -d seoul_route"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  otp:
+    image: opentripplanner/opentripplanner:2.10.0
+    command: ["--load", "/var/opentripplanner"]
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xmx4G"
+    volumes:
+      - ../otp/graph.obj:/var/opentripplanner/graph.obj:ro
+      - ../otp/router-config.json:/var/opentripplanner/router-config.json:ro
+      - ../otp/otp-config.json:/var/opentripplanner/otp-config.json:ro
+    ports:
+      - "127.0.0.1:8080:8080" # 호스트 loopback 만. Phase 5 에서 Caddy(TLS) 뒤로 붙일 때 그대로 둔다
+    mem_limit: 5g
+
+  api:
+    build:
+      context: ../backend
+    environment:
+      DATABASE_URL: postgres://seoul:seoul@postgres:5432/seoul_route?sslmode=disable
+      OTP_URL: http://otp:8080
+      JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      PORT: "8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8081:8081" # 평문 HTTP 를 외부에 열지 않는다. 외부 공개는 Phase 5 Caddy(TLS) 가 맡는다
+
+volumes:
+  pgdata:
