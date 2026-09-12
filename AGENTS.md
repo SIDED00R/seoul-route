@@ -26,13 +26,16 @@ docs/      스파이크 보고서·설계 문서
 - OTP 서빙: `cd otp && java -Xmx4G -jar otp-shaded-2.10.0.jar --load .` → GraphQL `http://localhost:8080/otp/gtfs/v1` (운영 GTFS 그래프 서빙 RSS 2.2GB, 질의 3건 후 실측)
 - GBFS fixture 서버(스파이크용): `python -m http.server 8090 -d otp/fixtures/gbfs`
 - PostgreSQL 17(로컬, WSL 없이): EDB 포터블 바이너리 `C:\Users\SAMSUNG\tools\pg17\pgsql`, 데이터 `..\pg17\data`, 포트 5432, 역할 `seoul/seoul`, DB `seoul_route`·`seoul_route_test`. 기동은 PowerShell `Start-Process postgres.exe -ArgumentList '-D',<data>,'-p','5432' -WindowStyle Hidden` (셸 자식으로 띄우면 셸 종료 시 같이 죽는다 — 실측). PostGIS 는 없다 → Phase 4 부터 Compose 의 `postgis/postgis:17-3.5` 를 쓴다.
-- 백엔드: `cd backend && go run ./cmd/api` → `http://localhost:8081`. 설정은 `.env`(DATABASE_URL·OTP_URL·JWT_SECRET 필수, GOOGLE_OAUTH_CLIENT_ID 없으면 `/auth/google` 503). 기동 시 `internal/db/migrations/*.sql` 을 자동 적용한다.
-- 전체 스택(Compose, WSL 필요): `docker compose -f deploy/compose.yml up -d` (postgis·otp·api)
+- 백엔드: `cd backend && go run ./cmd/api` → `http://localhost:8081`. 설정은 `.env`(DATABASE_URL·OTP_URL·JWT_SECRET 필수, GOOGLE_OAUTH_CLIENT_ID 없으면 `/auth/google` 503, SEOUL_OPENAPI_KEY 없으면 `/gbfs/*` 503). 기동 시 `internal/db/migrations/*.sql` 을 자동 적용한다.
+  - 엔드포인트: `GET /health` · `POST /auth/google` · `GET /gbfs/{gbfs,system_information,station_information,station_status}.json`(따릉이 60초 폴링, OTP 가 읽는다) · 인증 필요: `GET/DELETE /users/me`, `POST /routes/plan`(origin·destination·via[]·segment_modes[]·depart)
+  - OTP 는 `otp/router-config.json` 의 GBFS url 로 이 서버(8081/gbfs)를 읽는다. 백엔드를 먼저 띄우고 OTP 를 띄우거나, OTP 가 1분마다 재시도하게 둔다.
+  - 개발 토큰(Google 로그인 전): `cd backend && go run ./cmd/devtoken <이름>` → JWT 출력. 운영 이미지에는 넣지 않는다.
+- 전체 스택(Compose, WSL 필요): 레포 루트에서 `docker compose --env-file .env -f deploy/compose.yml up -d` (postgis·otp·api). 루트 `.env` 의 JWT_SECRET·SEOUL_OPENAPI_KEY 가 컨테이너로 들어간다. otp 컨테이너는 `deploy/otp/router-config.json`(GBFS url = `http://api:8081`)을 쓴다 — `otp/router-config.json` 의 routingDefaults 를 바꾸면 같이 맞춘다. 이 PC 에 docker 가 없어 Compose 는 아직 실기동 검증을 못 했다.
 
 ## 검증
 
 - Go: `cd gtfs && go vet ./... && go test ./...` / `cd backend && go vet ./... && TEST_DATABASE_URL=postgres://seoul:seoul@localhost:5432/seoul_route_test?sslmode=disable go test ./...` (DB 없으면 httpapi 테스트는 skip 된다 — 통과가 아니다)
-- API 실행 검증: 서버 기동 후 `curl localhost:8081/health`(db·otp 둘 다 ok 인지 본문 확인), 미인증 `/users/me` 401, `/auth/google` 미설정 503
+- API 실행 검증: 서버 기동 후 `curl localhost:8081/health`(db·otp 둘 다 ok 인지 본문 확인), 미인증 `/users/me` 401, `/auth/google` 미설정 503, `/gbfs/station_status.json` 에 대여소 2,700여 곳, devtoken 으로 `POST /routes/plan` 서울역→강남 정상 응답(legs 본문 확인)·부산 좌표 400
 - Flutter: `cd app && flutter analyze && flutter test`
 - 기능 완료 판정은 테스트 통과가 아니라 실제 실행이다: OTP에 curl로 plan 요청을 보내 응답 본문을 읽고, 앱은 실기기에서 흐름을 태운다.
 
