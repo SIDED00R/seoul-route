@@ -1,6 +1,7 @@
 // Compose 스택용 router-config. otp 컨테이너에서는 백엔드가 localhost 가 아니라 서비스명 api 라 GBFS url 만 다르다.
 // routingDefaults 는 otp/router-config.json 과 같은 값이어야 한다 — 그쪽을 고치면 여기도 같이 고친다.
-// (OTP 2.10 의 ${VAR} 치환은 기본값 문법이 없어 미정의 시 기동이 실패하므로 파일을 나눴다.)
+// (OTP 2.10 의 환경변수 치환은 기본값 문법이 없어 미정의 시 기동이 실패하므로 파일을 나눴다.
+//  치환은 주석 안에서도 일어나므로 이 파일에 달러-중괄호 표기를 쓰지 않는다.)
 {
   "routingDefaults": {
     "walk": { "speed": 1.2 },
