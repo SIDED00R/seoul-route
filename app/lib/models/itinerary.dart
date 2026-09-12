@@ -78,6 +78,9 @@ class Itinerary {
     required this.transfers,
     required this.walkM,
     required this.legs,
+    this.realtime = false,
+    this.realtimeDeltaSec = 0,
+    this.departInSec = 0,
   });
 
   final String start;
@@ -86,6 +89,9 @@ class Itinerary {
   final int transfers;
   final double walkM;
   final List<Leg> legs;
+  final bool realtime; // 첫 탑승 대기가 실시간 도착정보로 보정됨
+  final double realtimeDeltaSec; // 시간표 대비 보정(초, 음수면 시간표보다 빠름)
+  final double departInSec; // 지금 출발 요청에서 출발까지 기다리는 초. 총 소요 = departIn + duration
 
   factory Itinerary.fromJson(Map<String, dynamic> j) => Itinerary(
         start: (j['start'] as String?) ?? '',
@@ -96,9 +102,27 @@ class Itinerary {
         legs: ((j['legs'] as List<dynamic>?) ?? const [])
             .map((e) => Leg.fromJson(e as Map<String, dynamic>))
             .toList(),
+        realtime: (j['realtime'] as bool?) ?? false,
+        realtimeDeltaSec: (j['realtime_delta_sec'] as num?)?.toDouble() ?? 0,
+        departInSec: (j['depart_in_sec'] as num?)?.toDouble() ?? 0,
       );
 
-  int get minutes => (durationSec / 60).round();
+  /// 지금부터 도착까지(출발 대기 포함). 카카오맵의 "총 소요"와 같은 기준.
+  int get minutes => ((departInSec + durationSec) / 60).round();
+
+  /// "3분 후 출발" 문구. 1분 미만이면 null.
+  String? get departLabel {
+    final m = (departInSec / 60).round();
+    return m >= 1 ? '$m분 후 출발' : null;
+  }
+
+  /// "실시간 −3분" 같은 배지 문구. 보정이 없으면 null.
+  String? get realtimeLabel {
+    if (!realtime) return null;
+    final m = (realtimeDeltaSec / 60).round();
+    if (m == 0) return '실시간';
+    return '실시간 ${m > 0 ? '+' : '−'}${m.abs()}분';
+  }
 }
 
 class PlanResult {

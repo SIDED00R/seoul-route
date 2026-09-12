@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,6 +18,7 @@ import (
 	"github.com/SIDED00R/seoul-route/backend/internal/gbfs"
 	"github.com/SIDED00R/seoul-route/backend/internal/httpapi"
 	"github.com/SIDED00R/seoul-route/backend/internal/otp"
+	"github.com/SIDED00R/seoul-route/backend/internal/realtime"
 	"github.com/SIDED00R/seoul-route/backend/internal/route"
 )
 
@@ -52,6 +54,26 @@ func main() {
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	otpClient := &otp.Client{URL: cfg.OTPURL, HTTP: &http.Client{Timeout: httpapi.PlanTimeout}}
 	planner := &route.Planner{OTP: otpClient}
+	// 첫 탑승 실시간 보정. 키가 있는 수단만 켠다. 외부 API 는 응답이 느릴 수 있어 짧은 타임아웃.
+	rt := &realtime.Corrector{Log: log}
+	rtHTTP := &http.Client{Timeout: 5 * time.Second}
+	if cfg.BusArrivalKey != "" {
+		key := cfg.BusArrivalKey
+		if d, err := url.QueryUnescape(key); err == nil { // 포털이 주는 키는 URL 인코딩된 형태(gtfsgen 과 같은 처리)
+			key = d
+		}
+		rt.Bus = &realtime.BusClient{Key: key, HTTP: rtHTTP}
+	} else {
+		log.Warn("bus realtime disabled", "reason", "DATA_GO_KR_KEY 없음")
+	}
+	if cfg.SubwayRealtimeKey != "" {
+		rt.Subway = &realtime.SubwayClient{Key: cfg.SubwayRealtimeKey, HTTP: rtHTTP}
+	} else {
+		log.Warn("subway realtime disabled", "reason", "SEOUL_SUBWAY_REALTIME_KEY 없음")
+	}
+	if rt.Bus != nil || rt.Subway != nil {
+		planner.Realtime = rt
+	}
 	// 부모역 목록은 OTP 에서 한 번 받는다. Compose 에서는 OTP 가 그래프 로드에 1~2분 걸려 api 보다 늦게 뜨므로
 	// 될 때까지 30초마다 재시도하고, 그동안은 앵커링 없이(좌표로) 동작한다.
 	go func() {
