@@ -57,12 +57,23 @@ func TestPlanSingleCallNoVia(t *testing.T) {
 	}}
 	p := &Planner{OTP: f}
 	its, err := p.Plan(context.Background(), PlanRequest{Origin: seoulStn, Destination: gangnam, WalkSpeed: 1.5})
-	if err != nil || len(its) != 1 || len(f.calls) != 1 {
+	// 전체 1회 + 지하철만 + 버스만 = 3회 병렬. 같은 경로가 세 번 와도 하나로 합친다.
+	if err != nil || len(its) != 1 || len(f.calls) != 3 {
 		t.Fatalf("its=%v err=%v calls=%d", its, err, len(f.calls))
 	}
-	c := f.calls[0]
-	if c.WalkSpeed != 1.5 || c.BikeSpeed != DefaultBike || c.Modes.Transit == nil || c.First != DefaultFirst {
-		t.Fatalf("요청 파라미터: %+v", c)
+	kinds := map[string]bool{}
+	for _, c := range f.calls {
+		if c.WalkSpeed != 1.5 || c.BikeSpeed != DefaultBike || c.Modes.Transit == nil || c.First != DefaultFirst {
+			t.Fatalf("요청 파라미터: %+v", c)
+		}
+		if len(c.Modes.Transit.Modes) == 0 {
+			kinds["any"] = true
+		} else {
+			kinds[c.Modes.Transit.Modes[0].Mode] = true
+		}
+	}
+	if !kinds["any"] || !kinds["SUBWAY"] || !kinds["BUS"] {
+		t.Fatalf("전체·지하철만·버스만 세 변형이어야: %v", kinds)
 	}
 }
 
@@ -78,7 +89,7 @@ func TestPlanViaMergesSingleAndSegmented(t *testing.T) {
 		if r.Depart != nil {
 			dep = *r.Depart
 		}
-		end := dep.Add(1 * time.Minute)
+		end := dep.Add(15 * time.Minute)
 		return []otp.Itinerary{itin(dep.Format(time.RFC3339), end.Format(time.RFC3339),
 			otp.Leg{Mode: "WALK", FromName: "x", ToName: "y"})}, nil
 	}
@@ -87,11 +98,11 @@ func TestPlanViaMergesSingleAndSegmented(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(f.calls) != 3 { // via 1회 + 구간 2개(각 후보 1개)
+	if len(f.calls) != 5 { // via 3회(전체·지하철·버스) + 구간 2개(각 후보 1개)
 		t.Fatalf("호출 수 %d", len(f.calls))
 	}
-	if len(its) != 2 || its[0].Duration != 120 || its[0].Legs[0].Mode != "WALK" || its[1].Legs[0].Route != "152" {
-		t.Fatalf("도보 2분 결합 경로가 1순위, 대중교통 41분이 2순위여야 한다: %+v", its)
+	if len(its) != 2 || its[0].Duration != 1800 || its[0].Legs[0].Mode != "WALK" || its[1].Legs[0].Route != "152" {
+		t.Fatalf("도보 30분 결합 경로가 1순위, 대중교통 41분이 2순위여야 한다: %+v", its)
 	}
 	if its[0].Transfers != 0 {
 		t.Fatalf("도보→도보 경계는 환승이 아니다: %+v", its[0])
@@ -192,8 +203,15 @@ func TestPlanSegmentedBeam(t *testing.T) {
 	if !f.calls[0].Modes.Only || f.calls[0].Modes.Direct[0] != "WALK" || f.calls[1].Modes.Direct[0] != "BICYCLE_RENTAL" {
 		t.Fatalf("구간 모드 매핑: %+v %+v", f.calls[0].Modes, f.calls[1].Modes)
 	}
-	if f.calls[1].Depart == nil || f.calls[1].Depart.Format(time.RFC3339) != "2026-09-14T14:25:00+09:00" {
-		t.Fatalf("2구간 출발은 가장 이른 1구간 도착(14:25)이어야 한다: %v", f.calls[1].Depart)
+	// 2구간 호출은 빔 후보마다 병렬이라 순서가 없다. 출발시각 집합으로 본다.
+	departs := map[string]bool{}
+	for _, c := range f.calls[1:] {
+		if c.Depart != nil {
+			departs[c.Depart.Format(time.RFC3339)] = true
+		}
+	}
+	if !departs["2026-09-14T14:25:00+09:00"] || !departs["2026-09-14T14:30:00+09:00"] {
+		t.Fatalf("2구간 출발은 1구간 두 후보의 도착(14:25, 14:30)이어야 한다: %v", departs)
 	}
 	best := its[0]
 	if best.End != "2026-09-14T14:45:00+09:00" || len(best.Legs) != 2 || best.Duration != 45*60 || best.Transfers != 1 {

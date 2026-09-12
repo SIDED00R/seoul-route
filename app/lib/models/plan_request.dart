@@ -25,11 +25,13 @@ class PlanRequest {
   final List<Place> via; // 최대 5개(서버 검증)
   final List<SegmentMode> segmentModes; // 길이 = via 수 + 1. 비면 전 구간 any
 
+  // name 은 서버가 "…역" 이면 근처 같은 이름 역(GTFS 부모역)으로 앵커링하는 데 쓴다(역사 좌표 스냅 문제).
+  static Map<String, dynamic> _pt(Place p) => {'lat': p.lat, 'lon': p.lon, 'name': p.name};
+
   Map<String, dynamic> toJson() => {
-        'origin': {'lat': origin.lat, 'lon': origin.lon},
-        'destination': {'lat': destination.lat, 'lon': destination.lon},
-        if (via.isNotEmpty)
-          'via': via.map((p) => {'lat': p.lat, 'lon': p.lon}).toList(),
+        'origin': _pt(origin),
+        'destination': _pt(destination),
+        if (via.isNotEmpty) 'via': via.map(_pt).toList(),
         if (segmentModes.any((m) => m != SegmentMode.any))
           'segment_modes': segmentModes.map((m) => m.value).toList(),
       };
