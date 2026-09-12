@@ -153,6 +153,22 @@ func TestCachedETASubtractsElapsed(t *testing.T) {
 	}
 }
 
+// 역 앵커링은 여정 Start 를 첫 탑승 leg 보다 앞당겨 역 진입 틈을 둔다(route.applyStationSlack). 그 틈 안에 오는 차는 못 탄다:
+// 진입 3분인데 2분 뒤 차 → 놓치고 11분 뒤 차. 시간표 탑승(3분)보다 8분 늦으니 출발도 +8분.
+func TestEntryGapBeforeFirstLegCountsAsAccess(t *testing.T) {
+	var calls int32
+	srv := fakeBus(t, &calls)
+	defer srv.Close()
+	c := &Corrector{Bus: &BusClient{Key: "k", HTTP: srv.Client(), Base: srv.URL}, Now: func() time.Time { return now }}
+	bus := otp.Leg{Mode: "BUS", Route: "402", RouteID: "seoul:B_100100063", FromStopID: "seoul:BS_1", TransitLeg: true,
+		Start: at(180), End: at(180 + 1200)}
+	in := otp.Itinerary{Start: at(0), End: at(180 + 1200), Duration: 1380, Legs: []otp.Leg{bus}}
+	got := c.Adjust(context.Background(), []otp.Itinerary{in})[0]
+	if got.Legs[0].Start != at(660) || got.Start != at(480) || got.RealtimeDelta != 480 {
+		t.Fatalf("2분 뒤 차는 진입 틈 안이라 놓쳐야: %+v", got)
+	}
+}
+
 func TestNoClientsOrNoTransitLeavesItineraryUnchanged(t *testing.T) {
 	c := &Corrector{Now: func() time.Time { return now }}
 	walk := otp.Itinerary{Duration: 600, Legs: []otp.Leg{{Mode: "WALK", Duration: 600}}}
