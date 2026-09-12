@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/SIDED00R/seoul-route/backend/internal/otp"
@@ -36,8 +37,9 @@ const (
 )
 
 type Point struct {
-	Lat float64 `json:"lat"`
-	Lon float64 `json:"lon"`
+	Lat  float64 `json:"lat"`
+	Lon  float64 `json:"lon"`
+	Name string  `json:"name,omitempty"` // 장소명. "…역" 이면 근처 같은 이름 역으로 앵커링한다(anchor.go)
 }
 
 type PlanRequest struct {
@@ -54,6 +56,15 @@ type Planner struct {
 	OTP interface {
 		Plan(context.Context, otp.Request) ([]otp.Itinerary, error)
 	}
+	mu       sync.RWMutex
+	stations []otp.Station // 앵커링용 부모역 목록(SetStations). 비면 항상 좌표로 요청한다
+}
+
+// SetStations 는 부모역 목록을 바꾼다. OTP 가 늦게 뜨는 경우 기동 후 뒤늦게 채우므로 잠근다.
+func (p *Planner) SetStations(s []otp.Station) {
+	p.mu.Lock()
+	p.stations = s
+	p.mu.Unlock()
 }
 
 var ErrBadRequest = errors.New("bad request")
@@ -64,7 +75,7 @@ var ErrBadRequest = errors.New("bad request")
 //     도는 후보를 위한 구간 분할 탐색을 병렬로 돌려 합친다. 둘 다 경로가 없을 때만 ErrNoRoute.
 //   - 구간별 수단 고정: 구간 분할 탐색만.
 //
-// 결과는 총 소요시간순, leg 서명이 같은 중복은 제거한다.
+// 결과는 leg 서명이 같은 중복을 제거한 뒤 점수순(소요시간 + 환승·대여 페널티, rank 참조)이다.
 func (p *Planner) Plan(ctx context.Context, req PlanRequest) ([]otp.Itinerary, error) {
 	if err := validate(&req); err != nil {
 		return nil, err
@@ -94,9 +105,49 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) ([]otp.Itinerary, e
 	if err != nil {
 		return nil, err
 	}
-	its = dedupe(its)
-	sort.SliceStable(its, func(i, j int) bool { return its[i].Duration < its[j].Duration })
-	return its, nil
+	return rank(dedupe(its)), nil
+}
+
+// 순위 상수(제품 결정 2026-09-12: 환승·수단 전환이 잦은 후보는 뒤로, 도보·따릉이를 우대하지 않는다).
+//   - TransferPenaltySec 240: 환승 1회를 4분 손해로 친다. 카카오·구글이 쓰는 값은 비공개라 초기값이며 실사용 후 조정.
+//   - RentalPenaltySec 300: 따릉이 대여·반납 수고를 5분으로 친다(OTP 의 대여·반납 1분씩은 소요시간에 이미 포함).
+//   - MaxSlowerSec 1800: 최선보다 30분 넘게 느린 후보는 목록에서 뺀다(홍대입구→잠실 따릉이 122분 vs 지하철 38분).
+const (
+	TransferPenaltySec = 240.0
+	RentalPenaltySec   = 300.0
+	MaxSlowerSec       = 1800.0
+)
+
+// rank 는 소요시간에 환승·대여 페널티를 더한 점수순으로 정렬하고, 최선보다 MaxSlowerSec 넘게 느린 후보를 뺀다.
+func rank(its []otp.Itinerary) []otp.Itinerary {
+	if len(its) == 0 {
+		return its
+	}
+	best := its[0].Duration
+	for _, it := range its[1:] {
+		if it.Duration < best {
+			best = it.Duration
+		}
+	}
+	kept := its[:0:0]
+	for _, it := range its {
+		if it.Duration <= best+MaxSlowerSec {
+			kept = append(kept, it)
+		}
+	}
+	sort.SliceStable(kept, func(i, j int) bool { return score(kept[i]) < score(kept[j]) })
+	return kept
+}
+
+func score(it otp.Itinerary) float64 {
+	s := it.Duration + TransferPenaltySec*float64(it.Transfers)
+	for _, l := range it.Legs {
+		if l.RentedBike {
+			s += RentalPenaltySec
+			break
+		}
+	}
+	return s
 }
 
 // viaBoth 는 single(via) 과 segmented(any) 를 동시에 돌려 합친다. 한쪽의 ErrNoRoute 는 무시하고, 둘 다 없을 때만 올린다.
@@ -219,75 +270,83 @@ func firstVehicle(legs []otp.Leg) string {
 	return "WALK"
 }
 
-// single: via 를 넘긴 한 번 호출. via 는 대중교통 탐색에서만 동작한다(실측).
+// single: via 를 넘긴 호출. via 는 대중교통 탐색에서만 동작한다(실측).
+// 전체 수단 1회 + 지하철만·버스만 1회씩을 병렬로 돌려 합친다. OTP 는 지배되지 않는 여정만 돌려주므로
+// 직행 노선이 있으면 후보가 1~2개로 줄고(홍대입구→잠실: 2호선 하나), 수단별 탐색으로 대안을 채운다.
 func (p *Planner) single(ctx context.Context, req PlanRequest) ([]otp.Itinerary, error) {
-	r := otp.Request{Origin: coord(req.Origin), Destination: coord(req.Destination), Modes: modesFor(ModeAny),
+	base := otp.Request{Origin: coord(req.Origin), Destination: coord(req.Destination),
 		WalkSpeed: req.WalkSpeed, BikeSpeed: req.BikeSpeed, Depart: req.Depart, First: DefaultFirst}
+	base.OriginStop, base.DestStop = p.anchor(req.Origin), p.anchor(req.Destination)
 	for _, v := range req.Via {
-		r.Via = append(r.Via, coord(v))
+		base.Via = append(base.Via, coord(v))
+		base.ViaStops = append(base.ViaStops, p.anchor(v)) // 경유 역도 역 ID 로(좌표면 역 구내 우회가 되살아난다)
 	}
-	return p.OTP.Plan(ctx, r)
+	variants := []otp.Modes{modesFor(ModeAny), transitOnlyModes("SUBWAY"), transitOnlyModes("BUS")}
+	results := make([][]otp.Itinerary, len(variants))
+	errs := make([]error, len(variants))
+	var wg sync.WaitGroup
+	for i, m := range variants {
+		wg.Add(1)
+		go func(i int, m otp.Modes) {
+			defer wg.Done()
+			r := base
+			r.Modes = m
+			results[i], errs[i] = p.OTP.Plan(ctx, r)
+		}(i, m)
+	}
+	wg.Wait()
+	var merged []otp.Itinerary
+	for i := range variants {
+		if errs[i] != nil && !errors.Is(errs[i], otp.ErrNoRoute) {
+			return nil, errs[i]
+		}
+		merged = append(merged, results[i]...)
+	}
+	if len(merged) == 0 {
+		if errs[0] != nil {
+			return nil, errs[0]
+		}
+		return nil, otp.ErrNoRoute
+	}
+	return merged, nil
+}
+
+// transitOnlyModes 는 한 수단(SUBWAY/BUS)만 쓰는 대중교통 탐색. 접근·이탈은 도보.
+func transitOnlyModes(mode string) otp.Modes {
+	return otp.Modes{Transit: &otp.Transit{Access: []string{"WALK"}, Egress: []string{"WALK"}, Transfer: []string{"WALK"},
+		Modes: []otp.TransitMode{{Mode: mode}}}, TransitOnly: true}
 }
 
 // segmented: 구간마다 top-BeamWidth 후보를 받아 앞 구간 도착시각을 다음 구간 출발시각으로 넘기며 잇는다.
 // 결과는 "구간 제약을 순차 적용한 경로"이지 전역 최적이 아니다.
 func (p *Planner) segmented(ctx context.Context, req PlanRequest) ([]otp.Itinerary, error) {
 	pts := append(append([]Point{req.Origin}, req.Via...), req.Destination)
-	type partial struct {
-		legs      []otp.Leg
-		start     string
-		end       time.Time
-		endStr    string
-		transfers int
-		walk      float64
-	}
 	beam := []partial{{}}
 	for i := 0; i < len(pts)-1; i++ {
+		// 빔의 후보마다 OTP 호출이 독립이라 병렬로 부른다(직렬이면 경유지 2개에 25~37초 실측).
+		// 결과는 빔 순서대로 모아 prune 의 안정 정렬이 결정적이게 한다.
+		results := make([][]partial, len(beam))
+		errs := make([]error, len(beam))
+		var wg sync.WaitGroup
+		for bi, b := range beam {
+			wg.Add(1)
+			go func(bi int, b partial) {
+				defer wg.Done()
+				results[bi], errs[bi] = p.extend(ctx, req, pts, i, b)
+			}(bi, b)
+		}
+		wg.Wait()
 		var next []partial
-		for _, b := range beam {
-			r := otp.Request{Origin: coord(pts[i]), Destination: coord(pts[i+1]), Modes: modesFor(req.Modes[i]),
-				WalkSpeed: req.WalkSpeed, BikeSpeed: req.BikeSpeed, First: BeamWidth}
-			if i == 0 {
-				r.Depart = req.Depart
-			} else {
-				t := b.end
-				r.Depart = &t
+		for bi := range beam {
+			if errs[bi] != nil && !errors.Is(errs[bi], otp.ErrNoRoute) {
+				return nil, errs[bi]
 			}
-			its, err := p.OTP.Plan(ctx, r)
-			if errors.Is(err, otp.ErrNoRoute) {
-				continue
-			}
-			if err != nil {
-				return nil, err
-			}
-			for _, it := range its {
-				if !satisfies(req.Modes[i], it) {
-					continue
-				}
-				end, err := time.Parse(time.RFC3339, it.End)
-				if err != nil {
-					continue
-				}
-				np := partial{legs: append(append([]otp.Leg(nil), b.legs...), it.Legs...), start: b.start,
-					end: end, endStr: it.End, transfers: b.transfers + it.Transfers, walk: b.walk + it.WalkM}
-				if np.start == "" {
-					np.start = it.Start
-				}
-				// 구간 경계 환승: 양쪽 다 도보면 0, 한쪽이라도 탈것이면 +1(같은 수단끼리도 내렸다 다시 탄다).
-				if len(b.legs) > 0 && (lastVehicle(b.legs) != "WALK" || firstVehicle(it.Legs) != "WALK") {
-					np.transfers++
-				}
-				next = append(next, np)
-			}
+			next = append(next, results[bi]...)
 		}
 		if len(next) == 0 {
 			return nil, fmt.Errorf("%w: 구간 %d", otp.ErrNoRoute, i+1)
 		}
-		sort.SliceStable(next, func(a, b int) bool { return next[a].end.Before(next[b].end) })
-		if len(next) > BeamWidth {
-			next = next[:BeamWidth]
-		}
-		beam = next
+		beam = prune(next)
 	}
 	out := make([]otp.Itinerary, 0, len(beam))
 	for _, b := range beam {
@@ -301,17 +360,118 @@ func (p *Planner) segmented(ctx context.Context, req PlanRequest) ([]otp.Itinera
 	return out, nil
 }
 
-// dedupe 는 leg 서명(수단·노선·출발지·도착지 열)이 같은 itinerary 중 가장 이른 출발만 남긴다.
-// frequencies 기반 버스는 출발시각만 1분씩 다른 같은 경로를 여러 개 내기 때문이다(실측).
+// extend 는 부분 경로 b 를 구간 i(pts[i]→pts[i+1])로 한 번 더 잇는 후보들을 OTP 에서 받아 돌려준다.
+func (p *Planner) extend(ctx context.Context, req PlanRequest, pts []Point, i int, b partial) ([]partial, error) {
+	// First 는 빔 폭보다 넉넉히 받는다: OTP 가 같은 노선의 출발시각만 다른 복제를 앞에 몰아주므로
+	// 빔 폭만큼만 받으면 중복 제거 뒤 후보가 1개로 줄어든다(실측).
+	r := otp.Request{Origin: coord(pts[i]), Destination: coord(pts[i+1]), Modes: modesFor(req.Modes[i]),
+		WalkSpeed: req.WalkSpeed, BikeSpeed: req.BikeSpeed, First: DefaultFirst}
+	if m := req.Modes[i]; m == "" || m == ModeAny || m == ModeTransit { // 도보·자전거 전용 구간은 좌표로
+		r.OriginStop, r.DestStop = p.anchor(pts[i]), p.anchor(pts[i+1])
+	}
+	if i == 0 {
+		r.Depart = req.Depart
+	} else {
+		t := b.end
+		r.Depart = &t
+	}
+	its, err := p.OTP.Plan(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	var out []partial
+	for _, it := range its {
+		if !satisfies(req.Modes[i], it) {
+			continue
+		}
+		end, err := time.Parse(time.RFC3339, it.End)
+		if err != nil {
+			continue
+		}
+		np := partial{legs: append(append([]otp.Leg(nil), b.legs...), it.Legs...), start: b.start,
+			end: end, endStr: it.End, transfers: b.transfers + it.Transfers, walk: b.walk + it.WalkM}
+		if np.start == "" {
+			np.start = it.Start
+		}
+		// 구간 경계 환승: 양쪽 다 도보면 0, 한쪽이라도 탈것이면 +1(같은 수단끼리도 내렸다 다시 탄다).
+		if len(b.legs) > 0 && (lastVehicle(b.legs) != "WALK" || firstVehicle(it.Legs) != "WALK") {
+			np.transfers++
+		}
+		out = append(out, np)
+	}
+	return out, nil
+}
+
+// partial 은 구간 분할 탐색에서 앞 구간까지 이어 붙인 부분 경로.
+type partial struct {
+	legs      []otp.Leg
+	start     string
+	end       time.Time
+	endStr    string
+	transfers int
+	walk      float64
+}
+
+// prune 은 구간 후보를 빔 폭으로 줄인다. 같은 leg 서명은 가장 이른 도착 하나만 남기고,
+// (도착시각·환승·도보) 세 축에서 지배되지 않는 후보를 먼저 채운 뒤 남는 자리는 도착시각순으로 채운다.
+// 도착시각 하나로만 자르면 "조금 늦지만 환승이 적은" 후보가 구간 경계에서 전부 사라진다.
+func prune(cands []partial) []partial {
+	best := map[string]int{}
+	var uniq []partial
+	for _, c := range cands {
+		sig := legSig(c.legs)
+		if idx, ok := best[sig]; ok {
+			if c.end.Before(uniq[idx].end) {
+				uniq[idx] = c
+			}
+			continue
+		}
+		best[sig] = len(uniq)
+		uniq = append(uniq, c)
+	}
+	sort.SliceStable(uniq, func(a, b int) bool { return uniq[a].end.Before(uniq[b].end) })
+	var out []partial
+	taken := make([]bool, len(uniq))
+	for i, c := range uniq {
+		dominated := false
+		for _, k := range out { // k.end <= c.end 는 정렬로 보장
+			if k.transfers <= c.transfers && k.walk <= c.walk {
+				dominated = true
+				break
+			}
+		}
+		if !dominated && len(out) < BeamWidth {
+			out = append(out, c)
+			taken[i] = true
+		}
+	}
+	for i, c := range uniq { // 남는 자리는 지배되더라도 도착이 이른 순으로(대안 다양성)
+		if len(out) == BeamWidth {
+			break
+		}
+		if !taken[i] {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// legSig 는 수단·노선·출발지·도착지 열로 만든 경로 서명. 출발시각만 다른 같은 경로를 묶는다.
+func legSig(legs []otp.Leg) string {
+	var sb strings.Builder
+	for _, l := range legs {
+		sb.WriteString(l.Mode + "|" + l.Route + "|" + l.FromName + "|" + l.ToName + ";")
+	}
+	return sb.String()
+}
+
+// dedupe 는 leg 서명이 같은 itinerary 중 가장 이른 출발만 남긴다.
+// OTP 는 같은 경로를 출발시각만 다르게 여러 개 내기 때문이다(실측).
 func dedupe(its []otp.Itinerary) []otp.Itinerary {
 	seen := map[string]int{}
 	var out []otp.Itinerary
 	for _, it := range its {
-		var sb strings.Builder
-		for _, l := range it.Legs {
-			sb.WriteString(l.Mode + "|" + l.Route + "|" + l.FromName + "|" + l.ToName + ";")
-		}
-		sig := sb.String()
+		sig := legSig(it.Legs)
 		if idx, ok := seen[sig]; ok {
 			if it.Start < out[idx].Start {
 				out[idx] = it
