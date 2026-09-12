@@ -26,6 +26,8 @@ type Server struct {
 	Log     *slog.Logger
 	Planner *route.Planner
 	GBFS    http.Handler // nil 이면 /gbfs/* 은 503
+	KakaoKey  string // 비면 /places/search 503
+	VWorldKey string // 비면 /tiles/* 503
 }
 
 func (s *Server) Router() http.Handler {
@@ -47,6 +49,8 @@ func (s *Server) Router() http.Handler {
 		r.Use(s.requireAuth)
 		r.With(short).Get("/users/me", s.handleGetMe)
 		r.With(short).Delete("/users/me", s.handleDeleteMe)
+		r.With(short).Get("/places/search", s.handlePlacesSearch)
+		r.With(short).Get("/tiles/{z}/{x}/{y}.png", s.handleTile)
 		// via 대중교통 탐색이 OTP 에서 15~37초 걸린다(실측) → 이 경로만 상한이 길다.
 		r.With(middleware.Timeout(PlanTimeout)).Post("/routes/plan", s.handlePlan)
 	})
