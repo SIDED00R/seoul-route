@@ -5,11 +5,11 @@
 ## 구조
 
 ```
-otp/       OpenTripPlanner 2.10.0 설정·데이터 스크립트 (그래프 빌드는 로컬, 서빙은 VM)
-backend/   Go API (chi + pgx/sqlc). OTP 오케스트레이션, 궤적 수집, 따릉이 GBFS 어댑터, 신호 잔여시간 조회
+otp/       OpenTripPlanner 2.10.0 설정·데이터 스크립트 (그래프 빌드·서빙 모두 로컬 PC)
+backend/   Go API (chi + pgx). OTP 오케스트레이션, 따릉이 GBFS 어댑터, 카카오 검색·VWorld 타일 프록시, 궤적 수집
 gtfs/      GTFS 생성기 (서울 버스 API + TAGO 지하철 시간표 → GTFS zip)
-app/       Flutter 앱
-deploy/    Compose·Caddy·GCE 배포
+app/       Flutter 앱(Android 전용). lib/{api,models,screens,settings,util,widgets}
+deploy/    로컬 Docker Compose(postgis·otp·api). 클라우드 배포는 하지 않는다(2026-09-12 결정)
 docs/      스파이크 보고서·설계 문서
 ```
 
@@ -27,16 +27,17 @@ docs/      스파이크 보고서·설계 문서
 - GBFS fixture 서버(스파이크용): `python -m http.server 8090 -d otp/fixtures/gbfs`
 - PostgreSQL 17(로컬, WSL 없이): EDB 포터블 바이너리 `C:\Users\SAMSUNG\tools\pg17\pgsql`, 데이터 `..\pg17\data`, 포트 5432, 역할 `seoul/seoul`, DB `seoul_route`·`seoul_route_test`. 기동은 PowerShell `Start-Process postgres.exe -ArgumentList '-D',<data>,'-p','5432' -WindowStyle Hidden` (셸 자식으로 띄우면 셸 종료 시 같이 죽는다 — 실측). PostGIS 는 없다 → Phase 4 부터 Compose 의 `postgis/postgis:17-3.5` 를 쓴다.
 - 백엔드: `cd backend && go run ./cmd/api` → `http://localhost:8081`. 설정은 `.env`(DATABASE_URL·OTP_URL·JWT_SECRET 필수, GOOGLE_OAUTH_CLIENT_ID 없으면 `/auth/google` 503, SEOUL_OPENAPI_KEY 없으면 `/gbfs/*` 503). 기동 시 `internal/db/migrations/*.sql` 을 자동 적용한다.
-  - 엔드포인트: `GET /health` · `POST /auth/google` · `GET /gbfs/{gbfs,system_information,station_information,station_status}.json`(따릉이 60초 폴링, OTP 가 읽는다) · 인증 필요: `GET/DELETE /users/me`, `POST /routes/plan`(origin·destination·via[]·segment_modes[]·depart)
+  - 엔드포인트: `GET /health` · `POST /auth/google` · `GET /gbfs/{gbfs,system_information,station_information,station_status}.json`(따릉이 60초 폴링, OTP 가 읽는다) · 인증 필요: `GET/DELETE /users/me`, `POST /routes/plan`(origin·destination·via[]·segment_modes[]·depart), `GET /places/search?q=`(카카오 로컬 키워드, 서울 bbox, KAKAO_REST_API_KEY 없으면 503), `GET /tiles/{z}/{x}/{y}.png`(VWorld WMTS Base 프록시, VWORLD_API_KEY 없으면 503). 카카오·VWorld 키는 서버에만 두고 앱은 이 두 경로로만 쓴다.
   - OTP 는 `otp/router-config.json` 의 GBFS url 로 이 서버(8081/gbfs)를 읽는다. 백엔드를 먼저 띄우고 OTP 를 띄우거나, OTP 가 1분마다 재시도하게 둔다.
   - 개발 토큰(Google 로그인 전): `cd backend && go run ./cmd/devtoken <이름>` → JWT 출력. 운영 이미지에는 넣지 않는다.
 - 전체 스택(Compose, WSL 필요): 레포 루트에서 `docker compose --env-file .env -f deploy/compose.yml up -d` (postgis·otp·api). 루트 `.env` 의 JWT_SECRET·SEOUL_OPENAPI_KEY 가 컨테이너로 들어간다. otp 컨테이너는 `deploy/otp/router-config.json`(GBFS url = `http://api:8081`)을 쓴다 — `otp/router-config.json` 의 routingDefaults 를 바꾸면 같이 맞춘다. 로컬 OTP·API 가 8080·8081 을 잡고 있으면 포트 충돌이므로 먼저 내린다. 2026-09-12 Docker Desktop(WSL2)에서 실기동 검증함. 주의: otp 이미지 entrypoint 가 디렉터리 인자를 붙이므로 command 는 `--load` 만, 그리고 OTP 는 설정 파일 주석 안의 달러-중괄호도 환경변수로 치환하므로 그 표기를 쓰지 않는다.
+- 앱(Flutter 3.47.4 stable, Android 전용): SDK `C:\Users\SAMSUNG\tools\flutter`, Android SDK `%LOCALAPPDATA%\Android\Sdk`(cmdline-tools 로 설치, Android Studio 는 있으나 GUI 마법사는 안 돌림), Gradle 용 JDK 21 `C:\Users\SAMSUNG\tools\jdk-21.0.12.1+1`(`flutter config --jdk-dir`). 에뮬레이터 AVD `s23ultra`(갤럭시 S23 울트라 사양 1440×3088·560dpi, API 36) = `%LOCALAPPDATA%\Android\Sdk\emulator\emulator.exe -avd s23ultra`. 실행 `cd app && flutter run`(에뮬레이터/USB 실기기). 앱은 설정 화면에서 서버 주소(에뮬레이터 `http://10.0.2.2:8081`, 실기기 `http://<PC 내부 IP>:8081`)와 devtoken JWT 를 입력한다. 평문 HTTP 라 매니페스트에 `usesCleartextTraffic` 을 켜 뒀다(개인용·미배포).
 
 ## 검증
 
 - Go: `cd gtfs && go vet ./... && go test ./...` / `cd backend && go vet ./... && TEST_DATABASE_URL=postgres://seoul:seoul@localhost:5432/seoul_route_test?sslmode=disable go test ./...` (DB 없으면 httpapi 테스트는 skip 된다 — 통과가 아니다)
 - API 실행 검증: 서버 기동 후 `curl localhost:8081/health`(db·otp 둘 다 ok 인지 본문 확인), 미인증 `/users/me` 401, `/auth/google` 미설정 503, `/gbfs/station_status.json` 에 대여소 2,700여 곳, devtoken 으로 `POST /routes/plan` 서울역→강남 정상 응답(legs 본문 확인)·부산 좌표 400
-- Flutter: `cd app && flutter analyze && flutter test`
+- Flutter: `cd app && flutter analyze && flutter test`. 실행 검증은 에뮬레이터(s23ultra) 또는 실기기에서 설정→검색→경로 목록→상세 지도까지 실제로 눌러 보고 `flutter run` 콘솔에 예외 0건인지 본다. 스크린샷은 `docs/app/` 에 남긴다.
 - 기능 완료 판정은 테스트 통과가 아니라 실제 실행이다: OTP에 curl로 plan 요청을 보내 응답 본문을 읽고, 앱은 실기기에서 흐름을 태운다.
 
 ## 데이터·키
