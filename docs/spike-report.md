@@ -52,8 +52,27 @@ GTFS 투입 후 재측정 필요. 도로망만으로는 8GB VM 여유가 충분�
 | rental_direct_bike_speed_2.5 | 자전거 leg 증가 | ✅ 자전거 38.8→53.7분 — `preferences.street.bicycle.speed` 반영 |
 | rental_from_empty_station (ST-5 0대) | 빈 대여소 미사용 | ⚠️ **출발시각을 미래로 주면 0대 대여소에서 대여함.** `SPIKE_DEPART=now` 로 지금 출발이면 ✅ 회피(도보 909m) |
 | via_yeouido_direct_only | 여의도 경유 | ❌ `NO_DIRECT_MODE_CONNECTION` — via 는 도보/자전거 전용(direct) 탐색에서 동작하지 않음 |
-| via_yeouido_transit | 여의도 경유 | ⏳ GTFS 없어 `OUTSIDE_SERVICE_PERIOD`. GTFS 투입 후 재검증 |
-| transit_rental_access / egress | 대중교통 + 따릉이 접근/이탈 | ⏳ GTFS 투입 후 |
+| via_yeouido_transit | 여의도 경유 | ✅ (GTFS 투입 후) 서울역→버스162→여의도→9호선→강남 등 5개. **`via` 는 대중교통 탐색에서 동작** |
+| transit_rental_access / egress | 대중교통 + 따릉이 접근/이탈 | ✅ 응답은 정상이나 fixture 대여소 배치에서는 버스가 더 빨라 대여 leg 없음 → 아래 access_only 로 확인 |
+| transit_rental_access_only / egress_only | 접근(이탈)을 따릉이로만 제한 | ❌ BadRequest — access/egress 에서도 `BICYCLE_RENTAL` 은 `WALK` 동반 필수 |
+| transit_rental_*_slow_walker (걷기 0.6 m/s·reluctance 8) | 결합 leg 유도 | ✅ **"1호선 → 버스361 → 따릉이(신논현→강남)"** 등 대중교통+따릉이 결합 itinerary 생성. 미래 출발이라 빈 대여소 ST-5 를 썼다(제약 1 과 일치) |
+
+GTFS 투입 후 케이스의 원본 출력은 `otp/spike/results-transit.txt`.
+
+## GTFS 투입 후 그래프 (국가교통DB 파일럿, 서울 bbox 필터)
+
+원본 전국 GTFS: stops 215,409 · routes 26,399 · trips 326,368 · stop_times 18,889,140 (1.4 GB). `otp/filter_gtfs_seoul.py` 로 bbox 안 정류장을 지나는 trip 만 남김(2분).
+
+| 항목 | 값 |
+|---|---|
+| 필터 결과 | stops 38,640 · routes 3,060 · trips 150,112 · stop_times 8,662,836 · transfers 308, zip 85.6 MB |
+| `route_type` | **파일럿 코드가 비표준**(설명서 4쪽: 0 시내버스, 1 도시철도, 3 시외버스, 5 공항버스 …). 필터에서 GTFS 표준(3 버스, 1 지하철, 2 철도, 4 페리, 1100 항공)으로 변환. 변환 전엔 시내버스가 TRAM 으로 잡힌다 |
+| calendar | service B1 하나, 모든 요일 2017-01-01~2030-12-31 (평일 1일 시간표를 전 요일에 적용) |
+| 빌드 | 1분 57초, **peak RSS 8,718 MB**, graph.obj 329 MB, 정점 504,910 · 간선 1,282,078 · 패턴 4,954 |
+| 서빙 RSS (-Xmx6G, 기동 직후) | **5,138 MB** |
+| DataImportIssue | IsolatedStop 10,994 (bbox 밖 정류장, 예상된 것) · StopNotLinkedForTransfers 11,562 · HopSpeedSlow 3,777 |
+
+메모리 판정: 빌드 8.7 GB 는 8 GB VM 불가 → **그래프는 로컬(32 GB)에서 빌드해 artifact 로 배포**한다(계획대로). 서빙 5.1 GB 도 e2-standard-2 에서 PostgreSQL 과 공존이 빠듯하다 → 운영 GTFS 생성기는 **서울 노선만**(시외·전국 통과 노선 제외) 만들어 그래프를 줄이거나 e2-standard-4 로 간다. Phase 1a 에서 재측정.
 
 ### 실측으로 확정된 OTP 2.10 제약 (설계 반영)
 
@@ -72,8 +91,8 @@ GTFS 투입 후 재측정 필요. 도로망만으로는 8GB VM 여유가 충분�
 | TAGO 지하철 `SubwayInfo` (공공데이터포털) | ✅ 경로는 `/1613000/SubwayInfo/Get…`(2022-09 개편, 구 `SubwayInfoService/get…` 는 오류 12). 역 검색 20건, 역별 시간표(서울역 공항철도 평일 상행) 209건: depTime·arrTime·endSubwayStationId·subwayRouteId·dailyTypeCode(01/02/03)·upDownTypeCode(U/D) | stop_times 직접 생성 가능. **역 좌표 없음** → 좌표는 열린데이터광장 지하철역 좌표 또는 KTDB 파일럿 stops 에서 결합 |
 | T-data 신호 잔여시간 `v2xSignalPhaseTimingInformation/1.0` | ⚠️ 키 승인됨. 2026-09-12 14:27~14:28 호출 3회(numOfRows 1000/100/10) 모두 **서버 500** (`CannotGetJdbcConnectionException`, T-data 측 DB 장애). 게이트웨이는 통과했으므로 키는 유효 | 재시도 후 교차로 수·단위·신선도 실측. 엔드포인트는 `apig/apiman-gateway/tapi/…?apikey=` 형식 |
 
-## 게이트 판정 (부분)
+## 게이트 판정
 
-- (a) OTP 혼합 경로 실증: **도로망+GBFS 는 통과**. 대중교통 결합·`via` 는 GTFS 파일럿 도착 후 판정.
-- (b) T-data 매핑 가능 여부: 미판정(승인 대기).
+- (a) OTP 혼합 경로 실증: **통과**. 도로망+GBFS(따릉이 대여 경로·속도 파라미터), 대중교통 결합(버스·지하철 레이블 정상), 대중교통+따릉이 결합 itinerary, 대중교통 탐색에서의 `via` 경유지까지 실측. 제약은 위 5건.
+- (b) T-data 매핑 가능 여부: **미판정**. 키는 승인·유효하나 2026-09-12 14:27~14:54 4회 모두 T-data 서버 500(DB 장애). 복구 후 재실측.
 - (c) GTFS 생성기 착수 가능 여부: **가능**. 버스는 배차간격 기반 frequencies, 지하철은 역별 시간표 기반 정확 시각. 남은 확인 = 지하철 역 좌표 소스, 버스 정류장 간 소요시간 추정 방식(정류장별 첫막차 차이 또는 구간거리÷속도).

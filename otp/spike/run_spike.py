@@ -60,6 +60,9 @@ RENTAL_DIRECT = {"directOnly": True, "direct": ["BICYCLE_RENTAL", "WALK"]}
 VIA_YEOUIDO = [{"visit": {"coordinate": YEOUIDO, "label": "여의도", "minimumWaitTime": "PT0S"}}]
 
 
+SLOW_WALKER = {"street": {"walk": {"speed": 0.6, "reluctance": 8.0}}}
+
+
 def transit_modes(access, egress):
     return {"direct": ["WALK"], "transit": {"access": access, "egress": egress, "transfer": ["WALK"]}}
 
@@ -79,6 +82,18 @@ CASES = dict([
     # 아래 둘은 GTFS 가 그래프에 들어간 뒤에만 transit leg 가 나온다.
     case("transit_rental_access", SEOUL_STN, GANGNAM, modes=transit_modes(["BICYCLE_RENTAL", "WALK"], ["WALK"])),
     case("transit_rental_egress", SEOUL_STN, GANGNAM, modes=transit_modes(["WALK"], ["BICYCLE_RENTAL", "WALK"])),
+    # 접근/이탈을 BICYCLE_RENTAL 단독으로 제한하면 BadRequest(WALK 동반 필수, 실측) — 아래 두 케이스의 정상 결과다.
+    # 대신 걷기를 느리고 부담스럽게 줘서 대중교통+따릉이 결합 leg 가 생성되는지 본다.
+    case("transit_rental_access_only", SEOUL_STN, GANGNAM, modes={"transitOnly": True, "transit": {
+        "access": ["BICYCLE_RENTAL"], "egress": ["WALK"], "transfer": ["WALK"]}}),
+    case("transit_rental_egress_only", SEOUL_STN, GANGNAM, modes={"transitOnly": True, "transit": {
+        "access": ["WALK"], "egress": ["BICYCLE_RENTAL"], "transfer": ["WALK"]}}),
+    case("transit_rental_access_slow_walker", SEOUL_STN, GANGNAM,
+         modes=transit_modes(["BICYCLE_RENTAL", "WALK"], ["WALK"]), prefs=SLOW_WALKER, first=8),
+    case("transit_rental_egress_slow_walker", SEOUL_STN, GANGNAM,
+         modes=transit_modes(["WALK"], ["BICYCLE_RENTAL", "WALK"]), prefs=SLOW_WALKER, first=8),
+    case("transit_rental_both_slow_walker_yongsan", YONGSAN, GANGNAM,
+         modes=transit_modes(["BICYCLE_RENTAL", "WALK"], ["BICYCLE_RENTAL", "WALK"]), prefs=SLOW_WALKER, first=8),
 ])
 
 

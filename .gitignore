@@ -2,10 +2,8 @@
 .env
 *.key
 
-# data (large, downloaded/generated)
-otp/data/*.pbf
-otp/data/*.zip
-otp/data/*.obj
+# data (large, downloaded/generated) — otp/data 는 전부 산출물·원본 데이터
+otp/data/
 otp/*.obj
 otp/*.jar
 otp/graphs/
