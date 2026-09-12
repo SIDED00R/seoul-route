@@ -1,0 +1,9 @@
+{
+  "osm": [
+    { "source": "data/seoul.osm.pbf", "osmTagMapping": "default" }
+  ],
+  "transitServiceStart": "-P2Y",
+  "transitServiceEnd": "P3Y",
+  "transitModelTimeZone": "Asia/Seoul",
+  "osmCacheDataInMem": true
+}

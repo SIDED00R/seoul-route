@@ -1,0 +1,14 @@
+{
+  "last_updated": 1757650000,
+  "ttl": 60,
+  "version": "2.3",
+  "data": {
+    "ko": {
+      "feeds": [
+        { "name": "system_information", "url": "http://localhost:8090/system_information.json" },
+        { "name": "station_information", "url": "http://localhost:8090/station_information.json" },
+        { "name": "station_status", "url": "http://localhost:8090/station_status.json" }
+      ]
+    }
+  }
+}

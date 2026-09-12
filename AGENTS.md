@@ -15,6 +15,7 @@ docs/      스파이크 보고서·설계 문서
 
 ## 실행
 
+- OTP 2.10.0 은 **Java 25** 가 필요하다(class file 69, Java 21 은 UnsupportedClassVersionError).
 - OTP 그래프 빌드: `cd otp && java -Xmx6G -jar otp-shaded-2.10.0.jar --build --save .`
 - OTP 서빙: `cd otp && java -Xmx4G -jar otp-shaded-2.10.0.jar --load .` → GraphQL `http://localhost:8080/otp/gtfs/v1`
 - OSM 서울 추출: `python otp/extract_seoul.py` (입력 `otp/data/south-korea-latest.osm.pbf` → 출력 `otp/data/seoul.osm.pbf`)
