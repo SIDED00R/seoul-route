@@ -20,6 +20,7 @@ docs/      스파이크 보고서·설계 문서
   - OTP 실행파일: GitHub `opentripplanner/OpenTripPlanner` 릴리스 v2.10.0 의 `otp-shaded-2.10.0.jar` → `otp/`
   - OSM: Geofabrik `asia/south-korea-latest.osm.pbf` → `otp/data/` → `python otp/extract_seoul.py` 로 `otp/data/seoul.osm.pbf` → `python otp/extract_entrances.py` 로 `otp/data/subway-entrances.csv`(지하철 출입구 2,457개, 공사 중 제외. GTFS 생성기가 읽는다 — 없으면 승강장 좌표 출입구로 폴백)
   - GTFS 파일럿: 국가교통DB(ktdb.go.kr) 로그인 → 정보공개 > 자료신청 > 교통분석자료 신청 > 교통망 GIS DB > 대중교통 > 대중교통 GTFS(2025-03) 신청·다운로드 → zip 을 풀어 `otp/data/202503_GTFS_DataSet/` 에 배치 → `python otp/filter_gtfs_seoul.py` 로 `otp/data/gtfs-ktdb.zip` 생성(서울 bbox 필터 + route_type 표준 변환)
+  - 지하철 시간표: `python otp/fetch_metro_timetable.py` → `otp/data/seoul-metro-timetable.csv`(공공데이터포털 서울교통공사 열차운행시각표, 1~9호선 요일별·열차코드, 32MB). 생성기가 있으면 1~9호선 trip 을 이걸로 만들고(service WEEKDAY/SAT/SUN) 없으면 파일럿 trip 을 쓴다. 신분당선·경의중앙선 등은 파일럿 그대로(ALL, 평일 1일 표본이라 구멍 있음).
   - 운영 GTFS: `cd gtfs && go run ./cmd/gtfsgen fetch && go run ./cmd/gtfsgen build` → `gtfs/out/seoul-gtfs.zip` 을 `otp/data/seoul-gtfs.zip` 으로 복사. build-config 의 transitFeeds 는 이 파일을 가리킨다. 지하철 환승·출입구는 `pathways.txt` 로 고정한다: 승강장 간 통로(다승강장 104역) + OSM 실제 출입구(가장 가까운 승강장 350m 안, 454역, 진입 60초·이탈 30초 + 거리÷1.0 m/s, 500m 안 승강장에만 연결). OSM 출입구가 없는 다승강장 역은 승강장 좌표 출입구(진입 120·이탈 60초 = 백엔드 `route/station_slack.go` 와 같은 값)로 폴백. 상세 `docs/gtfs-generator.md`
   - GTFS zip 이 없으면 빌드는 **실패하지 않고** 종료코드 0 으로 `|Stops|=0` 그래프가 나온다(실측 2026-09-12). 빌드 로그의 `Transit built. |Stops|=` 를 확인한다.
 - OTP 그래프 빌드: `cd otp && java -Xmx8G -jar otp-shaded-2.10.0.jar --build --save .` (운영 GTFS 최종본 기준 peak RSS 4.1GB 실측, 로컬 PC 에서만)
@@ -39,7 +40,7 @@ docs/      스파이크 보고서·설계 문서
 - API 실행 검증: 서버 기동 후 `curl localhost:8081/health`(db·otp 둘 다 ok 인지 본문 확인), 미인증 `/users/me` 401, `/auth/google` 미설정 503, `/gbfs/station_status.json` 에 대여소 2,700여 곳, devtoken 으로 `POST /routes/plan` 서울역→강남 정상 응답(legs 본문 확인)·부산 좌표 400
 - Flutter: `cd app && flutter analyze && flutter test`. 실행 검증은 에뮬레이터(s23ultra) 또는 실기기에서 설정→검색→경로 목록→상세 지도까지 실제로 눌러 보고 `flutter run` 콘솔에 예외 0건인지 본다. 스크린샷은 `docs/app/` 에 남긴다.
 - 기능 완료 판정은 테스트 통과가 아니라 실제 실행이다: OTP에 curl로 plan 요청을 보내 응답 본문을 읽고, 앱은 실기기에서 흐름을 태운다.
-- 경로 정확도 대조: OTP 가 떠 있는 상태에서 `cd backend && go run ./cmd/odcompare -at 08:30`(대표 OD 20쌍 = ODsay 20콜, `-n 5` 로 줄임, `-at` 을 빼면 지금 출발·실시간 보정 포함, `-ref ../docs/eval/<이전>.json` 을 주면 그 파일의 ODsay 값을 재사용해 0콜로 돈다(선택한 OD 가 그 파일에 없으면 호출 없이 종료코드 2) — 설정 전후 비교는 이걸로). 결과 `docs/eval/<시각>.md` 의 Δ 중앙값·top3 일치율을 직전 파일과 비교한다. OTP 설정을 바꿨으면 `docker compose ... up -d --force-recreate otp`(`up -d` 는 바인드된 설정 파일 변경을 재생성 사유로 보지 않아 옛 설정으로 계속 돈다 — 2026-09-13 실측). 시간표·순위를 바꾼 PR 은 전후 실행 결과를 `docs/routing-accuracy.md` 에 적는다. `-ref` 없이 `ODSAY_API_KEY` 도 없으면 종료코드 2.
+- 경로 정확도 대조: OTP 가 떠 있는 상태에서 `cd backend && go run ./cmd/odcompare -at 08:30`(대표 OD 20쌍 = ODsay 20콜, `-n 5` 로 줄임, `-at` 을 빼면 지금 출발·실시간 보정 포함, `-ref ../docs/eval/<이전>.json` 을 주면 그 파일의 ODsay 값을 재사용해 0콜로 돈다(선택한 OD 가 그 파일에 없으면 호출 없이 종료코드 2) — 설정 전후 비교는 이걸로. `-on 2026-09-14` 처럼 날짜를 주면 그 요일 시간표로 돈다 — 지하철이 요일별이라 평일 비교는 평일 날짜로). 결과 `docs/eval/<시각>.md` 의 Δ 중앙값·top3 일치율을 직전 파일과 비교한다. OTP 설정을 바꿨으면 `docker compose ... up -d --force-recreate otp`(`up -d` 는 바인드된 설정 파일 변경을 재생성 사유로 보지 않아 옛 설정으로 계속 돈다 — 2026-09-13 실측). 시간표·순위를 바꾼 PR 은 전후 실행 결과를 `docs/routing-accuracy.md` 에 적는다. `-ref` 없이 `ODSAY_API_KEY` 도 없으면 종료코드 2.
 
 ## 데이터·키
 
