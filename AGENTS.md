@@ -20,7 +20,7 @@ docs/      스파이크 보고서·설계 문서
   - OTP 실행파일: GitHub `opentripplanner/OpenTripPlanner` 릴리스 v2.10.0 의 `otp-shaded-2.10.0.jar` → `otp/`
   - OSM: Geofabrik `asia/south-korea-latest.osm.pbf` → `otp/data/` → `python otp/extract_seoul.py` 로 `otp/data/seoul.osm.pbf`
   - GTFS 파일럿: 국가교통DB(ktdb.go.kr) 로그인 → 정보공개 > 자료신청 > 교통분석자료 신청 > 교통망 GIS DB > 대중교통 > 대중교통 GTFS(2025-03) 신청·다운로드 → zip 을 풀어 `otp/data/202503_GTFS_DataSet/` 에 배치 → `python otp/filter_gtfs_seoul.py` 로 `otp/data/gtfs-ktdb.zip` 생성(서울 bbox 필터 + route_type 표준 변환)
-  - 운영 GTFS: `cd gtfs && go run ./cmd/gtfsgen fetch && go run ./cmd/gtfsgen build` → `gtfs/out/seoul-gtfs.zip` 을 `otp/data/seoul-gtfs.zip` 으로 복사. build-config 의 transitFeeds 는 이 파일을 가리킨다. 상세 `docs/gtfs-generator.md`
+  - 운영 GTFS: `cd gtfs && go run ./cmd/gtfsgen fetch && go run ./cmd/gtfsgen build` → `gtfs/out/seoul-gtfs.zip` 을 `otp/data/seoul-gtfs.zip` 으로 복사. build-config 의 transitFeeds 는 이 파일을 가리킨다. 지하철 환승은 `pathways.txt`(자식 승강장 2개 이상인 104역에 승강장 간 통로 + 승강장별 출입구, 진입 120·이탈 60초 = 백엔드 `route/station_slack.go` 와 같은 값. 단일 승강장 역은 출입구 없음)로 고정한다. 상세 `docs/gtfs-generator.md`
   - GTFS zip 이 없으면 빌드는 **실패하지 않고** 종료코드 0 으로 `|Stops|=0` 그래프가 나온다(실측 2026-09-12). 빌드 로그의 `Transit built. |Stops|=` 를 확인한다.
 - OTP 그래프 빌드: `cd otp && java -Xmx8G -jar otp-shaded-2.10.0.jar --build --save .` (운영 GTFS 최종본 기준 peak RSS 4.1GB 실측, 로컬 PC 에서만)
 - OTP 서빙: `cd otp && java -Xmx4G -jar otp-shaded-2.10.0.jar --load .` → GraphQL `http://localhost:8080/otp/gtfs/v1` (운영 GTFS 그래프 서빙 RSS 2.2GB, 질의 3건 후 실측)
