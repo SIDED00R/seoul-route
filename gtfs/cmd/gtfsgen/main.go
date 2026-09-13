@@ -131,8 +131,10 @@ func printReport(rep *build.Report, out string) {
 			fmt.Printf("  제외 %s(%s): %s\n", r.Name, r.RouteID, r.Skipped)
 		}
 	}
-	fmt.Printf("버스 노선 %d (제외 %d), 정류장 %d | 도시철도 trip %d, 역 %d → %s\n",
-		rep.NBusRoutes, skipped, rep.NBusStops, rep.NSubwayTrips, rep.NSubwayStops, out)
+	fmt.Printf("버스 노선 %d (제외 %d), 정류장 %d | 도시철도 trip %d, 역 %d, 출입구 %d, 통로 %d"+
+		"(부모역이 갈려 빠진 환승 %d, 거리 상한으로 뺀 쌍 %d) → %s\n",
+		rep.NBusRoutes, skipped, rep.NBusStops, rep.NSubwayTrips, rep.NSubwayStops, rep.NEntrances, rep.NPathways,
+		rep.NUnpairedTransfers, rep.NFarPairs, out)
 }
 
 func envKey(path, name string) (string, error) {

@@ -55,6 +55,11 @@ type Report struct {
 	NSubwayTrips int
 	NSubwayStops int
 	NStations    int // 지하철 부모역(location_type=1)
+	NPathways    int // 역 구내 통로(pathways.txt): 출입구↔승강장 + 승강장 간 환승
+	NEntrances   int // 승강장별 출입구(location_type=2), 자식 stop 2개 이상인 역만
+	// transfers.txt 행인데 부모역이 달라 통로가 안 생긴 수(행 단위, 양방향이면 2). 0 이 아니면 그 환승은 지상 도보로 계산된다
+	NUnpairedTransfers int
+	NFarPairs          int // transfers 값 없이 PathwayFallbackMaxM 을 넘어 통로를 안 만든 승강장 쌍(신촌 2호선↔경의중앙선)
 }
 
 // Build 는 out 에 GTFS zip 을 쓴다. subway 는 nil 이면 버스만 쓴다.
@@ -131,6 +136,14 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway) (*Report, error) {
 			tr = append(tr, []string{t["from_stop_id"], t["to_stop_id"], t["transfer_type"], t["min_transfer_time"]})
 		}
 		w.table("transfers.txt", []string{"from_stop_id", "to_stop_id", "transfer_type", "min_transfer_time"}, tr)
+		entrances, pw, far := stationPathways(subway.Stops, parentOf, subway.Transfers)
+		stopRows = append(stopRows, entrances...)
+		w.table("pathways.txt",
+			[]string{"pathway_id", "from_stop_id", "to_stop_id", "pathway_mode", "is_bidirectional", "traversal_time"}, pw)
+		rep.NEntrances = len(entrances)
+		rep.NPathways = len(pw)
+		rep.NUnpairedTransfers = unpairedTransfers(subway.Transfers, parentOf)
+		rep.NFarPairs = far
 		rep.NSubwayTrips = len(subway.Trips)
 		rep.NSubwayStops = len(subway.Stops)
 	}
