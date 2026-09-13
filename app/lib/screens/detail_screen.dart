@@ -5,8 +5,10 @@ import 'package:latlong2/latlong.dart';
 import '../api/client.dart';
 import '../models/itinerary.dart';
 import '../models/plan_request.dart';
+import '../util/leg_names.dart';
 import '../util/polyline.dart';
 import '../widgets/mode_icon.dart';
+import 'guide_screen.dart';
 
 /// 경로 상세: VWorld 타일(서버 프록시) 위에 leg 폴리라인·출발/경유/도착 마커, 아래에 leg 목록.
 class DetailScreen extends StatelessWidget {
@@ -59,6 +61,14 @@ class DetailScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text('후보 $index · ${itinerary.minutes}분'
             '${itinerary.realtimeLabel == null ? '' : ' · ${itinerary.realtimeLabel}'}'),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => GuideScreen(api: api, request: request, itinerary: itinerary)),
+        ),
+        icon: const Icon(Icons.navigation),
+        label: const Text('안내 시작'),
       ),
       body: Column(
         children: [
@@ -119,22 +129,7 @@ class DetailScreen extends StatelessWidget {
     );
   }
 
-  /// OTP 는 출발·도착을 "Origin"/"Destination" 으로 돌려준다. 구간 분할 경로에서는 경유지도 그렇게 오므로
-  /// 좌표가 가장 가까운 지점(출발·경유·도착)의 이름으로 바꾼다.
-  String _name(String n, double lat, double lon) {
-    if (n != 'Origin' && n != 'Destination') return n;
-    final candidates = [request.origin, ...request.via, request.destination];
-    var best = candidates.first;
-    var bestD = double.infinity;
-    for (final p in candidates) {
-      final d = (p.lat - lat) * (p.lat - lat) + (p.lon - lon) * (p.lon - lon);
-      if (d < bestD) {
-        bestD = d;
-        best = p;
-      }
-    }
-    return best.name;
-  }
+  String _name(String n, double lat, double lon) => legEndpointName(request, n, lat, lon);
 
   Marker _marker(LatLng p, IconData icon, Color color) =>
       Marker(point: p, width: 32, height: 32, child: Icon(icon, color: color, size: 28));

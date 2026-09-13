@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../api/client.dart';
 import '../settings/settings_store.dart';
 
-/// 서버 주소와 토큰 입력. "연결 확인" 은 /health(무인증)와 /users/me(인증) 를 실제로 호출한다.
+/// 서버 주소와 토큰 입력. "연결 확인" 은 /health(무인증)와 /users/me·/users/me/speed(인증) 를 실제로 호출한다.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.initial});
 
@@ -32,8 +32,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final h = await api.health();
       final me = await api.me();
+      final sp = await api.mySpeed();
       if (!mounted) return;
-      setState(() => _status = '서버 OK (db ${h['db']}, otp ${h['otp']}) · 사용자 ${me['user_id']}');
+      setState(() => _status = '서버 OK (db ${h['db']}, otp ${h['otp']}) · 사용자 ${me['user_id']}\n'
+          '내 속도 — 걷기 ${sp['walk']?.label} · 자전거 ${sp['bicycle']?.label}');
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _status = '실패: $e');

@@ -17,7 +17,7 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteMe 는 탈퇴: 사용자 행에 deleted_at 을 찍고 그 사용자의 trip·속도 프로파일을 즉시 지운다.
-// 이후 같은 토큰은 requireAuth 에서 거부된다. 궤적 테이블은 Phase 3 에서 같은 트랜잭션에 추가한다.
+// 이후 같은 토큰은 requireAuth 에서 거부된다. 궤적(traces)은 trips 의 ON DELETE CASCADE 로 같이 지워진다.
 func (s *Server) handleDeleteMe(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFrom(r.Context())
 	tx, err := s.DB.Begin(r.Context())
