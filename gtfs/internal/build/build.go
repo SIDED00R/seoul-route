@@ -14,6 +14,7 @@ import (
 	"github.com/SIDED00R/seoul-route/gtfs/internal/ktdb"
 	"github.com/SIDED00R/seoul-route/gtfs/internal/osm"
 	"github.com/SIDED00R/seoul-route/gtfs/internal/seoulbus"
+	"github.com/SIDED00R/seoul-route/gtfs/internal/seoulmetro"
 )
 
 // 상수 출처·재보정 규칙
@@ -64,10 +65,20 @@ type Report struct {
 	NRealEntranceStations     int // OSM 출입구가 붙은 부모역
 	NFallbackEntranceStations int // OSM 출입구가 없어 승강장 좌표 출입구로 대신한 부모역(자식 2개 이상)
 	NNoEntrancePlatforms      int // OSM 출입구 역인데 500m 안 출입구가 없어 통로 없이 고립되는 승강장. 0 이어야 한다
+	NMetroTrips               int // 서울교통공사 시각표로 만든 1~9호선 trip
+	NMetroSkippedStops        int // 시각표 역 코드가 파일럿에 없어 뺀 정차
+	NMetroSkippedTrips        int // 정차 2개 미만이라 뺀 시각표 열차
+	NPilotTripsReplaced       int // 시각표로 대체돼 버린 파일럿 trip
+	NMetroNameMatched         int // 역 코드 대신 이름으로 찾은 정차(까치산 2호선)
+	NMetroNonMonotonic        int // 시각이 역행해 뺀 열차(9호선 토·일 심야 4편)
+	NMetroPassing             int // 급행 통과역 행으로 뺀 정차
+	NMetroNoTime              int // 도착·출발 모두 결측이라 뺀 정차
 }
 
 // Build 는 out 에 GTFS zip 을 쓴다. subway 는 nil 이면 버스만 쓴다. entrances 는 OSM 지하철 출입구(없으면 nil).
-func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.Entrance) (*Report, error) {
+// metro 는 서울교통공사 열차운행시각표(없으면 nil → 파일럿 1~9호선 trip 그대로).
+func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.Entrance,
+	metro *seoulmetro.Timetable) (*Report, error) {
 	rep := &Report{}
 	f, err := os.Create(out)
 	if err != nil {
@@ -88,11 +99,18 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 	if subway != nil {
 		agencies = append(agencies, []string{SubwayAgencyID, "KTDB 도시철도 파일럿", "http://www.ktdb.go.kr/", "Asia/Seoul"})
 	}
+	useMetro := subway != nil && metro != nil
+	if useMetro {
+		agencies = append(agencies, []string{MetroAgencyID, "서울교통공사", "http://www.seoulmetro.co.kr/", "Asia/Seoul"})
+	}
 	w.table("agency.txt", []string{"agency_id", "agency_name", "agency_url", "agency_timezone"}, agencies)
+	calendar := [][]string{{"ALL", "1", "1", "1", "1", "1", "1", "1", ServiceStart, ServiceEnd}}
+	if useMetro {
+		calendar = append(calendar, metroCalendar()...)
+	}
 	w.table("calendar.txt",
 		[]string{"service_id", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
-			"start_date", "end_date"},
-		[][]string{{"ALL", "1", "1", "1", "1", "1", "1", "1", ServiceStart, ServiceEnd}})
+			"start_date", "end_date"}, calendar)
 
 	routes := [][]string{}
 	trips := [][]string{}
@@ -116,15 +134,42 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 	sort.Slice(stopRows, func(i, j int) bool { return stopRows[i][0] < stopRows[j][0] })
 
 	if subway != nil {
+		replaced := map[string]bool{} // 시각표로 대체되는 파일럿 trip
 		for _, r := range subway.Routes {
+			if useMetro && metroReplacesRoute(r["route_id"]) {
+				continue
+			}
 			routes = append(routes, []string{r["route_id"], SubwayAgencyID, r["route_short_name"], r["route_long_name"], "1"})
 		}
 		for _, t := range subway.Trips {
+			if useMetro && metroReplacesRoute(t["route_id"]) {
+				replaced[t["trip_id"]] = true
+				continue
+			}
 			trips = append(trips, []string{t["route_id"], "ALL", t["trip_id"], "", "0"})
 		}
 		for _, st := range subway.StopTimes {
+			if replaced[st["trip_id"]] {
+				continue
+			}
 			stopTimes = append(stopTimes,
 				[]string{st["trip_id"], st["arrival_time"], st["departure_time"], st["stop_id"], st["stop_sequence"]})
+		}
+		rep.NPilotTripsReplaced = len(replaced)
+		if useMetro {
+			stopIDs := map[string]bool{}
+			stopByName := map[string]string{}
+			for _, s := range subway.Stops {
+				stopIDs[s["stop_id"]] = true
+				stopByName[s["stop_name"]] = s["stop_id"]
+			}
+			mr, mt, mst, ms := metroRows(metro, stopIDs, stopByName)
+			routes = append(routes, mr...)
+			trips = append(trips, mt...)
+			stopTimes = append(stopTimes, mst...)
+			rep.NMetroTrips, rep.NMetroSkippedStops, rep.NMetroSkippedTrips = ms.Trips, ms.SkippedStops, ms.SkippedTrips
+			rep.NMetroNameMatched, rep.NMetroNonMonotonic = ms.NameMatched, ms.NonMonotonic
+			rep.NMetroPassing, rep.NMetroNoTime = metro.NPassing, metro.NNoTime
 		}
 		parents, parentOf := stationGroups(subway.Stops)
 		for _, s := range subway.Stops {

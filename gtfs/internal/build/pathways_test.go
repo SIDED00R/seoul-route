@@ -210,7 +210,7 @@ func TestBuildWritesPathways(t *testing.T) {
 		},
 	}
 	out := filepath.Join(t.TempDir(), "g.zip")
-	rep, err := Build(out, []BusRoute{sampleRoute()}, sub, nil)
+	rep, err := Build(out, []BusRoute{sampleRoute()}, sub, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
