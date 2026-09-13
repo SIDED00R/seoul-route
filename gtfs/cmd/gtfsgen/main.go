@@ -20,6 +20,7 @@ import (
 	"github.com/SIDED00R/seoul-route/gtfs/internal/ktdb"
 	"github.com/SIDED00R/seoul-route/gtfs/internal/osm"
 	"github.com/SIDED00R/seoul-route/gtfs/internal/seoulbus"
+	"github.com/SIDED00R/seoul-route/gtfs/internal/seoulmetro"
 )
 
 var seoulBBox = ktdb.BBox{MinLon: 126.70, MinLat: 37.38, MaxLon: 127.25, MaxLat: 37.75} // otp/extract_seoul.py 와 동일
@@ -124,7 +125,19 @@ func buildAll(root, cache string) error {
 	} else if err != nil {
 		return err
 	}
-	rep, err := build.Build(out, buses, subway, entrances)
+	// 서울교통공사 열차운행시각표(otp/fetch_metro_timetable.py 산출). 없으면 파일럿 1~9호선 trip 그대로.
+	var metro *seoulmetro.Timetable
+	metroCSV := filepath.Join(root, "otp", "data", "seoul-metro-timetable.csv")
+	if _, err := os.Stat(metroCSV); err == nil {
+		fmt.Println("도시철도: 서울교통공사 열차운행시각표 로드 중")
+		metro, err = seoulmetro.Load(metroCSV)
+		if err != nil {
+			return err
+		}
+	} else {
+		fmt.Println("경고: otp/data/seoul-metro-timetable.csv 없음 — 1~9호선은 파일럿 시간표 (python otp/fetch_metro_timetable.py)")
+	}
+	rep, err := build.Build(out, buses, subway, entrances, metro)
 	if err != nil {
 		return err
 	}
@@ -140,9 +153,13 @@ func printReport(rep *build.Report, out string) {
 			fmt.Printf("  제외 %s(%s): %s\n", r.Name, r.RouteID, r.Skipped)
 		}
 	}
-	fmt.Printf("버스 노선 %d (제외 %d), 정류장 %d | 도시철도 trip %d, 역 %d, 출입구 %d(OSM 출입구 붙은 역 %d, 승강장 좌표 폴백 %d, "+
-		"출입구 통로 없는 승강장 %d), 통로 %d(부모역이 갈려 빠진 환승 %d, 거리 상한으로 뺀 쌍 %d) → %s\n",
-		rep.NBusRoutes, skipped, rep.NBusStops, rep.NSubwayTrips, rep.NSubwayStops, rep.NEntrances,
+	fmt.Printf("버스 노선 %d (제외 %d), 정류장 %d | 도시철도 파일럿 trip %d(시각표로 대체 %d), 시각표 trip %d(빠진 정차 %d, "+
+		"빠진 열차 %d, 이름으로 찾은 정차 %d, 시각 역행으로 뺀 열차 %d, 급행 통과역 %d, 시각 없는 정차 %d), 역 %d, "+
+		"출입구 %d(OSM 출입구 붙은 역 %d, 승강장 좌표 폴백 %d, 출입구 통로 없는 승강장 %d), "+
+		"통로 %d(부모역이 갈려 빠진 환승 %d, 거리 상한으로 뺀 쌍 %d) → %s\n",
+		rep.NBusRoutes, skipped, rep.NBusStops, rep.NSubwayTrips, rep.NPilotTripsReplaced, rep.NMetroTrips,
+		rep.NMetroSkippedStops, rep.NMetroSkippedTrips, rep.NMetroNameMatched, rep.NMetroNonMonotonic, rep.NMetroPassing,
+		rep.NMetroNoTime, rep.NSubwayStops, rep.NEntrances,
 		rep.NRealEntranceStations, rep.NFallbackEntranceStations, rep.NNoEntrancePlatforms, rep.NPathways,
 		rep.NUnpairedTransfers, rep.NFarPairs, out)
 }

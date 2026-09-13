@@ -46,7 +46,7 @@ func sampleRoute() BusRoute {
 // 배선을 타는 테스트: Build → zip → csv 를 다시 읽어 값으로 판정한다.
 func TestBuildBusOnly(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "g.zip")
-	rep, err := Build(out, []BusRoute{sampleRoute()}, nil, nil)
+	rep, err := Build(out, []BusRoute{sampleRoute()}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestBuildSplitsAtTurnaround(t *testing.T) {
 		SectDist: "360", SectSpd: "36"}) // C→D 36+38 = 74 → 누적 286
 	b.Stops[2].TransYn = "Y" // C 가 회차
 	out := filepath.Join(t.TempDir(), "s.zip")
-	rep, err := Build(out, []BusRoute{b}, nil, nil)
+	rep, err := Build(out, []BusRoute{b}, nil, nil, nil)
 	if err != nil || rep.Routes[0].TravelSec != 286 || rep.Routes[0].DroppedDirections != 0 {
 		t.Fatalf("err=%v rep=%+v", err, rep.Routes)
 	}
@@ -147,7 +147,7 @@ func TestBuildDropsStopsOutsideBBox(t *testing.T) {
 	b := sampleRoute()
 	b.Stops[1].Lon = "127.300" // B 가 경기(bbox 밖)
 	out := filepath.Join(t.TempDir(), "b.zip")
-	rep, err := Build(out, []BusRoute{b}, nil, nil)
+	rep, err := Build(out, []BusRoute{b}, nil, nil, nil)
 	if err != nil || rep.NBusStops != 2 || rep.Routes[0].TravelSec != 212 {
 		t.Fatalf("err=%v rep=%+v stops=%d", err, rep.Routes, rep.NBusStops)
 	}
@@ -167,7 +167,7 @@ func TestBuildDropsStopsOutsideBBox(t *testing.T) {
 	b = sampleRoute()
 	b.Stops[0].Lon = "127.300" // A 가 밖, B·C 안
 	out = filepath.Join(t.TempDir(), "a.zip")
-	if _, err := Build(out, []BusRoute{b}, nil, nil); err != nil {
+	if _, err := Build(out, []BusRoute{b}, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	zr2, _ := zip.OpenReader(out)
@@ -189,7 +189,7 @@ func TestBuildDropsStopsOutsideBBox(t *testing.T) {
 	b = sampleRoute()
 	b.Stops[1].Lon, b.Stops[2].Lon = "127.300", "127.300" // B·C 밖 → 안쪽 1개뿐 → 방향 제거 → 노선 제외
 	out = filepath.Join(t.TempDir(), "c.zip")
-	rep, err = Build(out, []BusRoute{b}, nil, nil)
+	rep, err = Build(out, []BusRoute{b}, nil, nil, nil)
 	if err != nil || rep.Routes[0].DroppedDirections != 1 || rep.Routes[0].Skipped == "" || rep.NBusRoutes != 0 {
 		t.Fatalf("전 방향이 빠지면 노선 제외로 보고: %v %+v n=%d", err, rep.Routes, rep.NBusRoutes)
 	}
@@ -212,7 +212,7 @@ func TestDwellSecByRouteType(t *testing.T) {
 	}
 	b := sampleRoute()
 	b.Route.Type = "2"
-	rep, err := Build(filepath.Join(t.TempDir(), "m.zip"), []BusRoute{b}, nil, nil)
+	rep, err := Build(filepath.Join(t.TempDir(), "m.zip"), []BusRoute{b}, nil, nil, nil)
 	if err != nil || rep.Routes[0].TravelSec != 136 {
 		t.Fatalf("마을버스는 정차 0 → 136 이어야: %v %+v", err, rep.Routes)
 	}
@@ -223,7 +223,7 @@ func TestBuildSkipsRouteWithFirstEqualsLast(t *testing.T) {
 	r := sampleRoute()
 	r.Route.FirstBus, r.Route.LastBus = "20260913000000", "20260913000000"
 	out := filepath.Join(t.TempDir(), "g.zip")
-	rep, err := Build(out, []BusRoute{r}, nil, nil)
+	rep, err := Build(out, []BusRoute{r}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +244,7 @@ func TestBuildSkipsRouteWithoutHeadway(t *testing.T) {
 	r := sampleRoute()
 	r.Route.TermMin = " "
 	out := filepath.Join(t.TempDir(), "g.zip")
-	rep, err := Build(out, []BusRoute{r}, nil, nil)
+	rep, err := Build(out, []BusRoute{r}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

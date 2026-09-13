@@ -8,6 +8,7 @@
 //	cd backend && go run ./cmd/odcompare -n 5       # 앞 5쌍만
 //	cd backend && go run ./cmd/odcompare -at 08:30  # 오늘 08:30 출발(시간표만, 실시간 없음). 새벽·심야 실행 시 사용
 //	cd backend && go run ./cmd/odcompare -at 08:30 -ref ../docs/eval/2026-09-13-0541.json  # ODsay 값 재사용(0콜), 설정 전후 비교용
+//	cd backend && go run ./cmd/odcompare -at 08:30 -on 2026-09-14 -ref ...              # 특정 날짜(요일) 시간표로
 package main
 
 import (
@@ -80,6 +81,7 @@ type row struct {
 func main() {
 	n := flag.Int("n", len(ods), "대조할 OD 수")
 	at := flag.String("at", "", "출발 시각 HH:MM(오늘). 비우면 지금 출발")
+	on := flag.String("on", "", "출발 날짜 YYYY-MM-DD(-at 과 함께). 비우면 오늘. 지하철 시간표가 요일별이라 평일 비교는 평일 날짜로")
 	ref := flag.String("ref", "", "이전 결과 json. 주면 ODsay 를 호출하지 않고 그 파일의 ODsay 값을 재사용한다(0콜)")
 	flag.Parse()
 	refRows := map[string]row{}
@@ -121,6 +123,14 @@ func main() {
 			os.Exit(2)
 		}
 		y, m, d := time.Now().Date()
+		if *on != "" {
+			day, err := time.ParseInLocation("2006-01-02", *on, time.Local)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "-on 은 YYYY-MM-DD 형식이다:", *on)
+				os.Exit(2)
+			}
+			y, m, d = day.Date()
+		}
 		t := time.Date(y, m, d, hm.Hour(), hm.Minute(), 0, 0, time.Local)
 		depart = &t
 	}
@@ -341,7 +351,7 @@ func write(rows []row, started time.Time, depart *time.Time, ref string) error {
 	fmt.Fprintf(&b, "# ODsay 대조 %s\n\n", started.Format("2006-01-02 15:04"))
 	when := "지금 출발(실시간 보정 포함)"
 	if depart != nil {
-		when = depart.Format("15:04") + " 출발(시간표만)"
+		when = depart.Format("2006-01-02 Mon 15:04") + " 출발(시간표만)"
 	}
 	src := "ODsay 는 출발 시각 파라미터가 없어 시각 무관 대표값"
 	if ref != "" {
