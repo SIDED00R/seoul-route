@@ -21,6 +21,7 @@ import (
 	"github.com/SIDED00R/seoul-route/backend/internal/otp"
 	"github.com/SIDED00R/seoul-route/backend/internal/realtime"
 	"github.com/SIDED00R/seoul-route/backend/internal/route"
+	"github.com/SIDED00R/seoul-route/backend/internal/speed"
 )
 
 func main() {
@@ -45,6 +46,21 @@ func main() {
 		os.Exit(1)
 	}
 	log.Info("migrate", "applied", applied)
+	// 원본 궤적 30일 보관(speed.TraceRetention). 기동 직후 한 번, 이후 1시간마다.
+	go func() {
+		for {
+			if n, err := speed.PurgeOldTraces(ctx, pool, time.Now()); err != nil {
+				log.Warn("trace purge", "err", err)
+			} else if n > 0 {
+				log.Info("trace purge", "deleted", n)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Hour):
+			}
+		}
+	}()
 
 	var google auth.GoogleVerifier
 	if g, err := auth.NewGoogleVerifier(cfg.GoogleOAuthClientID); err == nil {
