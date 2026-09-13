@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- 로컬 PC 의 API(평문 HTTP, 사설 IP)에 붙어야 하므로 cleartext 를 허용한다. 배포하지 않는 개인용 앱이다. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 안내 화면이 켜져 있는 동안만(foreground) 위치를 받는다. 백그라운드 위치 권한은 쓰지 않는다. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
         android:label="서울 길찾기"
         android:name="${applicationName}"
