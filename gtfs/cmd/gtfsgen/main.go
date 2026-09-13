@@ -18,6 +18,7 @@ import (
 
 	"github.com/SIDED00R/seoul-route/gtfs/internal/build"
 	"github.com/SIDED00R/seoul-route/gtfs/internal/ktdb"
+	"github.com/SIDED00R/seoul-route/gtfs/internal/osm"
 	"github.com/SIDED00R/seoul-route/gtfs/internal/seoulbus"
 )
 
@@ -115,7 +116,15 @@ func buildAll(root, cache string) error {
 		return err
 	}
 	out := filepath.Join(outDir, "seoul-gtfs.zip")
-	rep, err := build.Build(out, buses, subway)
+	// OSM 출입구(otp/extract_entrances.py 산출). 없으면 승강장 좌표 출입구로 폴백한다.
+	entrancesCSV := filepath.Join(root, "otp", "data", "subway-entrances.csv")
+	entrances, err := osm.LoadEntrances(entrancesCSV)
+	if errors.Is(err, os.ErrNotExist) {
+		fmt.Println("경고: otp/data/subway-entrances.csv 없음 — 승강장 좌표 출입구로 생성 (python otp/extract_entrances.py)")
+	} else if err != nil {
+		return err
+	}
+	rep, err := build.Build(out, buses, subway, entrances)
 	if err != nil {
 		return err
 	}
@@ -131,9 +140,10 @@ func printReport(rep *build.Report, out string) {
 			fmt.Printf("  제외 %s(%s): %s\n", r.Name, r.RouteID, r.Skipped)
 		}
 	}
-	fmt.Printf("버스 노선 %d (제외 %d), 정류장 %d | 도시철도 trip %d, 역 %d, 출입구 %d, 통로 %d"+
-		"(부모역이 갈려 빠진 환승 %d, 거리 상한으로 뺀 쌍 %d) → %s\n",
-		rep.NBusRoutes, skipped, rep.NBusStops, rep.NSubwayTrips, rep.NSubwayStops, rep.NEntrances, rep.NPathways,
+	fmt.Printf("버스 노선 %d (제외 %d), 정류장 %d | 도시철도 trip %d, 역 %d, 출입구 %d(OSM 출입구 붙은 역 %d, 승강장 좌표 폴백 %d, "+
+		"출입구 통로 없는 승강장 %d), 통로 %d(부모역이 갈려 빠진 환승 %d, 거리 상한으로 뺀 쌍 %d) → %s\n",
+		rep.NBusRoutes, skipped, rep.NBusStops, rep.NSubwayTrips, rep.NSubwayStops, rep.NEntrances,
+		rep.NRealEntranceStations, rep.NFallbackEntranceStations, rep.NNoEntrancePlatforms, rep.NPathways,
 		rep.NUnpairedTransfers, rep.NFarPairs, out)
 }
 
