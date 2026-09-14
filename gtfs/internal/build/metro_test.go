@@ -100,7 +100,7 @@ func TestBuildReplacesPilotMetroTrips(t *testing.T) {
 			{Code: "2731", Dep: "05:39:00"}, {Code: "2732", Arr: "05:41:30", Dep: "05:41:50"}}},
 	}}
 	out := filepath.Join(t.TempDir(), "g.zip")
-	rep, err := Build(out, []BusRoute{sampleRoute()}, sub, nil, metro)
+	rep, err := Build(out, []BusRoute{sampleRoute()}, sub, nil, metro, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
