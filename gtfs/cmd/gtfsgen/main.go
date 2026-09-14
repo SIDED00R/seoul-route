@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/SIDED00R/seoul-route/gtfs/internal/build"
+	"github.com/SIDED00R/seoul-route/gtfs/internal/kric"
 	"github.com/SIDED00R/seoul-route/gtfs/internal/ktdb"
 	"github.com/SIDED00R/seoul-route/gtfs/internal/osm"
 	"github.com/SIDED00R/seoul-route/gtfs/internal/seoulbus"
@@ -137,7 +138,20 @@ func buildAll(root, cache string) error {
 	} else {
 		fmt.Println("경고: otp/data/seoul-metro-timetable.csv 없음 — 1~9호선은 파일럿 시간표 (python otp/fetch_metro_timetable.py)")
 	}
-	rep, err := build.Build(out, buses, subway, entrances, metro)
+	// 레일포털 시각표(otp/fetch_kric_timetable.py 산출). 없으면 코레일·민자 노선은 파일럿 trip 그대로.
+	var kricTT *kric.Timetable
+	kricStations := filepath.Join(root, "otp", "data", "kric-stations.csv")
+	kricTimetable := filepath.Join(root, "otp", "data", "kric-timetable.csv")
+	if _, err := os.Stat(kricTimetable); err == nil {
+		fmt.Println("도시철도: 레일포털 코레일·민자 노선 시각표 로드 중")
+		kricTT, err = kric.Load(kricStations, kricTimetable)
+		if err != nil {
+			return err
+		}
+	} else {
+		fmt.Println("경고: otp/data/kric-timetable.csv 없음 — 코레일·민자 노선은 파일럿 시간표 (python otp/fetch_kric_timetable.py)")
+	}
+	rep, err := build.Build(out, buses, subway, entrances, metro, kricTT)
 	if err != nil {
 		return err
 	}
@@ -156,12 +170,14 @@ func printReport(rep *build.Report, out string) {
 	fmt.Printf("버스 노선 %d (제외 %d), 정류장 %d | 도시철도 파일럿 trip %d(시각표로 대체 %d), 시각표 trip %d(빠진 정차 %d, "+
 		"빠진 열차 %d, 이름으로 찾은 정차 %d, 시각 역행으로 뺀 열차 %d, 급행 통과역 %d, 시각 없는 정차 %d), 역 %d, "+
 		"출입구 %d(OSM 출입구 붙은 역 %d, 승강장 좌표 폴백 %d, 출입구 통로 없는 승강장 %d), "+
-		"통로 %d(부모역이 갈려 빠진 환승 %d, 거리 상한으로 뺀 쌍 %d) → %s\n",
+		"통로 %d(부모역이 갈려 빠진 환승 %d, 거리 상한으로 뺀 쌍 %d) | 레일포털 노선 %d, trip %d(빠진 정차 %d, 빠진 열차 %d, "+
+		"좌표로 붙인 역 %d, 시각 역행으로 뺀 열차 %d, 중복 행 %d) → %s\n",
 		rep.NBusRoutes, skipped, rep.NBusStops, rep.NSubwayTrips, rep.NPilotTripsReplaced, rep.NMetroTrips,
 		rep.NMetroSkippedStops, rep.NMetroSkippedTrips, rep.NMetroNameMatched, rep.NMetroNonMonotonic, rep.NMetroPassing,
 		rep.NMetroNoTime, rep.NSubwayStops, rep.NEntrances,
 		rep.NRealEntranceStations, rep.NFallbackEntranceStations, rep.NNoEntrancePlatforms, rep.NPathways,
-		rep.NUnpairedTransfers, rep.NFarPairs, out)
+		rep.NUnpairedTransfers, rep.NFarPairs, rep.NKricLines, rep.NKricTrips, rep.NKricSkippedStops, rep.NKricSkippedTrips,
+		rep.NKricNearestMatched, rep.NKricNonMonotonic, rep.NKricDupRows, out)
 }
 
 func envKey(path, name string) (string, error) {
