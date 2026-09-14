@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/SIDED00R/seoul-route/gtfs/internal/kric"
 	"github.com/SIDED00R/seoul-route/gtfs/internal/ktdb"
 	"github.com/SIDED00R/seoul-route/gtfs/internal/osm"
 	"github.com/SIDED00R/seoul-route/gtfs/internal/seoulbus"
@@ -73,12 +74,20 @@ type Report struct {
 	NMetroNonMonotonic        int // 시각이 역행해 뺀 열차(9호선 토·일 심야 4편)
 	NMetroPassing             int // 급행 통과역 행으로 뺀 정차
 	NMetroNoTime              int // 도착·출발 모두 결측이라 뺀 정차
+	NKricLines                int // 레일포털 시각표로 대체한 노선 수(경의중앙·수인분당·경춘·공항철도·신분당 …)
+	NKricTrips                int // 레일포털 시각표로 만든 trip
+	NKricSkippedStops         int // 파일럿 정차역에 붙이지 못해 뺀 정차
+	NKricSkippedTrips         int // 정차 2개 미만이라 뺀 열차
+	NKricNearestMatched       int // 이름이 달라 좌표(KricNearestM 안)로 붙인 역
+	NKricNonMonotonic         int // 시각이 역행해 뺀 열차
+	NKricDupRows              int // 같은 열차·같은 역 중복 행(뒤 것을 버림)
 }
 
 // Build 는 out 에 GTFS zip 을 쓴다. subway 는 nil 이면 버스만 쓴다. entrances 는 OSM 지하철 출입구(없으면 nil).
-// metro 는 서울교통공사 열차운행시각표(없으면 nil → 파일럿 1~9호선 trip 그대로).
+// metro 는 서울교통공사 열차운행시각표(없으면 nil → 파일럿 1~9호선 trip 그대로), kricTT 는 레일포털 시각표(없으면 nil →
+// 코레일·민자 노선 파일럿 trip 그대로).
 func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.Entrance,
-	metro *seoulmetro.Timetable) (*Report, error) {
+	metro *seoulmetro.Timetable, kricTT *kric.Timetable) (*Report, error) {
 	rep := &Report{}
 	f, err := os.Create(out)
 	if err != nil {
@@ -103,10 +112,17 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 	if useMetro {
 		agencies = append(agencies, []string{MetroAgencyID, "서울교통공사", "http://www.seoulmetro.co.kr/", "Asia/Seoul"})
 	}
+	useKric := subway != nil && kricTT != nil && len(kricTT.Lines) > 0
+	if useKric {
+		agencies = append(agencies, kricAgencies(kricTT)...)
+	}
 	w.table("agency.txt", []string{"agency_id", "agency_name", "agency_url", "agency_timezone"}, agencies)
 	calendar := [][]string{{"ALL", "1", "1", "1", "1", "1", "1", "1", ServiceStart, ServiceEnd}}
-	if useMetro {
+	if useMetro || useKric {
 		calendar = append(calendar, metroCalendar()...)
+	}
+	if useKric && kricNeedsSatSun(kricTT) {
+		calendar = append(calendar, []string{"SATSUN", "0", "0", "0", "0", "0", "1", "1", ServiceStart, ServiceEnd})
 	}
 	w.table("calendar.txt",
 		[]string{"service_id", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
@@ -135,27 +151,83 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 
 	if subway != nil {
 		replaced := map[string]bool{} // 시각표로 대체되는 파일럿 trip
+		kricLine := func(routeID string) string { // 레일포털 시각표로 대체되는 노선이면 그 코드
+			if !useKric {
+				return ""
+			}
+			code := kricLineOf(routeID)
+			if _, ok := kricTT.Lines[code]; !ok {
+				return ""
+			}
+			return code
+		}
+		pilotNames := map[string]string{}
 		for _, r := range subway.Routes {
 			if useMetro && metroReplacesRoute(r["route_id"]) {
 				continue
 			}
+			if code := kricLine(r["route_id"]); code != "" {
+				if _, ok := pilotNames[code]; !ok {
+					pilotNames[code] = r["route_short_name"]
+				}
+				continue
+			}
 			routes = append(routes, []string{r["route_id"], SubwayAgencyID, r["route_short_name"], r["route_long_name"], "1"})
 		}
+		tripLine := map[string]string{} // 대체되는 파일럿 trip → 노선 코드(정차역 수집용)
 		for _, t := range subway.Trips {
 			if useMetro && metroReplacesRoute(t["route_id"]) {
 				replaced[t["trip_id"]] = true
 				continue
 			}
+			if code := kricLine(t["route_id"]); code != "" {
+				replaced[t["trip_id"]] = true
+				tripLine[t["trip_id"]] = code
+				continue
+			}
 			trips = append(trips, []string{t["route_id"], "ALL", t["trip_id"], "", "0"})
 		}
+		lineStopIDs := map[string]map[string]bool{}
 		for _, st := range subway.StopTimes {
 			if replaced[st["trip_id"]] {
+				if code := tripLine[st["trip_id"]]; code != "" {
+					if lineStopIDs[code] == nil {
+						lineStopIDs[code] = map[string]bool{}
+					}
+					lineStopIDs[code][st["stop_id"]] = true
+				}
 				continue
 			}
 			stopTimes = append(stopTimes,
 				[]string{st["trip_id"], st["arrival_time"], st["departure_time"], st["stop_id"], st["stop_sequence"]})
 		}
 		rep.NPilotTripsReplaced = len(replaced)
+		if useKric {
+			stopRow := map[string]ktdb.Row{}
+			for _, s := range subway.Stops {
+				stopRow[s["stop_id"]] = s
+			}
+			pilotStops := map[string][]pilotStop{}
+			for code, ids := range lineStopIDs {
+				sorted := make([]string, 0, len(ids))
+				for id := range ids {
+					sorted = append(sorted, id)
+				}
+				sort.Strings(sorted) // 맵 순회 순서를 고정해 동점 후보 선택이 빌드마다 같게
+				for _, id := range sorted {
+					s := stopRow[id]
+					pilotStops[code] = append(pilotStops[code],
+						pilotStop{ID: id, Name: s["stop_name"], Lat: parseF(s["stop_lat"]), Lon: parseF(s["stop_lon"])})
+				}
+			}
+			kr, kt, kst, ks := kricRows(kricTT, pilotStops, pilotNames)
+			routes = append(routes, kr...)
+			trips = append(trips, kt...)
+			stopTimes = append(stopTimes, kst...)
+			rep.NKricLines = len(kricTT.Lines)
+			rep.NKricTrips, rep.NKricSkippedStops, rep.NKricSkippedTrips = ks.Trips, ks.SkippedStops, ks.SkippedTrips
+			rep.NKricNearestMatched, rep.NKricNonMonotonic, rep.NKricDupRows = ks.NearestMatched, ks.NonMonotonic, kricTT.NDup
+		}
 		if useMetro {
 			stopIDs := map[string]bool{}
 			stopByName := map[string]string{}
