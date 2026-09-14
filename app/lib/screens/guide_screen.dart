@@ -249,47 +249,51 @@ class _GuideScreenState extends State<GuideScreen> {
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(modeIcon(leg), color: modeColor(leg)),
-                  title: Text('${leg.label} · ${(leg.durationSec / 60).round()}분'),
-                  subtitle: Text('${legEndpointName(widget.request, leg.fromName, leg.fromLat, leg.fromLon)} → '
-                      '${legEndpointName(widget.request, leg.toName, leg.toLat, leg.toLon)}'
-                      '${remainM == null ? '' : ' · 끝까지 ${remainM.round()}m'}'),
-                ),
-                Row(
-                  children: [
-                    OutlinedButton(
-                      onPressed: _tracker.index > 0 && !_ending ? () => setState(_tracker.prev) : null,
-                      child: const Text('이전 구간'),
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton(
-                      onPressed: !_tracker.isLast && !_ending ? () => setState(_tracker.next) : null,
-                      child: const Text('다음 구간'),
-                    ),
-                    const Spacer(),
-                    FilledButton.icon(
-                      onPressed: _ending ? null : _end,
-                      icon: const Icon(Icons.stop),
-                      label: const Text('안내 종료'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$_status · 샘플 $_samples'
-                  '${_accuracyM == null ? '' : ' · 정확도 ${_accuracyM!.round()}m'}'
-                  '${up == null ? '' : ' · 업로드 ${up.uploaded} · 대기 ${up.pending}'
-                      '${up.failures > 0 ? ' · 실패 ${up.failures}' : ''}'}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+          // 실기기(S23 울트라)의 시스템 내비게이션 바가 하단 패널을 덮으므로 아래 인셋만큼 띄운다(에뮬레이터에는 바가 없다).
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(modeIcon(leg), color: modeColor(leg)),
+                    title: Text('${leg.label} · ${(leg.durationSec / 60).round()}분'),
+                    subtitle: Text('${legEndpointName(widget.request, leg.fromName, leg.fromLat, leg.fromLon)} → '
+                        '${legEndpointName(widget.request, leg.toName, leg.toLat, leg.toLon)}'
+                        '${remainM == null ? '' : ' · 끝까지 ${remainM.round()}m'}'),
+                  ),
+                  Row(
+                    children: [
+                      OutlinedButton(
+                        onPressed: _tracker.index > 0 && !_ending ? () => setState(_tracker.prev) : null,
+                        child: const Text('이전 구간'),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: !_tracker.isLast && !_ending ? () => setState(_tracker.next) : null,
+                        child: const Text('다음 구간'),
+                      ),
+                      const Spacer(),
+                      FilledButton.icon(
+                        onPressed: _ending ? null : _end,
+                        icon: const Icon(Icons.stop),
+                        label: const Text('안내 종료'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$_status · 샘플 $_samples'
+                    '${_accuracyM == null ? '' : ' · 정확도 ${_accuracyM!.round()}m'}'
+                    '${up == null ? '' : ' · 업로드 ${up.uploaded} · 대기 ${up.pending}'
+                        '${up.failures > 0 ? ' · 실패 ${up.failures}' : ''}'}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
             ),
           ),
         ],
