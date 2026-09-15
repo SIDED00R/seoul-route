@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../api/client.dart';
 import '../guide/activity_classifier.dart';
+import '../guide/background_location.dart';
 import '../guide/end_confirm.dart';
 import '../guide/leg_tracker.dart';
 import '../guide/trace_uploader.dart';
@@ -18,7 +19,8 @@ import '../util/leg_names.dart';
 import '../util/polyline.dart';
 import '../widgets/mode_icon.dart';
 
-/// 안내 화면. 화면이 떠 있는 동안(foreground) 5초마다 위치를 받아 현재 구간을 넘기고 서버 trip 에 샘플을 올린다.
+/// 안내 화면. 5초마다 위치를 받아 현재 구간을 넘기고 서버 trip 에 샘플을 올린다. 위치는 포그라운드 서비스(상단 알림)로
+/// 받아 화면이 꺼지거나 다른 앱으로 넘어가도 이어진다.
 /// "안내 종료" 를 누르면 남은 샘플을 보내고 trip 을 닫는다 — 서버가 그때 이번 안내의 걷기·자전거 속도를 내 프로파일에 반영한다.
 class GuideScreen extends StatefulWidget {
   const GuideScreen({super.key, required this.api, required this.request, required this.itinerary});
@@ -66,23 +68,25 @@ class _GuideScreenState extends State<GuideScreen> {
       if (mounted) setState(() => _status = '기기 위치 서비스가 꺼져 있습니다.');
       return;
     }
+    // 거부해도 안내는 계속한다(알림창에 안내 알림만 안 뜬다).
+    await requestNotificationPermission();
+    if (!mounted) return;
+    // 위치 포그라운드 서비스는 앱이 백그라운드로 간 뒤에는 시작되지 않는다(Android 12+, ForegroundServiceStartNotAllowedException).
+    // 스트림은 trip 발급을 기다리기 전에 연다. 발급 전 샘플은 서버에 올리지 않는다.
+    _positions = Geolocator.getPositionStream(locationSettings: guideLocationSettings(sampleInterval)).listen(
+        _onPosition, onError: (e) {
+      if (mounted) setState(() => _status = '위치 오류: $e');
+    });
     try {
       final tripId = await widget.api.startTrip();
       if (!mounted) return;
       _uploader = TraceUploader(api: widget.api, tripId: tripId)..start();
     } catch (e) {
+      await _positions?.cancel();
+      _positions = null;
       if (mounted) setState(() => _status = 'trip 발급 실패: $e');
       return;
     }
-    _positions = Geolocator.getPositionStream(
-      locationSettings: AndroidSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 0,
-        intervalDuration: sampleInterval,
-      ),
-    ).listen(_onPosition, onError: (e) {
-      if (mounted) setState(() => _status = '위치 오류: $e');
-    });
     setState(() => _status = '안내 중');
     await _startActivity();
   }
