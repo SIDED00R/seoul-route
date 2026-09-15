@@ -156,6 +156,9 @@ class Itinerary {
     return m >= 1 ? '횡단보도 +$m분' : null;
   }
 
+  /// 횡단보도 대기로 원래 탑승을 놓쳐 다시 탐색한 여정이면 "재탐색" 배지 문구, 아니면 null.
+  String? get replannedLabel => replanned ? '재탐색' : null;
+
   /// 지금부터 도착까지(출발 대기 포함). 카카오맵의 "총 소요"와 같은 기준.
   int get minutes => ((departInSec + durationSec) / 60).round();
 

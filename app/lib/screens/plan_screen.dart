@@ -122,7 +122,7 @@ class _PlanScreenState extends State<PlanScreen> {
               ),
             ),
           _placeTile('출발', Icons.trip_origin, _origin, () async {
-            if (_locating) return; // 현재 위치를 받는 동안은 출발지 검색을 열지 않는다
+            if (_locating || _busy) return; // 현재 위치를 받는 동안·경로 요청 중에는 출발지 검색을 열지 않는다
             final p = await _pick('출발지');
             if (p != null) setState(() => _origin = p);
           },
@@ -134,7 +134,7 @@ class _PlanScreenState extends State<PlanScreen> {
                   : IconButton(
                       tooltip: '현재 위치',
                       icon: const Icon(Icons.my_location),
-                      onPressed: _useCurrentLocation,
+                      onPressed: _busy ? null : _useCurrentLocation, // 탐색 요청 중에는 출발지를 바꾸지 않는다
                     )),
           _segmentMode(0),
           for (var i = 0; i < _via.length; i++) ...[
