@@ -68,6 +68,7 @@ type Leg struct {
 	RouteID    string  `json:"route_id,omitempty"`     // gtfsId, 예 "seoul:B_100100063" / "seoul:RR_…"
 	FromStopID string  `json:"from_stop_id,omitempty"` // 탑승 정류장 gtfsId, 예 "seoul:BS_123000354"
 	NextStop   string  `json:"next_stop,omitempty"`    // 탑승 후 첫 정차역 이름(지하철 방면 판별용)
+	InStation  bool    `json:"in_station,omitempty"`   // 양끝이 같은 부모역의 정류장이고 역 출입구를 지나지 않는 도보(역 안 환승 통로)
 	RentedBike bool    `json:"rented_bike,omitempty"`
 	TransitLeg bool    `json:"transit_leg"`
 	Polyline   string  `json:"polyline,omitempty"` // Google encoded polyline
@@ -120,8 +121,9 @@ query Plan($origin: PlanLabeledLocationInput!, $destination: PlanLabeledLocation
       start end duration numberOfTransfers walkDistance
       legs { mode duration distance rentedBike transitLeg
              start { scheduledTime } end { scheduledTime }
-             from { name lat lon stop { gtfsId } } to { name lat lon } route { shortName gtfsId }
-             intermediateStops { name } legGeometry { points }
+             from { name lat lon stop { gtfsId parentStation { gtfsId } } }
+             to { name lat lon stop { gtfsId parentStation { gtfsId } } } route { shortName gtfsId }
+             intermediateStops { name } legGeometry { points } steps { relativeDirection }
              previousLegs(numberOfLegs: 5) { start { scheduledTime } duration }
              nextLegs(numberOfLegs: 7) { start { scheduledTime } duration } }
     } }
@@ -273,13 +275,12 @@ type node struct {
 		From       struct {
 			Name     string
 			Lat, Lon float64
-			Stop     *struct {
-				GtfsID string `json:"gtfsId"`
-			}
+			Stop     *legStop
 		}
 		To struct {
 			Name     string
 			Lat, Lon float64
+			Stop     *legStop
 		}
 		Route *struct {
 			ShortName string
@@ -287,9 +288,34 @@ type node struct {
 		}
 		IntermediateStops []struct{ Name string }
 		LegGeometry       *struct{ Points string }
+		Steps             []struct{ RelativeDirection string }
 		PreviousLegs      []legTime
 		NextLegs          []legTime
 	}
+}
+
+// legStop 은 leg 양끝의 정류장(없으면 nil — 좌표 출발·도착). 생성 GTFS 의 지하철 승강장은 부모역(ST_…)을 가진다.
+type legStop struct {
+	GtfsID        string `json:"gtfsId"`
+	ParentStation *struct {
+		GtfsID string `json:"gtfsId"`
+	} `json:"parentStation"`
+}
+
+// sameParentStation 은 두 정류장이 모두 있고 같은 부모역에 속하는지.
+func sameParentStation(a, b *legStop) bool {
+	return a != nil && b != nil && a.ParentStation != nil && b.ParentStation != nil &&
+		a.ParentStation.GtfsID != "" && a.ParentStation.GtfsID == b.ParentStation.GtfsID
+}
+
+// leavesStation 은 도보 steps 에 역 출입구로 나가거나 들어오는 지점(EXIT_STATION·ENTER_STATION)이 있는지.
+func leavesStation(steps []struct{ RelativeDirection string }) bool {
+	for _, s := range steps {
+		if s.RelativeDirection == "EXIT_STATION" || s.RelativeDirection == "ENTER_STATION" {
+			return true
+		}
+	}
+	return false
 }
 
 type legTime struct {
@@ -340,6 +366,7 @@ func (n node) itinerary() Itinerary {
 		if l.From.Stop != nil {
 			leg.FromStopID = l.From.Stop.GtfsID
 		}
+		leg.InStation = l.Mode == "WALK" && sameParentStation(l.From.Stop, l.To.Stop) && !leavesStation(l.Steps)
 		if len(l.IntermediateStops) > 0 {
 			leg.NextStop = l.IntermediateStops[0].Name
 		} else if l.TransitLeg {

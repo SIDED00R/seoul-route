@@ -25,6 +25,8 @@ import (
 //     걸어갔다가 되돌아와 같은 지하철을 타는" 열등 복제라 목록만 어지럽힌다(실측: 20쌍 168후보 중 37개가 이 꼴).
 //   - 서로 다른 원래 후보가 재탐색 뒤 같은 대중교통 열·같은 다음 정차역이 되면 점수(score)가 가장 좋은 하나만 남긴다
 //     (이슈 #47). 같은 역·같은 노선이라도 다음 정차역이 다르면(순환선 내선·외선) 둘 다 남긴다.
+//   - 역 안 환승 통로 도보(Leg.InStation: 양끝이 같은 부모역의 정류장이고 역 출입구를 지나지 않는다)는 횡단보도를 세지
+//     않는다(이슈 #57).
 const ReplanMax = 3
 
 // Crossings 는 폴리라인이 지나는 신호 횡단보도 수를 센다(crossing.Index).
@@ -44,7 +46,7 @@ func addCrossingWaits(it *otp.Itinerary, cx Crossings, waitPer float64) (int, fl
 			acc = 0
 			continue
 		}
-		if l.Crossings == 0 {
+		if l.Crossings == 0 && !l.InStation {
 			if n := cx.Count(l.Polyline); n > 0 {
 				wait := float64(n) * waitPer
 				l.Crossings, l.CrossingWait = n, wait
