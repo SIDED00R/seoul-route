@@ -23,6 +23,8 @@ import (
 //     tail 의 End 로 덮어쓰기 때문).
 //   - 재탐색 결과의 대중교통 열(노선·탑승 정류장)이 재탐색하지 않은 다른 후보와 같으면 버린다 — "역에서 버스 정류장까지
 //     걸어갔다가 되돌아와 같은 지하철을 타는" 열등 복제라 목록만 어지럽힌다(실측: 20쌍 168후보 중 37개가 이 꼴).
+//   - 서로 다른 원래 후보가 재탐색 뒤 같은 대중교통 열·같은 다음 정차역이 되면 점수(score)가 가장 좋은 하나만 남긴다
+//     (이슈 #47). 같은 역·같은 노선이라도 다음 정차역이 다르면(순환선 내선·외선) 둘 다 남긴다.
 const ReplanMax = 3
 
 // Crossings 는 폴리라인이 지나는 신호 횡단보도 수를 센다(crossing.Index).
@@ -108,14 +110,22 @@ func (p *Planner) applyCrossings(ctx context.Context, its []otp.Itinerary, req P
 		}
 	}
 	kept := map[string]bool{}
-	for _, it := range its {
+	bestReplan := map[string]int{} // 대중교통 열+다음 정차역 → 그렇게 타는 재탐색 후보 중 점수가 가장 좋은 인덱스
+	for i, it := range its {
+		sig := transitSig(it.Legs)
 		if !it.Replanned {
-			kept[transitSig(it.Legs)] = true
+			kept[sig] = true
+			continue
+		}
+		dir := sig + nextStops(it.Legs)
+		if j, ok := bestReplan[dir]; !ok || score(it) < score(its[j]) {
+			bestReplan[dir] = i
 		}
 	}
 	out := its[:0]
-	for _, it := range its {
-		if it.Replanned && kept[transitSig(it.Legs)] {
+	for i, it := range its {
+		sig := transitSig(it.Legs)
+		if it.Replanned && (kept[sig] || bestReplan[sig+nextStops(it.Legs)] != i) {
 			continue
 		}
 		out = append(out, it)
@@ -129,6 +139,17 @@ func transitSig(legs []otp.Leg) string {
 	for _, l := range legs {
 		if l.TransitLeg {
 			s += l.Route + "@" + l.FromStopID + ";"
+		}
+	}
+	return s
+}
+
+// nextStops 는 대중교통 leg 마다 탑승 뒤 첫 정차역(NextStop)을 이은 것. 같은 역·같은 노선이라도 방향이 다르면 다르다.
+func nextStops(legs []otp.Leg) string {
+	s := ""
+	for _, l := range legs {
+		if l.TransitLeg {
+			s += l.NextStop + ";"
 		}
 	}
 	return s
