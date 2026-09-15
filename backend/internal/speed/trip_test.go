@@ -44,6 +44,42 @@ func TestTripSpeedsMedianOfMovingPairs(t *testing.T) {
 	}
 }
 
+// 도보 구간인데 활동 인식이 vehicle 인 샘플 쌍은 세지 않고 Mismatch 로 센다. still/unknown/빈 값은 그대로 센다.
+func TestTripSpeedsExcludesActivityMismatch(t *testing.T) {
+	t0 := time.Date(2026, 9, 15, 9, 0, 0, 0, time.UTC)
+	s := walkSamples(t0, "walk", 1.4, 5, 21, 10) // 20쌍
+	for i := range s {
+		switch {
+		case i < 5:
+			s[i].Activity = "walk"
+		case i < 8:
+			s[i].Activity = "still"
+		case i < 10:
+			s[i].Activity = "unknown"
+		case i >= 15:
+			s[i].Activity = "vehicle" // 15~20: 쌍 (14,15)~(19,20) 6개가 빠진다
+		}
+	}
+	w := TripSpeeds(s)["walk"]
+	if !w.OK || w.Pairs != 14 || w.Mismatch != 6 || math.Abs(w.SpeedMps-1.4) > 0.01 {
+		t.Fatalf("walk=%+v", w)
+	}
+	// 전부 불일치면 추정은 없고 Mismatch 만 남는다
+	for i := range s {
+		s[i].Activity = "bicycle"
+	}
+	w = TripSpeeds(s)["walk"]
+	if w.OK || w.Pairs != 0 || w.Mismatch != 20 {
+		t.Fatalf("walk=%+v", w)
+	}
+	// 간격이 30초를 넘는 쌍은 애초에 연속 쌍이 아니라 불일치로도 세지 않는다(키도 생기지 않는다)
+	gap := []Sample{{TS: t0, Lat: 37.5, Lon: 127.0, AccuracyM: 5, Mode: "walk", Activity: "vehicle"},
+		{TS: t0.Add(2 * time.Minute), Lat: 37.501, Lon: 127.0, AccuracyM: 5, Mode: "walk", Activity: "vehicle"}}
+	if est := TripSpeeds(gap); len(est) != 0 {
+		t.Fatalf("간격 초과 쌍이 불일치로 세였다: %+v", est)
+	}
+}
+
 func TestTripSpeedsModeBoundaryAndTransit(t *testing.T) {
 	t0 := time.Date(2026, 9, 13, 9, 0, 0, 0, time.UTC)
 	s := walkSamples(t0, "walk", 1.2, 5, 13, 5) // 12쌍 = MinPairs 경계

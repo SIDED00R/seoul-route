@@ -6,6 +6,7 @@ class TraceSample {
     required this.lon,
     required this.accuracyM,
     required this.mode,
+    this.activity,
   });
 
   final DateTime ts;
@@ -13,6 +14,7 @@ class TraceSample {
   final double lon;
   final double accuracyM;
   final String mode; // walk / bicycle / transit — 샘플 시점의 안내 구간 수단
+  final String? activity; // 폰 활동 인식 판정 walk / bicycle / vehicle / still / unknown, 못 받으면 null
 
   Map<String, dynamic> toJson() => {
         'ts': ts.toUtc().toIso8601String(),
@@ -20,6 +22,7 @@ class TraceSample {
         'lon': lon,
         'accuracy_m': accuracyM,
         'mode': mode,
+        if (activity != null) 'activity': activity,
       };
 }
 
