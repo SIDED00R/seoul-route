@@ -25,27 +25,38 @@ const (
 var (
 	MaxSpeed  = map[string]float64{"walk": 3.0, "bicycle": 12.0}
 	MinMoving = map[string]float64{"walk": 0.3, "bicycle": 0.5}
+	// 활동 인식이 준 이동 활동. 이 셋 중 하나이면서 안내 구간 수단(Mode)과 다르면 그 샘플은 학습에서 뺀다.
+	// still/unknown/빈 값은 판단하지 않는다(정지는 MinMoving 이 거른다).
+	Activities     = map[string]bool{"walk": true, "bicycle": true, "vehicle": true, "still": true, "unknown": true}
+	movingActivity = map[string]bool{"walk": true, "bicycle": true, "vehicle": true}
 )
 
 type Sample struct {
 	TS        time.Time
 	Lat, Lon  float64
 	AccuracyM float64
-	Mode      string // walk / bicycle / transit
+	Mode      string // walk / bicycle / transit — 안내 구간의 수단
+	Activity  string // 폰 활동 인식 판정 walk / bicycle / vehicle / still / unknown, 없으면 ""
 }
 
-// Estimate 는 한 trip 한 수단의 결과. Pairs 는 이동 중으로 센 연속 쌍 수, OK 는 MinPairs 를 넘겼는지.
+// Mismatch 는 활동 인식이 이동 활동을 판정했는데 안내 구간 수단과 다른 샘플인지(예: 도보 구간에서 vehicle).
+func (s Sample) Mismatch() bool { return movingActivity[s.Activity] && s.Activity != s.Mode }
+
+// Estimate 는 한 trip 한 수단의 결과. Pairs 는 이동 중으로 센 연속 쌍 수, OK 는 MinPairs 를 넘겼는지,
+// Mismatch 는 활동 불일치로 뺀 쌍 수.
 type Estimate struct {
 	SpeedMps float64
 	Pairs    int
+	Mismatch int
 	OK       bool
 }
 
 // TripSpeeds 는 시각순 샘플에서 walk·bicycle 각각의 이동 중 중앙값 속도를 낸다. transit 샘플은 쓰지 않는다.
-// 연속 쌍은 같은 수단이고 정확도가 좋고 간격이 2~30초일 때만 센다.
+// 연속 쌍은 같은 수단이고 정확도가 좋고 간격이 2~30초일 때만 센다. 한쪽이라도 활동 불일치면 세지 않고 Mismatch 에 더한다.
 func TripSpeeds(samples []Sample) map[string]Estimate {
 	sort.Slice(samples, func(i, j int) bool { return samples[i].TS.Before(samples[j].TS) })
 	speeds := map[string][]float64{}
+	mismatch := map[string]int{}
 	for i := 1; i < len(samples); i++ {
 		a, b := samples[i-1], samples[i]
 		maxV, ok := MaxSpeed[b.Mode]
@@ -54,6 +65,10 @@ func TripSpeeds(samples []Sample) map[string]Estimate {
 		}
 		dt := b.TS.Sub(a.TS).Seconds()
 		if dt < MinPairSec || dt > MaxPairSec {
+			continue
+		}
+		if a.Mismatch() || b.Mismatch() {
+			mismatch[b.Mode]++
 			continue
 		}
 		v := haversineM(a.Lat, a.Lon, b.Lat, b.Lon) / dt
@@ -65,7 +80,12 @@ func TripSpeeds(samples []Sample) map[string]Estimate {
 	out := map[string]Estimate{}
 	for mode, vs := range speeds {
 		sort.Float64s(vs)
-		out[mode] = Estimate{SpeedMps: median(vs), Pairs: len(vs), OK: len(vs) >= MinPairs}
+		out[mode] = Estimate{SpeedMps: median(vs), Pairs: len(vs), Mismatch: mismatch[mode], OK: len(vs) >= MinPairs}
+	}
+	for mode, n := range mismatch {
+		if _, has := out[mode]; !has {
+			out[mode] = Estimate{Mismatch: n}
+		}
 	}
 	return out
 }

@@ -44,6 +44,7 @@ type traceSample struct {
 	Lon       float64   `json:"lon"`
 	AccuracyM float64   `json:"accuracy_m"`
 	Mode      string    `json:"mode"`
+	Activity  string    `json:"activity"` // 폰 활동 인식 판정(speed.Activities), 없으면 빈 값
 }
 
 // ownTrip 은 trip 이 요청 사용자 것인지와 종료 여부를 돌려준다. 남의 trip 은 404 로 숨긴다.
@@ -87,15 +88,20 @@ func (s *Server) handleUploadTraces(w http.ResponseWriter, r *http.Request) {
 	for _, p := range body.Samples {
 		if p.TS.IsZero() || p.TS.After(latest) || p.Lat < route.MinLat || p.Lat > route.MaxLat ||
 			p.Lon < route.MinLon || p.Lon > route.MaxLon || p.AccuracyM < 0 ||
-			speed.MaxSpeed[p.Mode] == 0 && p.Mode != "transit" {
-			writeError(w, http.StatusBadRequest, "샘플 오류(ts 미래·서울 밖 좌표·accuracy_m·mode walk/bicycle/transit)")
+			speed.MaxSpeed[p.Mode] == 0 && p.Mode != "transit" || p.Activity != "" && !speed.Activities[p.Activity] {
+			writeError(w, http.StatusBadRequest,
+				"샘플 오류(ts 미래·서울 밖 좌표·accuracy_m·mode walk/bicycle/transit·activity walk/bicycle/vehicle/still/unknown)")
 			return
 		}
 	}
 	batch := &pgx.Batch{}
 	for _, p := range body.Samples {
-		batch.Queue(`INSERT INTO traces(trip_id, ts, lat, lon, accuracy_m, mode) VALUES ($1, $2, $3, $4, $5, $6)
-			ON CONFLICT DO NOTHING`, id, p.TS, p.Lat, p.Lon, p.AccuracyM, p.Mode)
+		var activity *string
+		if p.Activity != "" {
+			activity = &p.Activity
+		}
+		batch.Queue(`INSERT INTO traces(trip_id, ts, lat, lon, accuracy_m, mode, activity) VALUES ($1, $2, $3, $4, $5, $6, $7)
+			ON CONFLICT DO NOTHING`, id, p.TS, p.Lat, p.Lon, p.AccuracyM, p.Mode, activity)
 	}
 	if err := s.DB.SendBatch(r.Context(), batch).Close(); err != nil {
 		s.Log.Error("upload traces", "err", err)
@@ -117,7 +123,8 @@ func (s *Server) handleEndTrip(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	userID := userIDFrom(ctx)
-	rows, err := s.DB.Query(ctx, `SELECT ts, lat, lon, accuracy_m, mode FROM traces WHERE trip_id = $1 ORDER BY ts`, id)
+	rows, err := s.DB.Query(ctx, `SELECT ts, lat, lon, accuracy_m, mode, COALESCE(activity, '') FROM traces
+		WHERE trip_id = $1 ORDER BY ts`, id)
 	if err != nil {
 		s.Log.Error("end trip query", "err", err)
 		writeError(w, http.StatusInternalServerError, "종료 실패")
@@ -127,7 +134,7 @@ func (s *Server) handleEndTrip(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var p speed.Sample
 		var acc float32
-		if err := rows.Scan(&p.TS, &p.Lat, &p.Lon, &acc, &p.Mode); err != nil {
+		if err := rows.Scan(&p.TS, &p.Lat, &p.Lon, &acc, &p.Mode, &p.Activity); err != nil {
 			rows.Close()
 			writeError(w, http.StatusInternalServerError, "종료 실패")
 			return
@@ -151,8 +158,8 @@ func (s *Server) handleEndTrip(w http.ResponseWriter, r *http.Request) {
 	var walkV, bikeV *float64
 	for _, mode := range []string{"walk", "bicycle"} {
 		e, has := est[mode]
-		entry := map[string]any{"pairs": e.Pairs, "used": has && e.OK}
-		if has {
+		entry := map[string]any{"pairs": e.Pairs, "mismatch": e.Mismatch, "used": has && e.OK}
+		if has && e.Pairs > 0 { // 활동 불일치로만 채워진 수단은 속도가 없다(Mismatch 만 보고)
 			entry["speed_mps"] = e.SpeedMps
 		}
 		tripOut[mode] = entry

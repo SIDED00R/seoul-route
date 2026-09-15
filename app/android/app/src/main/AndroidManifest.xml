@@ -4,6 +4,9 @@
     <!-- 안내 화면이 켜져 있는 동안만(foreground) 위치를 받는다. 백그라운드 위치 권한은 쓰지 않는다. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- 안내 중 실제 활동(걷기·자전거·차량)을 받아 안내 구간 수단과 다른 샘플을 속도 학습에서 뺀다. -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
+    <uses-permission android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION"/>
     <application
         android:label="서울 길찾기"
         android:name="${applicationName}"
