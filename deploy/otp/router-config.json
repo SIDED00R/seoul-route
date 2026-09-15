@@ -2,6 +2,8 @@
 // routingDefaults 는 otp/router-config.json 과 같은 값이어야 한다 — 그쪽을 고치면 여기도 같이 고친다.
 // (OTP 2.10 의 환경변수 치환은 기본값 문법이 없어 미정의 시 기동이 실패하므로 파일을 나눴다.
 //  치환은 주석 안에서도 일어나므로 이 파일에 달러-중괄호 표기를 쓰지 않는다.)
+// transferSlack 은 설정하지 않아 OTP 기본 2분이다. 백엔드 realtime.TransferSlackSec(120) 가 이 값을 가정하므로
+// 여기서 바꾸면 그 상수도 같이 바꾼다.
 {
   "routingDefaults": {
     "walk": { "speed": 1.2 },
