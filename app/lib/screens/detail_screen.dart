@@ -117,9 +117,12 @@ class DetailScreen extends StatelessWidget {
                       // 앞뒤 차·배차: 실시간 다음 차 / 시간표 앞·뒤 열차 / 배차간격
                       if (leg.scheduleLabel != null)
                         Text(leg.scheduleLabel!, style: TextStyle(color: Colors.teal.shade700)),
+                      // 도보·따릉이: 지나는 신호 횡단보도와 그 대기(소요에 포함)
+                      if (leg.crossingLabel != null)
+                        Text(leg.crossingLabel!, style: TextStyle(color: Colors.orange.shade800)),
                     ],
                   ),
-                  isThreeLine: leg.scheduleLabel != null,
+                  isThreeLine: leg.scheduleLabel != null || leg.crossingLabel != null,
                 );
               },
             ),

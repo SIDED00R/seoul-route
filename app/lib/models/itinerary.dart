@@ -20,6 +20,8 @@ class Leg {
     this.nextDepartures = const [],
     this.headwaySec = 0,
     this.realtimeArrivalsSec = const [],
+    this.crossings = 0,
+    this.crossingWaitSec = 0,
   });
 
   final String mode; // WALK / BICYCLE / BUS / SUBWAY ...
@@ -41,6 +43,8 @@ class Leg {
   final List<String> nextDepartures; // 다음 차 출발(RFC3339, 지하철)
   final int headwaySec; // 배차간격(버스, 생성 GTFS)
   final List<int> realtimeArrivalsSec; // 첫 탑승 정류장의 실시간 다음 차(초)
+  final int crossings; // 도보·따릉이 leg 가 지나는 신호 횡단보도 수
+  final double crossingWaitSec; // 그 기대 대기(초). durationSec 에 이미 포함
 
   factory Leg.fromJson(Map<String, dynamic> j) => Leg(
         mode: j['mode'] as String,
@@ -64,7 +68,13 @@ class Leg {
         realtimeArrivalsSec: ((j['realtime_arrivals_sec'] as List<dynamic>?) ?? const [])
             .map((e) => (e as num).toInt())
             .toList(),
+        crossings: (j['crossings'] as num?)?.toInt() ?? 0,
+        crossingWaitSec: (j['crossing_wait_sec'] as num?)?.toDouble() ?? 0,
       );
+
+  /// "횡단보도 3곳 · 신호 대기 약 2분". 신호 횡단보도가 없으면 null.
+  String? get crossingLabel =>
+      crossings == 0 ? null : '횡단보도 $crossings곳 · 신호 대기 약 ${(crossingWaitSec / 60).round()}분';
 
   /// 앞뒤 차 안내 한 줄. 실시간 > 시간표 앞뒤 차 > 배차간격 순으로 있는 것만 보여준다. 없으면 null.
   String? get scheduleLabel {
@@ -108,6 +118,8 @@ class Itinerary {
     this.realtime = false,
     this.realtimeDeltaSec = 0,
     this.departInSec = 0,
+    this.crossingWaitSec = 0,
+    this.replanned = false,
   });
 
   final String start;
@@ -119,6 +131,8 @@ class Itinerary {
   final bool realtime; // 첫 탑승 대기가 실시간 도착정보로 보정됨
   final double realtimeDeltaSec; // 시간표 대비 보정(초, 음수면 시간표보다 빠름)
   final double departInSec; // 지금 출발 요청에서 출발까지 기다리는 초. 총 소요 = departIn + duration
+  final double crossingWaitSec; // 도보·따릉이 구간 신호 횡단보도 기대 대기 합(초, durationSec 에 포함)
+  final bool replanned; // 횡단보도 대기로 탑승을 놓쳐 그 지점부터 다시 탐색한 여정
 
   factory Itinerary.fromJson(Map<String, dynamic> j) => Itinerary(
         start: (j['start'] as String?) ?? '',
@@ -132,7 +146,15 @@ class Itinerary {
         realtime: (j['realtime'] as bool?) ?? false,
         realtimeDeltaSec: (j['realtime_delta_sec'] as num?)?.toDouble() ?? 0,
         departInSec: (j['depart_in_sec'] as num?)?.toDouble() ?? 0,
+        crossingWaitSec: (j['crossing_wait_sec'] as num?)?.toDouble() ?? 0,
+        replanned: (j['replanned'] as bool?) ?? false,
       );
+
+  /// "횡단보도 +2분" 배지 문구. 대기가 30초 미만이면 null.
+  String? get crossingLabel {
+    final m = (crossingWaitSec / 60).round();
+    return m >= 1 ? '횡단보도 +$m분' : null;
+  }
 
   /// 지금부터 도착까지(출발 대기 포함). 카카오맵의 "총 소요"와 같은 기준.
   int get minutes => ((departInSec + durationSec) / 60).round();
