@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 import 'package:seoul_route/location/current_location.dart';
 import 'package:seoul_route/models/place.dart';
@@ -112,5 +114,35 @@ void main() {
     expect(find.text('출발: 현재 위치'), findsOneWidget);
     await _pick(tester, find.text('출발: 현재 위치'), _a); // 끝난 뒤에는 검색으로 바꿀 수 있다
     expect(find.text('출발: A역'), findsOneWidget);
+  });
+
+  testWidgets('경로 요청이 나가는 동안 현재 위치 버튼·출발지 검색이 막히고, 끝나면 다시 된다', (tester) async {
+    final reply = Completer<http.Response>();
+    final mock = MockClient((_) => reply.future);
+    await http.runWithClient(() async {
+      await tester.pumpWidget(MaterialApp(home: PlanScreen(settings: _settings, locate: () async => _here)));
+      await _pick(tester, find.text('출발지 선택'), _a);
+      await _pick(tester, find.text('도착지 선택'), _b);
+      IconButton here() => tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.my_location));
+      expect(here().onPressed, isNotNull);
+
+      await tester.tap(find.byType(FilledButton));
+      await tester.pump();
+      expect(here().onPressed, isNull); // 이대로 누르면 홈 출발지가 요청과 달라진다
+      // 꺼진 아이콘을 눌러도 탭이 감싼 출발지 줄로 넘어가 검색이 열리지 않아야 한다. 줄 본문도 마찬가지.
+      await tester.tap(find.byIcon(Icons.my_location));
+      await _frames(tester);
+      expect(find.byType(PlaceSearchScreen), findsNothing);
+      await tester.tap(find.text('출발: A역'));
+      await _frames(tester);
+      expect(find.byType(PlaceSearchScreen), findsNothing);
+
+      reply.complete(http.Response('{"error":"x"}', 500, headers: {'content-type': 'application/json'}));
+      await _frames(tester);
+      expect(here().onPressed, isNotNull);
+      expect(find.text('출발: A역'), findsOneWidget);
+      await _pick(tester, find.text('출발: A역'), _b); // 요청이 끝나면 검색으로 바꿀 수 있다
+      expect(find.text('출발: B역'), findsOneWidget);
+    }, () => mock);
   });
 }
