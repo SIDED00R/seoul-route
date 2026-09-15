@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../api/client.dart';
 import '../guide/activity_classifier.dart';
+import '../guide/end_confirm.dart';
 import '../guide/leg_tracker.dart';
 import '../guide/trace_uploader.dart';
 import '../models/itinerary.dart';
@@ -178,6 +179,12 @@ class _GuideScreenState extends State<GuideScreen> {
     }
   }
 
+  /// 뒤로가기: "종료" 를 고르면 안내 종료 버튼과 같은 흐름(샘플 전송·속도 반영)을 탄다.
+  Future<void> _onBack() async {
+    if (_ending) return;
+    if (await confirmEndGuide(context) && mounted && !_ending) await _end();
+  }
+
   void _endFailed(Object e) {
     setState(() {
       _ending = false;
@@ -238,7 +245,14 @@ class _GuideScreenState extends State<GuideScreen> {
     final remainM = here == null ? null : LegTracker.distanceM(here.latitude, here.longitude, leg.toLat, leg.toLon);
     final up = _uploader;
     final mismatch = _activityOn && ActivityClassifier.mismatch(_tracker.mode, _activity.current);
-    return Scaffold(
+    // trip 을 발급받은 뒤에는 뒤로가기(시스템 제스처·앱바 화살표)로 바로 나가지 않고 종료할지 묻는다.
+    // 종료 흐름 안의 Navigator.pop 은 canPop 과 무관하게 화면을 닫는다.
+    return PopScope(
+      canPop: _uploader == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _onBack();
+      },
+      child: Scaffold(
       appBar: AppBar(title: Text('안내 · 구간 ${_tracker.index + 1}/${legs.length}')),
       body: Column(
         children: [
@@ -333,6 +347,7 @@ class _GuideScreenState extends State<GuideScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
