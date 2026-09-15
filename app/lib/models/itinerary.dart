@@ -129,7 +129,7 @@ class Itinerary {
   final double walkM;
   final List<Leg> legs;
   final bool realtime; // 첫 탑승 대기가 실시간 도착정보로 보정됨
-  final double realtimeDeltaSec; // 시간표 대비 보정(초, 음수면 시간표보다 빠름)
+  final double realtimeDeltaSec; // 실시간 보정 뒤 도착 시각 이동량(초, 음수면 시간표보다 이른 도착)
   final double departInSec; // 지금 출발 요청에서 출발까지 기다리는 초. 총 소요 = departIn + duration
   final double crossingWaitSec; // 도보·따릉이 구간 신호 횡단보도 기대 대기 합(초, durationSec 에 포함)
   final bool replanned; // 횡단보도 대기로 탑승을 놓쳐 그 지점부터 다시 탐색한 여정
@@ -168,7 +168,7 @@ class Itinerary {
     return m >= 1 ? '$m분 후 출발' : null;
   }
 
-  /// "실시간 −3분" 같은 배지 문구. 보정이 없으면 null.
+  /// "실시간 −3분" 같은 배지 문구(도착 시각 이동량). 도착이 그대로면 "실시간", 보정이 없으면 null.
   String? get realtimeLabel {
     if (!realtime) return null;
     final m = (realtimeDeltaSec / 60).round();
