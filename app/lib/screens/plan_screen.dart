@@ -142,20 +142,23 @@ class _PlanScreenState extends State<PlanScreen> {
               leading: const Icon(Icons.flag),
               title: Text('경유 ${i + 1}: ${_via[i].name}'),
               subtitle: Text(_via[i].address),
-              trailing: IconButton(icon: const Icon(Icons.close), onPressed: () => _removeVia(i)),
+              trailing: IconButton(icon: const Icon(Icons.close), onPressed: _busy ? null : () => _removeVia(i)),
             ),
             _segmentMode(i + 1),
           ],
           if (_via.length < maxVia)
             TextButton.icon(
-              onPressed: () async {
-                final p = await _pick('경유지 ${_via.length + 1}');
-                if (p != null) _addVia(p);
-              },
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      final p = await _pick('경유지 ${_via.length + 1}');
+                      if (p != null) _addVia(p);
+                    },
               icon: const Icon(Icons.add),
               label: const Text('경유지 추가'),
             ),
           _placeTile('도착', Icons.place, _destination, () async {
+            if (_busy) return; // 경로 요청 중에는 도착지 검색을 열지 않는다
             final p = await _pick('도착지');
             if (p != null) setState(() => _destination = p);
           }),
@@ -199,7 +202,8 @@ class _PlanScreenState extends State<PlanScreen> {
                   visualDensity: VisualDensity.compact,
                   padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 6)),
                 ),
-                onSelectionChanged: (s) => setState(() => _modes[i] = s.first),
+                // 경로 요청 중에는 수단을 바꾸지 않는다(null 이면 버튼이 꺼진다).
+                onSelectionChanged: _busy ? null : (s) => setState(() => _modes[i] = s.first),
               ),
             ),
           ],
