@@ -93,10 +93,15 @@ func (c *Corrector) adjustOne(ctx context.Context, now time.Time, it otp.Itinera
 	}
 	delta := board.Sub(sched)
 	// 탑승 이후 leg 는 delta 만큼 옮기고(차내·환승 시간은 시간표 값 유지), 탑승 전 leg 와 출발도 같이 당기되
-	// 출발이 now 보다 앞서지는 않게 한다(그만큼은 정류장에서 기다린다). 소요시간은 옮긴 Start·End 로 다시 잰다.
+	// 출발이 now 보다 앞서지는 않게 한다(그만큼은 정류장에서 기다린다). 소요시간은 옮긴 Start·End 로 다시 재되,
+	// Start·End 차이에 들어 있지 않은 몫(대중교통 탑승 앞 도보의 횡단보도 대기)은 그대로 얹는다.
 	start, err := time.Parse(time.RFC3339, it.Start)
 	if err != nil {
 		return it, false
+	}
+	extra := 0.0
+	if e0, err0 := time.Parse(time.RFC3339, it.End); err0 == nil {
+		extra = it.Duration - e0.Sub(start).Seconds()
 	}
 	pre := delta
 	if start.Add(delta).Before(now) {
@@ -114,7 +119,7 @@ func (c *Corrector) adjustOne(ctx context.Context, now time.Time, it otp.Itinera
 	it.End = shift(it.End, delta)
 	if s, e1 := time.Parse(time.RFC3339, it.Start); e1 == nil {
 		if e, e2 := time.Parse(time.RFC3339, it.End); e2 == nil {
-			it.Duration = e.Sub(s).Seconds()
+			it.Duration = e.Sub(s).Seconds() + extra
 		}
 	}
 	it.Realtime = true

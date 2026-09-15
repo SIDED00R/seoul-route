@@ -46,7 +46,7 @@ class ResultsScreen extends StatelessWidget {
                     runSpacing: 4,
                     children: [
                       // 출발 대기·실시간 배지는 수단 칩 앞에 둔다(제목 줄이 꺾이지 않게).
-                      for (final label in [it.departLabel, it.realtimeLabel])
+                      for (final label in [it.departLabel, it.realtimeLabel, it.crossingLabel])
                         if (label != null)
                           Chip(
                             label: Text(label, style: const TextStyle(fontSize: 12)),

@@ -60,7 +60,10 @@ type Planner struct {
 	Realtime interface {
 		Adjust(context.Context, []otp.Itinerary) []otp.Itinerary
 	}
-	Now      func() time.Time // 테스트용 현재 시각. nil 이면 time.Now
+	// Crossings 는 도보·자전거 leg 가 지나는 신호 횡단보도를 세어 기대 대기를 더한다(crossing_hook.go). nil 이면 미반영.
+	Crossings   Crossings
+	CrossingSec float64          // 횡단보도 하나의 기대 대기(초). 0 이면 crossing.ExpectedWaitSec 을 main 이 넣는다
+	Now         func() time.Time // 테스트용 현재 시각. nil 이면 time.Now
 	Headways map[string]int   // GTFS route_id(예 "B_100100063") → 배차간격(초). 버스 leg 의 "배차 약 N분" 표시용
 	mu       sync.RWMutex
 	stations []otp.Station // 앵커링용 부모역 목록(SetStations). 비면 항상 좌표로 요청한다
@@ -115,10 +118,13 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) ([]otp.Itinerary, e
 	now := p.now()
 	// 역 ID 로 앵커링된 출발·도착지는 출입구↔승강장 진입·이탈 시간을 더한다(station_slack.go).
 	// 첫·끝 구간이 도보·따릉이 고정이면 extend 가 좌표로 요청하므로(anchorsSegment) 붙이지 않는다.
-	applyStationSlack(its,
-		anchorsSegment(req.Modes[0]) && p.anchor(req.Origin) != "",
-		anchorsSegment(req.Modes[len(req.Modes)-1]) && p.anchor(req.Destination) != "")
+	destAnchored := anchorsSegment(req.Modes[len(req.Modes)-1]) && p.anchor(req.Destination) != ""
+	applyStationSlack(its, anchorsSegment(req.Modes[0]) && p.anchor(req.Origin) != "", destAnchored)
 	setDepartIn(its, req.Depart, now)
+	// 신호 횡단보도 대기는 실시간보다 먼저 더한다(대기로 탑승을 놓치면 재탐색해 뒤 구간이 바뀌므로 그 뒤에 실시간을 봐야 한다).
+	if p.Crossings != nil {
+		its = p.applyCrossings(ctx, its, req, p.CrossingSec, destAnchored)
+	}
 	// 실시간은 점수순 상위 후보의 첫 탑승에만 적용한다. 그 전에는 정렬만 하고 컷은 걸지 않는다 — 최선이 실시간으로
 	// 늦어지면 컷 경계 밖에 있던 후보가 경쟁력을 얻는데, 먼저 잘라 버리면 되살릴 수 없다.
 	// 미래 출발(Depart 지정)은 실시간과 무관하므로 건너뛴다.
