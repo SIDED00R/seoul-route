@@ -254,3 +254,72 @@ func TestCrossingWaitSurvivesRealtime(t *testing.T) {
 		t.Fatalf("Duration 에서 대기가 사라졌다: %+v", it)
 	}
 }
+
+// 서로 다른 두 후보(버스 472·6516)가 둘 다 탑승을 놓쳐 재탐색됐는데 결과가 같은 2호선이면 점수가 좋은 하나만 남긴다(#47).
+func TestCrossingReplanDropsDuplicateAmongReplanned(t *testing.T) {
+	f := &fakeOTP{answer: func(r otp.Request) ([]otp.Itinerary, error) {
+		switch {
+		case r.Depart != nil && r.OriginStop == "seoul:BS_1": // A: 14:06:54 출발 → 14:40 도착
+			return []otp.Itinerary{itin("2026-09-14T14:06:54+09:00", "2026-09-14T14:40:00+09:00",
+				walkLeg("ta", "2026-09-14T14:06:54+09:00", "2026-09-14T14:10:00+09:00", 37.54, 126.98),
+				otp.Leg{Mode: "SUBWAY", Route: "2호선", FromStopID: "seoul:ST_X", TransitLeg: true, NextStop: "을지로입구(2호선)",
+					Start: "2026-09-14T14:12:00+09:00", End: "2026-09-14T14:40:00+09:00"})}, nil
+		case r.Depart != nil && r.OriginStop == "seoul:BS_2": // B: 14:09:54 출발 → 14:45 도착(같은 2호선·같은 역)
+			return []otp.Itinerary{itin("2026-09-14T14:09:54+09:00", "2026-09-14T14:45:00+09:00",
+				walkLeg("tb", "2026-09-14T14:09:54+09:00", "2026-09-14T14:14:00+09:00", 37.54, 126.98),
+				otp.Leg{Mode: "SUBWAY", Route: "2호선", FromStopID: "seoul:ST_X", TransitLeg: true, NextStop: "을지로입구(2호선)",
+					Start: "2026-09-14T14:17:00+09:00", End: "2026-09-14T14:45:00+09:00"})}, nil
+		}
+		return []otp.Itinerary{
+			itin("2026-09-14T14:00:00+09:00", "2026-09-14T14:35:00+09:00",
+				walkLeg("a", "2026-09-14T14:00:00+09:00", "2026-09-14T14:05:00+09:00", 37.55, 126.97),
+				otp.Leg{Mode: "BUS", Route: "472", FromStopID: "seoul:BS_1", TransitLeg: true,
+					Start: "2026-09-14T14:06:00+09:00", End: "2026-09-14T14:35:00+09:00"}),
+			itin("2026-09-14T14:00:00+09:00", "2026-09-14T14:38:00+09:00",
+				walkLeg("b", "2026-09-14T14:00:00+09:00", "2026-09-14T14:08:00+09:00", 37.56, 126.96),
+				otp.Leg{Mode: "BUS", Route: "6516", FromStopID: "seoul:BS_2", TransitLeg: true,
+					Start: "2026-09-14T14:09:00+09:00", End: "2026-09-14T14:38:00+09:00"}),
+		}, nil
+	}}
+	p := &Planner{OTP: f, Crossings: fakeCrossings{"a": 3, "b": 3}, CrossingSec: 38}
+	its, err := p.Plan(context.Background(), PlanRequest{Origin: seoulStn, Destination: gangnam})
+	if err != nil || len(its) != 1 {
+		t.Fatalf("재탐색 결과 둘이 같은 2호선인데 %d개가 남았다: err=%v %+v", len(its), err, its)
+	}
+	if !its[0].Replanned || its[0].Legs[0].Polyline != "a" || its[0].End != "2026-09-14T14:40:00+09:00" {
+		t.Fatalf("점수가 좋은 A(14:40 도착)가 남아야 한다: %+v", its[0])
+	}
+}
+
+// 재탐색 결과 둘이 같은 역·같은 2호선이라도 다음 정차역(방향)이 다르면 둘 다 남긴다(순환선 내선·외선).
+func TestCrossingReplanKeepsOppositeDirections(t *testing.T) {
+	f := &fakeOTP{answer: func(r otp.Request) ([]otp.Itinerary, error) {
+		switch {
+		case r.Depart != nil && r.OriginStop == "seoul:BS_1": // 을지로입구 방향 14:40 도착
+			return []otp.Itinerary{itin("2026-09-14T14:06:54+09:00", "2026-09-14T14:40:00+09:00",
+				walkLeg("ta", "2026-09-14T14:06:54+09:00", "2026-09-14T14:10:00+09:00", 37.56, 126.98),
+				otp.Leg{Mode: "SUBWAY", Route: "2호선", FromStopID: "seoul:RS_ACC1_S-1-0201", TransitLeg: true,
+					NextStop: "을지로입구(2호선)", Start: "2026-09-14T14:12:00+09:00", End: "2026-09-14T14:40:00+09:00"})}, nil
+		case r.Depart != nil && r.OriginStop == "seoul:BS_2": // 충정로 방향 14:45 도착
+			return []otp.Itinerary{itin("2026-09-14T14:09:54+09:00", "2026-09-14T14:45:00+09:00",
+				walkLeg("tb", "2026-09-14T14:09:54+09:00", "2026-09-14T14:14:00+09:00", 37.56, 126.98),
+				otp.Leg{Mode: "SUBWAY", Route: "2호선", FromStopID: "seoul:RS_ACC1_S-1-0201", TransitLeg: true,
+					NextStop: "충정로(2호선)", Start: "2026-09-14T14:17:00+09:00", End: "2026-09-14T14:45:00+09:00"})}, nil
+		}
+		return []otp.Itinerary{
+			itin("2026-09-14T14:00:00+09:00", "2026-09-14T14:35:00+09:00",
+				walkLeg("a", "2026-09-14T14:00:00+09:00", "2026-09-14T14:05:00+09:00", 37.55, 126.97),
+				otp.Leg{Mode: "BUS", Route: "472", FromStopID: "seoul:BS_1", TransitLeg: true,
+					Start: "2026-09-14T14:06:00+09:00", End: "2026-09-14T14:35:00+09:00"}),
+			itin("2026-09-14T14:00:00+09:00", "2026-09-14T14:38:00+09:00",
+				walkLeg("b", "2026-09-14T14:00:00+09:00", "2026-09-14T14:08:00+09:00", 37.56, 126.96),
+				otp.Leg{Mode: "BUS", Route: "6516", FromStopID: "seoul:BS_2", TransitLeg: true,
+					Start: "2026-09-14T14:09:00+09:00", End: "2026-09-14T14:38:00+09:00"}),
+		}, nil
+	}}
+	p := &Planner{OTP: f, Crossings: fakeCrossings{"a": 3, "b": 3}, CrossingSec: 38}
+	its, err := p.Plan(context.Background(), PlanRequest{Origin: seoulStn, Destination: gangnam})
+	if err != nil || len(its) != 2 || !its[0].Replanned || !its[1].Replanned {
+		t.Fatalf("방향이 다른 재탐색 결과 둘이 모두 남아야 한다: err=%v %+v", err, its)
+	}
+}
