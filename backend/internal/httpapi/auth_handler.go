@@ -5,6 +5,12 @@ import (
 	"net/http"
 )
 
+// handleAuthConfig 는 앱이 Google 로그인에 쓸 웹 클라이언트 ID 를 돌려준다(무인증). 클라이언트 ID 는 비밀이 아니라
+// 공개 식별자다(앱 바이너리에 박아도 되는 값) — 서버가 내려주면 앱을 다시 빌드하지 않고 바꿀 수 있다. 미설정이면 빈 문자열.
+func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"google_client_id": s.GoogleClientID})
+}
+
 // handleAuthGoogle 은 앱의 Google ID 토큰을 검증하고, 처음 보는 sub 면 사용자를 만든 뒤 서버 JWT 를 돌려준다.
 // 탈퇴한 사용자가 같은 Google 계정으로 다시 오면 새 행을 만들지 않고 401 을 준다(재가입은 별도 정책으로 미정).
 func (s *Server) handleAuthGoogle(w http.ResponseWriter, r *http.Request) {

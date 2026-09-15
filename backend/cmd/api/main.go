@@ -63,8 +63,10 @@ func main() {
 	}()
 
 	var google auth.GoogleVerifier
+	googleClientID := ""
 	if g, err := auth.NewGoogleVerifier(cfg.GoogleOAuthClientID); err == nil {
 		google = g
+		googleClientID = cfg.GoogleOAuthClientID
 	} else {
 		log.Warn("google login disabled", "reason", err.Error())
 	}
@@ -117,7 +119,8 @@ func main() {
 		}
 	}()
 	srv := &httpapi.Server{
-		DB: pool, JWT: auth.NewJWT(cfg.JWTSecret), Google: google, OTPURL: cfg.OTPURL, HTTP: httpClient, Log: log,
+		DB: pool, JWT: auth.NewJWT(cfg.JWTSecret), Google: google, GoogleClientID: googleClientID,
+		OTPURL: cfg.OTPURL, HTTP: httpClient, Log: log,
 		Planner: planner, KakaoKey: cfg.KakaoRESTKey, VWorldKey: cfg.VWorldKey,
 	}
 	if cfg.KakaoRESTKey == "" {
