@@ -1,5 +1,7 @@
 // OTP 는 설정 JSON 에 // 주석을 허용한다(OTP 2.10.0 ConfigFileLoader 실측 2026-09-12).
 // 백엔드가 이 파일을 엄격 JSON 파서로 읽게 되면 주석을 걷어내야 한다.
+// transferSlack 은 설정하지 않아 OTP 기본 2분이다. 백엔드 realtime.TransferSlackSec(120) 가 이 값을 가정하므로
+// 여기서 바꾸면 그 상수도 같이 바꾼다(deploy/otp/router-config.json 도 같다).
 {
   "routingDefaults": {
     // 1.2 m/s: placeholder. OTP 기본 1.35 에서 낮춘 값이며 실측값이 아니다.

@@ -94,7 +94,8 @@ type Itinerary struct {
 	// 순위와 앱의 총 소요 표시는 Duration+DepartIn 을 쓴다(OTP 의 Duration 은 Start 부터라 출발 전 대기가 빠져 있다).
 	DepartIn float64 `json:"depart_in_sec,omitempty"`
 	// Realtime: 첫 탑승을 실시간 도착정보로 보정했을 때 true. RealtimeDelta 는 보정 뒤 도착(End) 이동량(초, 음수 가능).
-	// 첫 차가 시간표보다 일러도 뒤에 대중교통 탑승이 더 있으면 도착은 그대로라 0 이다.
+	// 첫 차가 시간표보다 일러도 뒤에 대중교통 탑승이 더 있으면 도착은 그대로라 0 이다. 첫 차가 늦을 때 지하철끼리 환승은
+	// 여유 안이면 0, 넘으면 다음 열차 기준이라 지연보다 클 수 있다(realtime/transfer_connect.go).
 	Realtime      bool    `json:"realtime,omitempty"`
 	RealtimeDelta float64 `json:"realtime_delta_sec,omitempty"`
 	// CrossingWait: 도보·따릉이 구간의 신호 횡단보도 기대 대기 합(초, Duration 에 포함). Replanned: 그 대기로 다음 탑승을
