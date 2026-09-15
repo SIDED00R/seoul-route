@@ -14,6 +14,7 @@ import (
 
 	"github.com/SIDED00R/seoul-route/backend/internal/auth"
 	"github.com/SIDED00R/seoul-route/backend/internal/config"
+	"github.com/SIDED00R/seoul-route/backend/internal/crossing"
 	"github.com/SIDED00R/seoul-route/backend/internal/db"
 	"github.com/SIDED00R/seoul-route/backend/internal/gbfs"
 	"github.com/SIDED00R/seoul-route/backend/internal/headway"
@@ -72,7 +73,14 @@ func main() {
 	}
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	otpClient := &otp.Client{URL: cfg.OTPURL, HTTP: &http.Client{Timeout: httpapi.PlanTimeout}}
-	planner := &route.Planner{OTP: otpClient}
+	planner := &route.Planner{OTP: otpClient, CrossingSec: crossing.ExpectedWaitSec}
+	// 신호 횡단보도 대기(otp/extract_crossings.py 산출). 없으면 도보 시간에 대기가 빠진 채 계산된다.
+	if ix, err := crossing.Load(cfg.CrossingsCSV); err != nil {
+		log.Warn("crossing wait disabled", "path", cfg.CrossingsCSV, "err", err)
+	} else {
+		planner.Crossings = ix
+		log.Info("crossings loaded", "n", ix.Len(), "wait_sec", crossing.ExpectedWaitSec)
+	}
 	// 버스 배차간격(앱 "배차 약 N분")은 생성 GTFS 의 frequencies.txt 에서. 없으면 표시만 빠진다.
 	if hw, err := headway.Load(cfg.GTFSZip); err != nil {
 		log.Warn("headways disabled", "path", cfg.GTFSZip, "err", err)

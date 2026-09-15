@@ -29,6 +29,7 @@ import (
 
 	"github.com/SIDED00R/seoul-route/backend/internal/config"
 	"github.com/SIDED00R/seoul-route/backend/internal/otp"
+	"github.com/SIDED00R/seoul-route/backend/internal/crossing"
 	"github.com/SIDED00R/seoul-route/backend/internal/realtime"
 	"github.com/SIDED00R/seoul-route/backend/internal/route"
 )
@@ -146,7 +147,12 @@ func main() {
 	ctx := context.Background()
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	otpClient := &otp.Client{URL: cfg.OTPURL, HTTP: &http.Client{Timeout: 90 * time.Second}}
-	planner := &route.Planner{OTP: otpClient}
+	planner := &route.Planner{OTP: otpClient, CrossingSec: crossing.ExpectedWaitSec}
+	if ix, err := crossing.Load(cfg.CrossingsCSV); err != nil { // 서버(cmd/api)와 같은 조건으로 비교한다
+		log.Warn("crossing wait disabled", "path", cfg.CrossingsCSV, "err", err)
+	} else {
+		planner.Crossings = ix
+	}
 	if sts, err := otpClient.Stations(ctx); err == nil {
 		planner.SetStations(sts)
 	} else {

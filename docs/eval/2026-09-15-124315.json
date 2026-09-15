@@ -1,0 +1,297 @@
+[
+  {
+    "name": "서울역→강남역",
+    "ours_min": 34.13333333333333,
+    "ours_wait_min": 0,
+    "ours_sig": "4호선\u003e2호선",
+    "ours_top3": [
+      "4호선\u003e2호선",
+      "402",
+      "4호선\u003e3호선\u003e신분당선"
+    ],
+    "odsay_min": 33,
+    "odsay_sig": "4호선\u003e2호선",
+    "delta_min": 1.1333333333333329,
+    "top3_match": true
+  },
+  {
+    "name": "홍대입구→잠실",
+    "ours_min": 45,
+    "ours_wait_min": 0,
+    "ours_sig": "2호선\u003e2호선",
+    "ours_top3": [
+      "2호선\u003e2호선",
+      "2호선",
+      "6002\u003e303"
+    ],
+    "odsay_min": 41,
+    "odsay_sig": "2호선",
+    "delta_min": 4,
+    "top3_match": true
+  },
+  {
+    "name": "여의도→수서",
+    "ours_min": 40.083333333333336,
+    "ours_wait_min": 0,
+    "ours_sig": "9호선\u003e수인분당선",
+    "ours_top3": [
+      "9호선\u003e수인분당선",
+      "9호선\u003e3호선",
+      "6300"
+    ],
+    "odsay_min": 38,
+    "odsay_sig": "9호선\u003e수인분당선",
+    "delta_min": 2.0833333333333357,
+    "top3_match": true
+  },
+  {
+    "name": "신촌→성수",
+    "ours_min": 28.5,
+    "ours_wait_min": 0,
+    "ours_sig": "2호선",
+    "ours_top3": [
+      "2호선"
+    ],
+    "odsay_min": 28,
+    "odsay_sig": "2호선",
+    "delta_min": 0.5,
+    "top3_match": true
+  },
+  {
+    "name": "종로3가→건대입구",
+    "ours_min": 29.333333333333332,
+    "ours_wait_min": 0,
+    "ours_sig": "5호선\u003e7호선",
+    "ours_top3": [
+      "5호선\u003e7호선",
+      "5호선\u003e2호선\u003e2호선",
+      "2호선\u003e2호선"
+    ],
+    "odsay_min": 25,
+    "odsay_sig": "5호선\u003e2호선",
+    "delta_min": 4.333333333333332,
+    "top3_match": false
+  },
+  {
+    "name": "노원→왕십리",
+    "ours_min": 33.166666666666664,
+    "ours_wait_min": 0,
+    "ours_sig": "7호선\u003e경의중앙선",
+    "ours_top3": [
+      "7호선\u003e경의중앙선",
+      "4호선\u003e2호선",
+      "7호선\u003e5호선"
+    ],
+    "odsay_min": 37,
+    "odsay_sig": "7호선\u003e경의중앙선",
+    "delta_min": -3.8333333333333357,
+    "top3_match": true
+  },
+  {
+    "name": "사당→강남",
+    "ours_min": 12,
+    "ours_wait_min": 0,
+    "ours_sig": "2호선",
+    "ours_top3": [
+      "2호선",
+      "643",
+      "040"
+    ],
+    "odsay_min": 11,
+    "odsay_sig": "2호선",
+    "delta_min": 1,
+    "top3_match": true
+  },
+  {
+    "name": "김포공항→여의도",
+    "ours_min": 22.916666666666668,
+    "ours_wait_min": 0,
+    "ours_sig": "9호선",
+    "ours_top3": [
+      "9호선",
+      "5호선"
+    ],
+    "odsay_min": 20,
+    "odsay_sig": "9호선",
+    "delta_min": 2.916666666666668,
+    "top3_match": true
+  },
+  {
+    "name": "용산→고속터미널",
+    "ours_min": 20.333333333333332,
+    "ours_wait_min": 0,
+    "ours_sig": "1호선\u003e9호선",
+    "ours_top3": [
+      "1호선\u003e9호선",
+      "152\u003e9호선",
+      "152\u003e9호선"
+    ],
+    "odsay_min": 21,
+    "odsay_sig": "1호선\u003e9호선",
+    "delta_min": -0.6666666666666679,
+    "top3_match": true
+  },
+  {
+    "name": "수유→종로3가",
+    "ours_min": 27,
+    "ours_wait_min": 0,
+    "ours_sig": "4호선\u003e1호선",
+    "ours_top3": [
+      "4호선\u003e1호선",
+      "4호선\u003e5호선",
+      "4호선\u003e3호선"
+    ],
+    "odsay_min": 30,
+    "odsay_sig": "4호선\u003e5호선",
+    "delta_min": -3,
+    "top3_match": true
+  },
+  {
+    "name": "구로디지털단지→신논현",
+    "ours_min": 37.5,
+    "ours_wait_min": 0,
+    "ours_sig": "2호선",
+    "ours_top3": [
+      "2호선",
+      "2호선\u003e신분당선",
+      "5633\u003e6009"
+    ],
+    "odsay_min": 31,
+    "odsay_sig": "2호선\u003e신분당선",
+    "delta_min": 6.5,
+    "top3_match": true
+  },
+  {
+    "name": "천호→시청",
+    "ours_min": 33.666666666666664,
+    "ours_wait_min": 0,
+    "ours_sig": "5호선\u003e2호선",
+    "ours_top3": [
+      "5호선\u003e2호선",
+      "5호선",
+      "370"
+    ],
+    "odsay_min": 38,
+    "odsay_sig": "5호선\u003e2호선",
+    "delta_min": -4.333333333333336,
+    "top3_match": true
+  },
+  {
+    "name": "상암→광화문",
+    "ours_min": 24.5,
+    "ours_wait_min": 0,
+    "ours_sig": "공항철도\u003e5호선",
+    "ours_top3": [
+      "공항철도\u003e5호선",
+      "경의중앙선\u003e5호선",
+      "1200고양"
+    ],
+    "odsay_min": 41,
+    "odsay_sig": "470",
+    "delta_min": -16.5,
+    "top3_match": false
+  },
+  {
+    "name": "목동→압구정",
+    "ours_min": 47.5,
+    "ours_wait_min": 0,
+    "ours_sig": "5호선\u003e3호선",
+    "ours_top3": [
+      "5호선\u003e3호선",
+      "5호선\u003e9호선\u003e3호선",
+      "640\u003e6013"
+    ],
+    "odsay_min": 42,
+    "odsay_sig": "5호선\u003e9호선\u003e3호선",
+    "delta_min": 5.5,
+    "top3_match": true
+  },
+  {
+    "name": "석계→왕십리",
+    "ours_min": 22.133333333333333,
+    "ours_wait_min": 0,
+    "ours_sig": "1호선\u003e경의중앙선",
+    "ours_top3": [
+      "1호선\u003e경의중앙선",
+      "1호선\u003e경의중앙선",
+      "6호선\u003e2호선"
+    ],
+    "odsay_min": 19,
+    "odsay_sig": "1호선\u003e경의중앙선",
+    "delta_min": 3.133333333333333,
+    "top3_match": true
+  },
+  {
+    "name": "마포→이태원",
+    "ours_min": 16.333333333333332,
+    "ours_wait_min": 0,
+    "ours_sig": "5호선\u003e6호선",
+    "ours_top3": [
+      "5호선\u003e6호선",
+      "6호선",
+      "6호선"
+    ],
+    "odsay_min": 17,
+    "odsay_sig": "5호선\u003e6호선",
+    "delta_min": -0.6666666666666679,
+    "top3_match": true
+  },
+  {
+    "name": "잠실→강남",
+    "ours_min": 14.5,
+    "ours_wait_min": 0,
+    "ours_sig": "2호선",
+    "ours_top3": [
+      "2호선"
+    ],
+    "odsay_min": 13,
+    "odsay_sig": "2호선",
+    "delta_min": 1.5,
+    "top3_match": true
+  },
+  {
+    "name": "성북구청→동대문",
+    "ours_min": 9,
+    "ours_wait_min": 0,
+    "ours_sig": "4호선",
+    "ours_top3": [
+      "4호선",
+      "1014",
+      "도보/따릉이"
+    ],
+    "odsay_min": 9,
+    "odsay_sig": "4호선",
+    "delta_min": 0,
+    "top3_match": true
+  },
+  {
+    "name": "염창→여의도",
+    "ours_min": 11.5,
+    "ours_wait_min": 0,
+    "ours_sig": "9호선",
+    "ours_top3": [
+      "9호선",
+      "6623\u003e163",
+      "6623\u003e5713"
+    ],
+    "odsay_min": 9,
+    "odsay_sig": "9호선",
+    "delta_min": 2.5,
+    "top3_match": true
+  },
+  {
+    "name": "불광→신도림",
+    "ours_min": 37.63333333333333,
+    "ours_wait_min": 0,
+    "ours_sig": "6호선\u003e2호선",
+    "ours_top3": [
+      "6호선\u003e2호선",
+      "708\u003e600",
+      "709\u003e600"
+    ],
+    "odsay_min": 38,
+    "odsay_sig": "6호선\u003e2호선",
+    "delta_min": -0.36666666666666714,
+    "top3_match": true
+  }
+]

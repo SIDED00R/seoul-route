@@ -78,6 +78,9 @@ type Leg struct {
 	NextDepartures   []string `json:"next_departures,omitempty"`
 	HeadwaySec       int      `json:"headway_sec,omitempty"`           // 생성 GTFS frequencies 의 배차간격(버스)
 	RealtimeArrivals []int    `json:"realtime_arrivals_sec,omitempty"` // 첫 탑승 정류장의 실시간 다음 차(초, 지금 기준)
+	// 도보·따릉이 leg 가 지나는 신호 횡단보도 수와 그 기대 대기(초). Duration 에 이미 더해져 있다(route/crossing_hook.go).
+	Crossings    int     `json:"crossings,omitempty"`
+	CrossingWait float64 `json:"crossing_wait_sec,omitempty"`
 }
 
 type Itinerary struct {
@@ -93,6 +96,10 @@ type Itinerary struct {
 	// Realtime: 첫 탑승 대기를 실시간 도착정보로 바꿨을 때 true. RealtimeDelta 는 시간표 대비 보정(초, 음수 가능).
 	Realtime      bool    `json:"realtime,omitempty"`
 	RealtimeDelta float64 `json:"realtime_delta_sec,omitempty"`
+	// CrossingWait: 도보·따릉이 구간의 신호 횡단보도 기대 대기 합(초, Duration 에 포함). Replanned: 그 대기로 다음 탑승을
+	// 놓치게 돼 그 지점부터 다시 탐색해 뒤 구간을 갈아 끼웠다.
+	CrossingWait float64 `json:"crossing_wait_sec,omitempty"`
+	Replanned    bool    `json:"replanned,omitempty"`
 }
 
 type Client struct {
