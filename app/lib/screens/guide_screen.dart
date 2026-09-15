@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_activity_recognition/flutter_activity_recognition.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../api/client.dart';
+import '../guide/activity_classifier.dart';
 import '../guide/leg_tracker.dart';
 import '../guide/trace_uploader.dart';
 import '../models/itinerary.dart';
@@ -33,9 +35,12 @@ class _GuideScreenState extends State<GuideScreen> {
   static const sampleInterval = Duration(seconds: 5);
 
   late final LegTracker _tracker = LegTracker(widget.itinerary.legs);
+  final ActivityClassifier _activity = ActivityClassifier();
   final MapController _map = MapController();
   TraceUploader? _uploader;
   StreamSubscription<Position>? _positions;
+  StreamSubscription<Activity>? _activities;
+  bool _activityOn = false; // 활동 인식 권한을 받아 스트림을 켰는지. 아니면 샘플에 activity 를 싣지 않는다
   LatLng? _here;
   double? _accuracyM;
   int _samples = 0;
@@ -78,10 +83,29 @@ class _GuideScreenState extends State<GuideScreen> {
       if (mounted) setState(() => _status = '위치 오류: $e');
     });
     setState(() => _status = '안내 중');
+    await _startActivity();
+  }
+
+  /// 활동 인식은 있으면 좋은 것이라 권한이 없어도 안내는 계속한다(샘플의 activity 만 빠진다).
+  Future<void> _startActivity() async {
+    final ar = FlutterActivityRecognition.instance;
+    try {
+      var perm = await ar.checkPermission();
+      if (perm == ActivityPermission.DENIED) perm = await ar.requestPermission();
+      if (!mounted || perm != ActivityPermission.GRANTED) return;
+      // 판정이 바뀔 때만 오는 스트림. 확정은 위치 샘플 시점(_onPosition 의 settle)에 한다.
+      _activities = ar.activityStream.listen((a) {
+        if (mounted) _activity.observe(a.type.name, a.confidence.name, DateTime.now());
+      }, onError: (_) {});
+      setState(() => _activityOn = true);
+    } catch (_) {
+      // 플러그인·Play 서비스 없음 등: 활동 없이 진행
+    }
   }
 
   void _onPosition(Position p) {
     if (!mounted || _ending) return;
+    _activity.settle(DateTime.now());
     final changed = _tracker.update(p.latitude, p.longitude);
     _uploader?.add(TraceSample(
       ts: p.timestamp,
@@ -89,6 +113,7 @@ class _GuideScreenState extends State<GuideScreen> {
       lon: p.longitude,
       accuracyM: p.accuracy,
       mode: _tracker.mode,
+      activity: _activityOn ? _activity.current : null,
     ));
     setState(() {
       _here = LatLng(p.latitude, p.longitude);
@@ -170,9 +195,11 @@ class _GuideScreenState extends State<GuideScreen> {
       final tripText = v == null
           ? '표본 없음'
           : '${(v as num).toStringAsFixed(2)} m/s (${t['pairs']}쌍, ${t['used'] == true ? '반영' : '표본 부족·미반영'})';
+      final mm = (t['mismatch'] as num?)?.toInt() ?? 0;
+      final mmText = mm > 0 ? ' · 활동 불일치 제외 $mm쌍' : '';
       final pj = profile[mode];
       final p = pj == null ? '' : ' · 내 속도 ${SpeedProfile.fromJson(pj as Map<String, dynamic>).label}';
-      return '$name: $tripText$p';
+      return '$name: $tripText$mmText$p';
     }
 
     return '샘플 ${res['samples']}개\n${line('walk', '걷기')}\n${line('bicycle', '자전거')}';
@@ -181,6 +208,7 @@ class _GuideScreenState extends State<GuideScreen> {
   @override
   void dispose() {
     _positions?.cancel();
+    _activities?.cancel();
     _uploader?.dispose();
     _map.dispose();
     super.dispose();
@@ -209,6 +237,7 @@ class _GuideScreenState extends State<GuideScreen> {
     final leg = _tracker.current;
     final remainM = here == null ? null : LegTracker.distanceM(here.latitude, here.longitude, leg.toLat, leg.toLon);
     final up = _uploader;
+    final mismatch = _activityOn && ActivityClassifier.mismatch(_tracker.mode, _activity.current);
     return Scaffold(
       appBar: AppBar(title: Text('안내 · 구간 ${_tracker.index + 1}/${legs.length}')),
       body: Column(
@@ -285,8 +314,15 @@ class _GuideScreenState extends State<GuideScreen> {
                     ],
                   ),
                   const SizedBox(height: 4),
+                  if (mismatch)
+                    Text(
+                      '감지된 활동(${ActivityClassifier.label(_activity.current)})이 이 구간과 다릅니다. '
+                      '구간을 넘기거나 안내를 종료하세요 — 이 동안의 샘플은 속도 학습에서 뺍니다.',
+                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    ),
                   Text(
                     '$_status · 샘플 $_samples'
+                    '${_activityOn ? ' · 활동 ${ActivityClassifier.label(_activity.current)}' : ''}'
                     '${_accuracyM == null ? '' : ' · 정확도 ${_accuracyM!.round()}m'}'
                     '${up == null ? '' : ' · 업로드 ${up.uploaded} · 대기 ${up.pending}'
                         '${up.failures > 0 ? ' · 실패 ${up.failures}' : ''}'}',

@@ -26,6 +26,36 @@ func samplesJSON(t0 time.Time, mode string, v float64, n int, acc float64) strin
 	return `{"samples":[` + strings.Join(parts, ",") + `]}`
 }
 
+// 도보 구간 샘플이 전부 활동 불일치(vehicle)면 walk 는 속도 없이(speed_mps 키 없음) mismatch 만 응답한다.
+func TestEndTripMismatchOnlyHasNoSpeed(t *testing.T) {
+	s, pool := testServer(t)
+	h := s.Router()
+	sub := "mm-" + time.Now().Format("150405.000000")
+	t.Cleanup(func() { pool.Exec(context.Background(), `DELETE FROM users WHERE google_sub = $1`, sub) })
+	_, out := do(t, h, http.MethodPost, "/auth/google", `{"id_token":"good:`+sub+`"}`, "")
+	token := out["token"].(string)
+	userID := out["user_id"].(string)
+	t.Cleanup(func() {
+		pool.Exec(context.Background(), `DELETE FROM speed_profiles WHERE user_id = $1`, userID)
+		pool.Exec(context.Background(), `DELETE FROM trips WHERE user_id = $1`, userID)
+	})
+	_, out = do(t, h, http.MethodPost, "/trips", "", token)
+	tripID := out["trip_id"].(string)
+	body := strings.ReplaceAll(samplesJSON(time.Date(2026, 9, 13, 9, 0, 0, 0, time.UTC), "walk", 1.6, 5, 5),
+		`"mode":"walk"`, `"mode":"walk","activity":"vehicle"`)
+	if rr, _ := do(t, h, http.MethodPost, "/trips/"+tripID+"/traces", body, token); rr.Code != 200 {
+		t.Fatalf("upload code=%d", rr.Code)
+	}
+	rr, out := do(t, h, http.MethodPost, "/trips/"+tripID+"/end", "", token)
+	tw := out["trip"].(map[string]any)["walk"].(map[string]any)
+	if rr.Code != 200 || tw["used"] != false || tw["pairs"] != float64(0) || tw["mismatch"] != float64(4) {
+		t.Fatalf("code=%d walk=%v", rr.Code, tw)
+	}
+	if _, has := tw["speed_mps"]; has {
+		t.Fatalf("불일치뿐인데 speed_mps 가 실렸다: %v", tw)
+	}
+}
+
 // trip 발급 → 업로드(재전송 포함) → 종료 → 프로파일 수축 → /routes/plan 에 개인 속도 주입까지 한 배선.
 func TestTripTracesAndSpeedLearning(t *testing.T) {
 	s, pool := testServer(t)
@@ -72,6 +102,11 @@ func TestTripTracesAndSpeedLearning(t *testing.T) {
 	if rr, _ := do(t, h, http.MethodPost, "/trips/"+tripID+"/traces", run, token); rr.Code != 400 {
 		t.Fatalf("mode run code=%d", rr.Code)
 	}
+	drive := `{"samples":[{"ts":"2026-09-13T09:00:00Z","lat":37.55,"lon":126.97,"accuracy_m":5,"mode":"walk",` +
+		`"activity":"driving"}]}`
+	if rr, _ := do(t, h, http.MethodPost, "/trips/"+tripID+"/traces", drive, token); rr.Code != 400 {
+		t.Fatalf("activity driving code=%d", rr.Code)
+	}
 	// 서버 시각보다 MaxClockSkew 넘게 미래인 ts 는 400(30일 삭제가 ts 기준이라 미래 행이 오래 남는다)
 	future := samplesJSON(time.Now().Add(MaxClockSkew+time.Minute), "walk", 1, 1, 5)
 	if rr, _ := do(t, h, http.MethodPost, "/trips/"+tripID+"/traces", future, token); rr.Code != 400 {
@@ -88,10 +123,29 @@ func TestTripTracesAndSpeedLearning(t *testing.T) {
 	}
 	do(t, h, http.MethodPost, "/trips/"+tripID+"/traces", samplesJSON(t0.Add(time.Hour), "bicycle", 4, 8, 8), token)
 	do(t, h, http.MethodPost, "/trips/"+tripID+"/traces", samplesJSON(t0.Add(2*time.Hour), "transit", 15, 2, 8), token)
+	// 도보 구간인데 활동 인식이 vehicle 인 5개(4쌍): 저장은 되지만 속도에서 빠지고 mismatch 로 센다
+	vehicle := `{"samples":[`
+	for i := 0; i < 5; i++ {
+		if i > 0 {
+			vehicle += ","
+		}
+		vehicle += fmt.Sprintf(`{"ts":%q,"lat":%.6f,"lon":126.97,"accuracy_m":5,"mode":"walk","activity":"vehicle"}`,
+			t0.Add(3*time.Hour+time.Duration(i)*5*time.Second).Format(time.RFC3339), 37.55+1.6*5*float64(i)/111195)
+	}
+	vehicle += "]}"
+	if rr, _ := do(t, h, http.MethodPost, "/trips/"+tripID+"/traces", vehicle, token); rr.Code != 200 {
+		t.Fatalf("activity vehicle code=%d", rr.Code)
+	}
 	var n int
 	pool.QueryRow(context.Background(), `SELECT count(*) FROM traces WHERE trip_id = $1`, tripID).Scan(&n)
-	if n != 40 {
+	if n != 45 {
 		t.Fatalf("재전송이 중복 저장됐다: traces=%d", n)
+	}
+	var stored string
+	pool.QueryRow(context.Background(), `SELECT activity FROM traces WHERE trip_id = $1 AND activity IS NOT NULL LIMIT 1`,
+		tripID).Scan(&stored)
+	if stored != "vehicle" {
+		t.Fatalf("activity 저장 안 됨: %q", stored)
 	}
 
 	rr, out = do(t, h, http.MethodPost, "/trips/"+tripID+"/end", "", token)
@@ -101,7 +155,8 @@ func TestTripTracesAndSpeedLearning(t *testing.T) {
 	trip := out["trip"].(map[string]any)
 	tw := trip["walk"].(map[string]any)
 	tb := trip["bicycle"].(map[string]any)
-	if tw["used"] != true || tw["pairs"] != float64(29) || math.Abs(tw["speed_mps"].(float64)-1.6) > 0.01 {
+	if tw["used"] != true || tw["pairs"] != float64(29) || tw["mismatch"] != float64(4) ||
+		math.Abs(tw["speed_mps"].(float64)-1.6) > 0.01 {
 		t.Fatalf("trip walk=%v", tw)
 	}
 	if tb["used"] != false || tb["pairs"] != float64(7) {
