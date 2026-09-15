@@ -8,7 +8,7 @@
 ```
 앱 상세 화면 "안내 시작"
  → POST /trips (trip id 발급)
- → 화면이 떠 있는 동안 5초마다 위치(geolocator, foreground) → 현재 구간 수단(walk/bicycle/transit) 태그
+ → 5초마다 위치(geolocator, 위치 포그라운드 서비스 — 화면이 꺼지거나 다른 앱으로 가도 이어진다, 이슈 #60) → 현재 구간 수단(walk/bicycle/transit) 태그
  → 20개(≈100초) 또는 30초마다 POST /trips/{id}/traces (실패분은 다음 배치 앞에 붙여 재전송, 요청당 최대 1000개, 서버는 (trip, ts) 중복 무시)
  → "안내 종료": 남은 샘플 flush(줄어드는 동안 반복, 실패하면 남긴 채 중단·재시도 안내) → POST /trips/{id}/end (409 면 이미 닫힌 것으로 보고 완료 처리)
     → 서버: 수단별 이동 중 중앙값(speed.TripSpeeds) → speed_profiles 수축 갱신 → 결과 대화상자
@@ -36,7 +36,9 @@ OTP 의 bicycle speed 는 평지 이동 속도 정의라 GPS 이동 중 중앙�
 
 - 궤적은 서버가 발급한 trip id 로만 받고, 원본은 30일 뒤 지운다(`speed.PurgeOldTraces`, api 기동 후 1시간마다, 샘플 `ts` 기준. 그래서 서버 시각보다 5분 넘게 미래인 `ts` 는 업로드에서 400). trip 별 속도와 프로파일만 남는다.
 - 탈퇴(`DELETE /users/me`)는 trip 을 지우고 traces 는 `ON DELETE CASCADE` 로 같이 사라진다(테스트로 확인).
-- 앱은 백그라운드 위치 권한을 요구하지 않는다(`ACCESS_FINE_LOCATION`/`COARSE` 만). 화면을 벗어나면 수집이 멈춘다.
+- 앱은 백그라운드 위치 권한("항상 허용")을 요구하지 않는다(`ACCESS_FINE_LOCATION`/`COARSE` 만). 안내를 시작하면 위치 포그라운드
+  서비스(`FOREGROUND_SERVICE_LOCATION`, 알림 "안내 중")를 올려 화면이 꺼지거나 다른 앱으로 가도 수집한다(이슈 #60). 서비스를 안내
+  화면에서 시작하므로 "앱 사용 중에만 허용" 권한으로 된다. 알림 권한(`POST_NOTIFICATIONS`)은 안내 시작 때 묻는다.
 - 활동 인식(`ACTIVITY_RECOGNITION`, 이슈 #42): 안내 화면에서만 `flutter_activity_recognition` 스트림을 받아
   `guide/activity_classifier.dart` 가 끈적하게 판정한다. 플러그인은 판정이 **바뀔 때만** 이벤트를 주므로(같은 판정이
   이어지는 동안은 무이벤트 — 플러그인 소스와 AOSP SharedPreferences 리스너 동작으로 확인) 횟수가 아니라 시간으로 확정한다:
@@ -73,9 +75,24 @@ OTP 의 bicycle speed 는 평지 이동 속도 정의라 GPS 이동 중 중앙�
 - 실기기에서만 난 문제: 하단 패널이 시스템 내비게이션 바에 가려졌다(`docs/app/12-phone-guide-cutoff.png`) → `SafeArea(top: false)` 로 감쌈(`13-phone-guide-safe-area.png`).
 - 아직 안 한 것: 실제로 걸으며 속도 상수 재보정. 집 밖에서는 PC 서버에 닿을 길이 필요하다(Tailscale 등) — 그전에는 USB 를 꽂은 채 실내에서만 된다.
 
+## 백그라운드 수집 (2026-09-15, 이슈 #60, 갤럭시 S23 울트라 · Android 16 · 실내)
+
+| 단계 | 결과 |
+|---|---|
+| 수정 전(포그라운드 서비스 없음) | 안내 중 홈으로 나간 151초(19:40:38 → 19:43:10) 동안 서버 샘플 0개 |
+| 안내 시작 | 알림 권한 대화상자 → 허용. logcat `Geolocator position updates started using Android foreground service`, `dumpsys activity services` `isForeground=true types=0x00000008`(location), 알림 "안내 중 · 위치를 기록하고 있습니다. 안내를 종료하면 멈춥니다." |
+| 홈으로 90초 | 샘플 14개, 간격 5~10초(평균 6.4) |
+| 화면 끔 125초(`mWakefulness=Dozing`) | 화면이 꺼진 채 서버에 샘플 18개가 올라옴, 간격 5~10초(평균 6.0) |
+| "안내 종료" | logcat `Geolocator position updates stopped` → `Stop service in foreground`, 앱 알림 0개. 종료 창 `샘플 68개 / 걷기: 표본 없음 · 내 속도 1.14 m/s (4.1 km/h, trip 1회)` — 걷기 프로파일 그대로 |
+| 알림 권한 거부 | `pm revoke` 뒤 안내 시작 → 대화상자 "허용 안함"(`POST_NOTIFICATIONS: granted=false`) → 서비스 `isForeground=true`, 앱 알림 0개. 화면을 끄고 75초 뒤 서버에 그 뒤 샘플 7개(간격 5~9초) |
+| 안내 시작 직후 홈(커밋 전 Codex 지적 재현) | 스트림을 trip 발급 뒤에 열던 첫 구현에 발급 뒤·스트림 시작 전 8초 지연을 넣은 스크래치 빌드: 안내 시작 1.8초 뒤 홈 → 그 6.5초 뒤 스트림 시작이 `Background started FGS: Disallowed` → `ForegroundServiceStartNotAllowedException`(앱은 안 죽고 서버 샘플 0개). 스트림을 발급 전에 여는 지금 구현에 발급 요청 전 8초 지연을 넣은 스크래치 빌드: 누른 순간 `Allowed`(uidState TOP), 홈으로 나간 뒤 발급·업로드가 이어짐. 발급 전 샘플은 서버에 올리지 않는다 |
+| trip 발급 실패 | API 컨테이너를 멈추고 안내 시작 → 10초 제한 뒤 화면 `trip 발급 실패: TimeoutException …`, logcat `position updates stopped` → `Stop service in foreground`, 포그라운드 서비스 해제 |
+
+측정은 실내 샘플이 걷기 속도에 섞이지 않게 대중교통 구간(2/3)으로 넘긴 뒤 했다(transit 샘플은 학습에 쓰지 않는다).
+
 ## 알려진 한계
 
-- 화면이 꺼지거나 다른 앱으로 가면 샘플이 끊긴다(백그라운드 위치 권한을 쓰지 않는 결정). 30초 넘게 비면 그 구간은 학습에서 빠진다.
+- 위치 포그라운드 서비스는 앱 프로세스 안에서 돈다. 앱 프로세스가 죽으면 수집도 멈추고, 30초 넘게 비면 그 구간은 학습에서 빠진다.
 - 구간 자동 넘김은 끝점 40m 반경 하나뿐이다. 경로를 벗어나도 재탐색하지 않는다. 활동 인식은 불일치 샘플을 학습에서 빼고
   화면에 알릴 뿐 구간을 자동으로 넘기지는 않는다(유지 20초·LOW 무시는 초기값, 실기기 궤적으로 재보정). 활동 라벨은 판정
   전환보다 20초 이상(위치 샘플 간격 탓에 25초쯤까지) 늦게 바뀐다. `mismatch` 는 간격 게이트(2~30초)를 통과한 쌍 중 불일치로 뺀 수라 정지 중이던 쌍도 포함한다.
