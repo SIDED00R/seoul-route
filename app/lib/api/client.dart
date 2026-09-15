@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../auth/google_login.dart';
 import '../models/itinerary.dart';
 import '../models/place.dart';
 import '../models/plan_request.dart';
@@ -39,6 +40,24 @@ class ApiClient {
         .get(Uri.parse('$baseUrl/health'))
         .timeout(const Duration(seconds: 10));
     return _decode(r);
+  }
+
+  /// 서버가 앱에 알려주는 Google 웹 클라이언트 ID(무인증). 서버에 미설정이면 빈 문자열.
+  Future<String> googleClientId() async {
+    final r = await http
+        .get(Uri.parse('$baseUrl/auth/config'))
+        .timeout(const Duration(seconds: 10));
+    return (_decode(r)['google_client_id'] as String?) ?? '';
+  }
+
+  /// Google ID 토큰 → 서버 JWT(무인증).
+  Future<LoginResult> loginGoogle(String idToken) async {
+    final r = await http
+        .post(Uri.parse('$baseUrl/auth/google'),
+            headers: {'Content-Type': 'application/json'}, body: jsonEncode({'id_token': idToken}))
+        .timeout(const Duration(seconds: 15));
+    final j = _decode(r);
+    return LoginResult(token: j['token'] as String, userId: j['user_id'] as String);
   }
 
   Future<Map<String, dynamic>> me() async {

@@ -86,6 +86,20 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+// /auth/config 는 무인증으로 웹 클라이언트 ID 를 준다. 미설정이면 빈 문자열.
+func TestAuthConfig(t *testing.T) {
+	s, _ := testServer(t)
+	rr, out := do(t, s.Router(), http.MethodGet, "/auth/config", "", "")
+	if rr.Code != 200 || out["google_client_id"] != "" {
+		t.Fatalf("미설정 code=%d body=%v", rr.Code, out)
+	}
+	s.GoogleClientID = "123.apps.googleusercontent.com"
+	_, out = do(t, s.Router(), http.MethodGet, "/auth/config", "", "")
+	if out["google_client_id"] != "123.apps.googleusercontent.com" {
+		t.Fatalf("body=%v", out)
+	}
+}
+
 func TestAuthAndUserLifecycle(t *testing.T) {
 	s, pool := testServer(t)
 	h := s.Router()

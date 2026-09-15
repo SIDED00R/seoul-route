@@ -21,6 +21,8 @@ type Server struct {
 	DB      *pgxpool.Pool
 	JWT     *auth.JWT
 	Google  auth.GoogleVerifier // nil 이면 /auth/google 은 503
+	// GoogleClientID 는 /auth/config 로 앱에 내려주는 웹 클라이언트 ID(Google 이 비밀로 보지 않는 값). Google 이 nil 이면 빈 문자열.
+	GoogleClientID string
 	OTPURL  string
 	HTTP    *http.Client
 	Log     *slog.Logger
@@ -37,6 +39,7 @@ func (s *Server) Router() http.Handler {
 	// chi Timeout 은 부모 컨텍스트 데드라인을 늘릴 수 없으므로 전역에 걸지 않고 라우트별로 건다.
 	short := middleware.Timeout(DefaultTimeout)
 	r.With(short).Get("/health", s.handleHealth)
+	r.With(short).Get("/auth/config", s.handleAuthConfig)
 	r.With(short).Post("/auth/google", s.handleAuthGoogle)
 	r.With(short).Get("/gbfs/*", func(w http.ResponseWriter, req *http.Request) {
 		if s.GBFS == nil {
