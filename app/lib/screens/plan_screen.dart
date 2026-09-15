@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/client.dart';
+import '../location/current_location.dart';
 import '../models/place.dart';
 import '../models/plan_request.dart';
 import '../settings/settings_store.dart';
@@ -8,11 +9,14 @@ import 'place_search_screen.dart';
 import 'results_screen.dart';
 import 'settings_screen.dart';
 
-/// 홈: 출발·경유(최대 5)·도착을 고르고 구간마다 수단을 고정한 뒤 경로를 요청한다.
+/// 홈: 출발·경유(최대 5)·도착을 고르고 구간마다 수단을 고정한 뒤 경로를 요청한다. 출발지는 현재 위치로도 고를 수 있다.
 class PlanScreen extends StatefulWidget {
-  const PlanScreen({super.key, required this.settings});
+  const PlanScreen({super.key, required this.settings, this.locate = currentPlace});
 
   final Settings settings;
+
+  /// 현재 위치를 Place 로 받는다. 실패하면 LocationException. 테스트가 가짜로 바꾼다.
+  final Future<Place> Function() locate;
 
   @override
   State<PlanScreen> createState() => _PlanScreenState();
@@ -25,6 +29,7 @@ class _PlanScreenState extends State<PlanScreen> {
   final List<Place> _via = [];
   final List<SegmentMode> _modes = [SegmentMode.any];
   bool _busy = false;
+  bool _locating = false;
   String _error = '';
 
   static const maxVia = 5;
@@ -69,6 +74,23 @@ class _PlanScreenState extends State<PlanScreen> {
     }
   }
 
+  Future<void> _useCurrentLocation() async {
+    setState(() {
+      _locating = true;
+      _error = '';
+    });
+    try {
+      final p = await widget.locate();
+      if (mounted) setState(() => _origin = p);
+    } on LocationException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (e) {
+      if (mounted) setState(() => _error = '현재 위치 실패: $e');
+    } finally {
+      if (mounted) setState(() => _locating = false);
+    }
+  }
+
   void _addVia(Place p) => setState(() {
         _via.add(p);
         _modes.add(SegmentMode.any);
@@ -81,7 +103,7 @@ class _PlanScreenState extends State<PlanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final ready = _settings.ready && _origin != null && _destination != null && !_busy;
+    final ready = _settings.ready && _origin != null && _destination != null && !_busy && !_locating;
     return Scaffold(
       appBar: AppBar(
         title: const Text('서울 길찾기'),
@@ -100,9 +122,20 @@ class _PlanScreenState extends State<PlanScreen> {
               ),
             ),
           _placeTile('출발', Icons.trip_origin, _origin, () async {
+            if (_locating) return; // 현재 위치를 받는 동안은 출발지 검색을 열지 않는다
             final p = await _pick('출발지');
             if (p != null) setState(() => _origin = p);
-          }),
+          },
+              extra: _locating
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+                    )
+                  : IconButton(
+                      tooltip: '현재 위치',
+                      icon: const Icon(Icons.my_location),
+                      onPressed: _useCurrentLocation,
+                    )),
           _segmentMode(0),
           for (var i = 0; i < _via.length; i++) ...[
             ListTile(
@@ -140,11 +173,14 @@ class _PlanScreenState extends State<PlanScreen> {
     );
   }
 
-  Widget _placeTile(String label, IconData icon, Place? p, VoidCallback onTap) => ListTile(
+  /// extra 는 검색 아이콘 앞에 붙는 버튼(출발지의 현재 위치).
+  Widget _placeTile(String label, IconData icon, Place? p, VoidCallback onTap, {Widget? extra}) => ListTile(
         leading: Icon(icon),
         title: Text(p == null ? '$label지 선택' : '$label: ${p.name}'),
         subtitle: p == null ? null : Text(p.address),
-        trailing: const Icon(Icons.search),
+        trailing: extra == null
+            ? const Icon(Icons.search)
+            : Row(mainAxisSize: MainAxisSize.min, children: [extra, const Icon(Icons.search)]),
         onTap: onTap,
       );
 
