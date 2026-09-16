@@ -19,6 +19,7 @@ android {
         applicationId = "kr.seoulroute.seoul_route"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // Flutter 3.47의 기본 API 24는 flutter_secure_storage 11.x 요구사항(API 23 이상)을 충족한다.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION

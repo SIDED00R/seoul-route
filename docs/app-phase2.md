@@ -1,5 +1,7 @@
 # Phase 2a — Flutter 앱 MVP 실행 검증 (2026-09-12)
 
+> 2026-09-16 재검증: Galaxy S23 Ultra에 최신 디버그 APK를 재설치해 홈 화면과 Android 오류 로그 없음을 확인했다. JWT 저장은 Android Keystore 기반으로 전환했으며 기존 평문 키의 자동 이전·삭제도 실기기에서 확인했다. 최신 화면은 [`docs/app/11-current-home.png`](app/11-current-home.png)다.
+
 환경: Flutter 3.47.4 stable, Android SDK 36, 에뮬레이터 `s23ultra`(갤럭시 S23 울트라 사양 1440×3088·560dpi, API 36),
 백엔드는 로컬 Docker Compose(postgis·otp·api), 앱 서버 주소 `http://10.0.2.2:8081`, devtoken JWT.
 
@@ -36,7 +38,7 @@
 
 ## 추가 (2026-09-15, 이슈 #38 Google 로그인)
 
-설정 화면 "Google 계정으로 로그인" → 서버 `/auth/config` 의 웹 클라이언트 ID 로 `google_sign_in` 7.x(Android Credential Manager) 계정 선택 → ID 토큰 → `POST /auth/google` → 서버 JWT 를 토큰 칸에 채우고 저장. 취소하면 "로그인 취소". 콘솔에 웹·Android 클라이언트 두 개가 있어야 한다(AGENTS.md). 실행 검증은 아래 표.
+설정 화면 "Google 계정으로 로그인" → 서버 `/auth/config` 의 웹 클라이언트 ID 로 `google_sign_in` 7.x(Android Credential Manager) 계정 선택 → ID 토큰 → `POST /auth/google` → 서버 JWT 를 토큰 칸에 채우고 저장. 취소하면 "로그인 취소". 콘솔에 웹·Android 클라이언트 두 개가 있어야 한다([앱 README](../app/README.md)). 실행 검증은 아래 표.
 
 | 단계 | 결과 |
 |---|---|
@@ -51,7 +53,7 @@
 
 ## 알려진 한계
 
-- 카카오 "서울역"(역사 건물 좌표)에서 출발하면 출발점이 선로 서쪽 도로에 붙어 도보가 1.2km 늘고 421번 55분이 1순위가 된다. 70m 옆 좌표면 402번 38.9분. OSM 역 구내 연결성 문제 — 이슈 #12.
+- ~~카카오 역사 건물 좌표가 선로 반대편 도로에 붙는 문제~~ → 이슈 #12에서 장소명이 `…역`이면 같은 이름의 GTFS 부모역으로 앵커링해 해결했다.
 - 버스·지하철 폴리라인은 정류장 사이 직선이다. 생성 GTFS 에 shapes.txt 가 없어서 OTP 가 stop-to-stop 으로 그린다. 노선 shape 는 후속.
 - 에뮬레이터 `adb shell input text` 는 한글을 못 넣어 영문 검색어로 검증했다. 카카오는 영문 키워드도 한글 장소를 돌려준다. 실기기에서는 한글 입력 그대로 쓰면 된다.
 - ~~로그인은 devtoken 을 설정 화면에 붙여 넣는 방식이다. Google 로그인은 GOOGLE_OAUTH_CLIENT_ID 발급 후 Phase 2b.~~ → 2026-09-15 이슈 #38: 설정 화면 "Google 계정으로 로그인"(위 "추가 (2026-09-15)" 절). devtoken 붙여 넣기는 개발용으로 남아 있다.

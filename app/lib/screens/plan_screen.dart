@@ -11,9 +11,15 @@ import 'settings_screen.dart';
 
 /// 홈: 출발·경유(최대 5)·도착을 고르고 구간마다 수단을 고정한 뒤 경로를 요청한다. 출발지는 현재 위치로도 고를 수 있다.
 class PlanScreen extends StatefulWidget {
-  const PlanScreen({super.key, required this.settings, this.locate = currentPlace});
+  const PlanScreen({
+    super.key,
+    required this.settings,
+    this.locate = currentPlace,
+    this.settingsStore = const SettingsStore(),
+  });
 
   final Settings settings;
+  final SettingsStore settingsStore;
 
   /// 현재 위치를 Place 로 받는다. 실패하면 LocationException. 테스트가 가짜로 바꾼다.
   final Future<Place> Function() locate;
@@ -44,7 +50,7 @@ class _PlanScreenState extends State<PlanScreen> {
   Future<void> _openSettings() async {
     final s = await Navigator.push<Settings>(
       context,
-      MaterialPageRoute(builder: (_) => SettingsScreen(initial: _settings)),
+      MaterialPageRoute(builder: (_) => SettingsScreen(initial: _settings, settingsStore: widget.settingsStore)),
     );
     if (s != null) setState(() => _settings = s);
   }

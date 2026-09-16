@@ -6,9 +6,15 @@ import '../settings/settings_store.dart';
 
 /// 서버 주소와 토큰 입력. "연결 확인" 은 /health(무인증)와 /users/me·/users/me/speed(인증) 를 실제로 호출한다.
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, required this.initial, this.login = _googleLogin});
+  const SettingsScreen({
+    super.key,
+    required this.initial,
+    this.login = _googleLogin,
+    this.settingsStore = const SettingsStore(),
+  });
 
   final Settings initial;
+  final SettingsStore settingsStore;
   // Google 로그인 실행. 기본은 GoogleLogin(계정 선택창이 시스템 UI 라 테스트에서 바꿔 끼운다).
   final Future<LoginResult?> Function(ApiClient api) login;
 
@@ -67,7 +73,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return;
       }
       _token.text = res.token;
-      await SettingsStore().save(_current);
+      await widget.settingsStore.save(_current);
       if (!mounted) return;
       Navigator.pop(context, _current);
     } on ApiException catch (e) {
@@ -82,7 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _save() async {
-    await SettingsStore().save(_current);
+    await widget.settingsStore.save(_current);
     if (!mounted) return;
     Navigator.pop(context, _current);
   }

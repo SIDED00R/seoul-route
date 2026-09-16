@@ -92,14 +92,14 @@ func readDotEnv(path string, into map[string]string) {
 	}
 }
 
-// repoRoot 는 실행 위치에서 위로 올라가며 AGENTS.md 가 있는 디렉터리를 찾는다(gtfsgen 과 같은 규칙).
+// repoRoot 는 실행 위치에서 위로 올라가며 공개 설정 예시(.env.example)가 있는 저장소 루트를 찾는다.
 func repoRoot() (string, error) {
 	d, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
 	for {
-		if _, err := os.Stat(filepath.Join(d, "AGENTS.md")); err == nil {
+		if _, err := os.Stat(filepath.Join(d, ".env.example")); err == nil {
 			return d, nil
 		}
 		p := filepath.Dir(d)
