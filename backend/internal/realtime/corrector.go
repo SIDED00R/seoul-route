@@ -3,6 +3,7 @@ package realtime
 import (
 	"context"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -74,6 +75,8 @@ func (c *Corrector) adjustOne(ctx context.Context, now time.Time, it otp.Itinera
 	default:
 		return it, false
 	}
+	// 상류 API의 응답 순서는 보장되지 않는다. 가장 빨리 탈 수 있는 차를 고르고 앱의 다음 차 목록도 시간순으로 보낸다.
+	sort.Ints(eta)
 	board := time.Time{}
 	for _, s := range eta {
 		t := now.Add(time.Duration(s) * time.Second)

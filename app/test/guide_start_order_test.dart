@@ -35,11 +35,18 @@ class HeldTripApi extends ApiClient {
 
   final trip = Completer<String>();
   int startCalls = 0;
+  int endCalls = 0;
 
   @override
   Future<String> startTrip() {
     startCalls++;
     return trip.future;
+  }
+
+  @override
+  Future<Map<String, dynamic>> endTrip(String tripId) async {
+    endCalls++;
+    return const {};
   }
 }
 
@@ -129,5 +136,22 @@ void main() {
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 10));
+  });
+
+  testWidgets('trip 발급을 기다리는 동안 화면이 닫히면 늦게 발급된 trip을 종료한다', (tester) async {
+    final geo = FakeGeolocator();
+    GeolocatorPlatform.instance = geo;
+    final api = HeldTripApi();
+    await tester.pumpWidget(MaterialApp(home: GuideScreen(api: api, request: _request, itinerary: _itinerary)));
+    await _settle(tester);
+    expect(api.startCalls, 1);
+
+    await tester.pumpWidget(const SizedBox());
+    api.trip.complete('trip-after-pop');
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await _settle(tester);
+
+    expect(api.endCalls, 1);
+    expect(geo.cancelled, isTrue);
   });
 }

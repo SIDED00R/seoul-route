@@ -58,7 +58,9 @@ class _GuideScreenState extends State<GuideScreen> {
 
   Future<void> _start() async {
     var perm = await Geolocator.checkPermission();
-    if (perm == LocationPermission.denied) perm = await Geolocator.requestPermission();
+    if (perm == LocationPermission.denied) {
+      perm = await Geolocator.requestPermission();
+    }
     if (!mounted) return;
     if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) {
       setState(() => _status = '위치 권한이 없어 안내를 시작할 수 없습니다. 설정에서 허용한 뒤 다시 시작하세요.');
@@ -79,7 +81,15 @@ class _GuideScreenState extends State<GuideScreen> {
     });
     try {
       final tripId = await widget.api.startTrip();
-      if (!mounted) return;
+      if (!mounted) {
+        // trip 발급을 기다리는 동안 화면이 닫혔다면 서버에 열린 기록을 남기지 않는다.
+        try {
+          await widget.api.endTrip(tripId);
+        } catch (_) {
+          // 화면이 이미 사라졌으므로 정리는 최선 노력으로 끝낸다.
+        }
+        return;
+      }
       _uploader = TraceUploader(api: widget.api, tripId: tripId)..start();
     } catch (e) {
       await _positions?.cancel();
@@ -96,11 +106,15 @@ class _GuideScreenState extends State<GuideScreen> {
     final ar = FlutterActivityRecognition.instance;
     try {
       var perm = await ar.checkPermission();
-      if (perm == ActivityPermission.DENIED) perm = await ar.requestPermission();
+      if (perm == ActivityPermission.DENIED) {
+        perm = await ar.requestPermission();
+      }
       if (!mounted || perm != ActivityPermission.GRANTED) return;
       // 판정이 바뀔 때만 오는 스트림. 확정은 위치 샘플 시점(_onPosition 의 settle)에 한다.
       _activities = ar.activityStream.listen((a) {
-        if (mounted) _activity.observe(a.type.name, a.confidence.name, DateTime.now());
+        if (mounted) {
+          _activity.observe(a.type.name, a.confidence.name, DateTime.now());
+        }
       }, onError: (_) {});
       setState(() => _activityOn = true);
     } catch (_) {

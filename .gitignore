@@ -2,6 +2,15 @@
 .env
 *.key
 
+# local AI assistants and review artifacts
+.claude/
+.agent/
+.agents/
+.codex/
+AGENTS.md
+CLAUDE.md
+docs/*-design-review-*.md
+
 # data (large, downloaded/generated) — otp/data 는 전부 산출물·원본 데이터
 otp/data/
 otp/*.obj
@@ -12,6 +21,7 @@ gtfs/out/
 
 # python
 __pycache__/
+.ruff_cache/
 
 # go
 backend/bin/

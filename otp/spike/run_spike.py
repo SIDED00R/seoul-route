@@ -112,11 +112,11 @@ def run(name, variables):
     for i, e in enumerate(pc["edges"], 1):
         it = e["node"]
         legs = " → ".join(
-            f"{l['mode']}{'(rent)' if l.get('rentedBike') else ''}"
-            f"{'[' + (l['route'] or {}).get('shortName', '') + ']' if l.get('transitLeg') else ''}"
-            f" {l['duration'] / 60:.1f}m/{l['distance'] / 1000:.2f}km"
-            f"{' ' + l['from']['name'] + '→' + l['to']['name'] if l.get('rentedBike') else ''}"
-            for l in it["legs"]
+            f"{leg['mode']}{'(rent)' if leg.get('rentedBike') else ''}"
+            f"{'[' + (leg['route'] or {}).get('shortName', '') + ']' if leg.get('transitLeg') else ''}"
+            f" {leg['duration'] / 60:.1f}m/{leg['distance'] / 1000:.2f}km"
+            f"{' ' + leg['from']['name'] + '→' + leg['to']['name'] if leg.get('rentedBike') else ''}"
+            for leg in it["legs"]
         )
         print(f"{i}. 총 {it['duration'] / 60:.1f}분  환승 {it['numberOfTransfers']}  "
               f"도보 {it['walkDistance']:.0f}m  cost {it['generalizedCost']}")
