@@ -222,3 +222,7 @@ flutter test
 ## 개발 규칙
 
 변경은 Issue → branch → PR → review → merge 순서로 진행합니다. 커밋 메시지와 PR 본문에는 AI trailer를 넣지 않습니다.
+
+## 라이선스
+
+프로젝트에서 작성한 소스 코드는 [MIT License](LICENSE)로 배포합니다. 지도 타일·교통 데이터·스크린샷에 포함된 제3자 데이터의 권리는 각 제공자에게 있으며 MIT License로 재허가되지 않습니다.
