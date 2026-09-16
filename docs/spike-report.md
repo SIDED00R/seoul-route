@@ -6,8 +6,8 @@
 
 | 항목 | 결과 |
 |---|---|
-| Java | Temurin **25.0.4.1** (포터블, `C:\Users\SAMSUNG\tools\jdk-25.0.4.1+1`, JAVA_HOME·PATH 사용자 변수 등록). Java 21 로는 OTP 2.10.0 이 `UnsupportedClassVersionError`(class 69) 로 기동 실패 — 실측 |
-| Go | 1.27.1 (포터블, `C:\Users\SAMSUNG\tools\go`) |
+| Java | Temurin **25.0.4.1** (포터블, `%USERPROFILE%\tools\jdk-25.0.4.1+1`, JAVA_HOME·PATH 사용자 변수 등록). Java 21 로는 OTP 2.10.0 이 `UnsupportedClassVersionError`(class 69) 로 기동 실패 — 실측 |
+| Go | 1.27.1 (포터블, `%USERPROFILE%\tools\go`) |
 | Docker Desktop | WSL2 엔진으로 Compose 실기동 검증(2026-09-12). 현재 설치 확인(2026-09-16): Docker client 29.7.2, Compose 5.5.1; 이번 문서 정비 시 daemon은 꺼져 있어 server 버전은 재확인하지 못함 |
 | OTP | 2.10.0 (`otp/otp-shaded-2.10.0.jar`, 2026-09-09 릴리스) |
 | OSM | Geofabrik south-korea-latest (2026-09-12 다운로드, 287MB) → 서울 bbox 126.70~127.25E, 37.38~37.75N |
