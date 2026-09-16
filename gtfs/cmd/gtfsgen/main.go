@@ -205,19 +205,19 @@ func envKey(path, name string) (string, error) {
 	return "", fmt.Errorf("%s 가 .env 에 없다", name)
 }
 
-// repoRoot 는 실행 위치에서 위로 올라가며 AGENTS.md 가 있는 디렉터리를 찾는다.
+// repoRoot 는 실행 위치에서 위로 올라가며 공개 설정 예시(.env.example)가 있는 저장소 루트를 찾는다.
 func repoRoot() (string, error) {
 	d, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
 	for {
-		if _, err := os.Stat(filepath.Join(d, "AGENTS.md")); err == nil {
+		if _, err := os.Stat(filepath.Join(d, ".env.example")); err == nil {
 			return d, nil
 		}
 		p := filepath.Dir(d)
 		if p == d {
-			return "", errors.New("레포 루트(AGENTS.md)를 찾지 못했다")
+			return "", errors.New("레포 루트(.env.example)를 찾지 못했다")
 		}
 		d = p
 	}

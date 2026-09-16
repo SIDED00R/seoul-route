@@ -27,7 +27,7 @@ services:
       - ./otp/router-config.json:/var/opentripplanner/router-config.json:ro # GBFS url 이 api 서비스명인 Compose 전용본
       - ../otp/otp-config.json:/var/opentripplanner/otp-config.json:ro
     ports:
-      - "127.0.0.1:8080:8080" # 호스트 loopback 만. Phase 5 에서 Caddy(TLS) 뒤로 붙일 때 그대로 둔다
+      - "127.0.0.1:8080:8080" # 호스트 loopback만. 외부 공개 시에는 TLS 역방향 프록시 뒤에 둔다.
     mem_limit: 5g
 
   api:
@@ -54,7 +54,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "127.0.0.1:8081:8081" # 평문 HTTP 를 외부에 열지 않는다. 외부 공개는 Phase 5 Caddy(TLS) 가 맡는다
+      - "127.0.0.1:8081:8081" # 평문 HTTP를 외부에 열지 않는다. 외부 공개 시에는 TLS 역방향 프록시를 둔다.
 
 volumes:
   pgdata:

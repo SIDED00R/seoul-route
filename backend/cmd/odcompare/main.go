@@ -28,8 +28,8 @@ import (
 	"time"
 
 	"github.com/SIDED00R/seoul-route/backend/internal/config"
-	"github.com/SIDED00R/seoul-route/backend/internal/otp"
 	"github.com/SIDED00R/seoul-route/backend/internal/crossing"
+	"github.com/SIDED00R/seoul-route/backend/internal/otp"
 	"github.com/SIDED00R/seoul-route/backend/internal/realtime"
 	"github.com/SIDED00R/seoul-route/backend/internal/route"
 )
@@ -326,7 +326,7 @@ func trunc(s string, n int) string {
 	return s
 }
 
-// write 는 docs/eval/<시각>.md·.json 을 쓴다(레포 루트는 AGENTS.md 로 찾는다).
+// write 는 docs/eval/<시각>.md·.json 을 쓴다(레포 루트는 .env.example 로 찾는다).
 func write(rows []row, started time.Time, depart *time.Time, ref string) error {
 	root, err := repoRoot()
 	if err != nil {
@@ -400,7 +400,7 @@ func repoRoot() (string, error) {
 		return "", err
 	}
 	for {
-		if _, err := os.Stat(filepath.Join(d, "AGENTS.md")); err == nil {
+		if _, err := os.Stat(filepath.Join(d, ".env.example")); err == nil {
 			return d, nil
 		}
 		p := filepath.Dir(d)

@@ -98,6 +98,23 @@ func TestSubwayFirstBoardingMatchesLineAndDirection(t *testing.T) {
 	}
 }
 
+func TestRealtimeArrivalsAreSortedBeforeChoosingTrain(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"errorMessage":{"status":200,"code":"INFO-000","message":"ok"},"realtimeArrivalList":[
+		 {"subwayId":"1004","trainLineNm":"불암산행 - 회현방면","barvlDt":"600","arvlCd":"99"},
+		 {"subwayId":"1004","trainLineNm":"불암산행 - 회현방면","barvlDt":"180","arvlCd":"99"}]}`))
+	}))
+	defer srv.Close()
+	c := &Corrector{Subway: &SubwayClient{Key: "s", HTTP: srv.Client(), Base: srv.URL},
+		Now: func() time.Time { return now }}
+	sub := otp.Leg{Mode: "SUBWAY", Route: "서울4호선", FromName: "서울(4호선)", NextStop: "회현(4호선)"}
+	got := c.Adjust(context.Background(), []otp.Itinerary{itinerary(60, sub)})[0]
+	if got.Legs[1].Start != at(180) || len(got.Legs[1].RealtimeArrivals) != 2 ||
+		got.Legs[1].RealtimeArrivals[0] != 180 || got.Legs[1].RealtimeArrivals[1] != 600 {
+		t.Fatalf("이른 열차 선택과 시간순 목록이 필요함: %+v", got.Legs[1])
+	}
+}
+
 // 실시간 차가 시간표보다 늦으면 출발도 그만큼 늦춘다(소요시간은 그대로, 출발 대기만 늘어난다).
 func TestLaterBusShiftsDeparture(t *testing.T) {
 	var calls int32
