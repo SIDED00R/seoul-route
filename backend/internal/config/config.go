@@ -24,6 +24,7 @@ type Config struct {
 	SubwayRealtimeKey   string // 열린데이터광장 지하철 실시간 키. 비면 지하철 첫 탑승 실시간 보정 없음
 	GTFSZip             string // 생성 GTFS zip(배차간격 표시용). 기본 <레포>/otp/data/seoul-gtfs.zip, 없으면 배차 표시 없음
 	CrossingsCSV        string // 신호 횡단보도 좌표(otp/extract_crossings.py). 기본 <레포>/otp/data/crossings.csv, 없으면 대기 미반영
+	FastExitJSON        string // 빠른하차 자료(cmd/fastexit). 기본 <레포>/otp/data/fast-exit.json, 없으면 하차 칸 표시 없음
 	ODsayKey            string // ODsay Lab 키. cmd/odcompare(정확도 대조)에서만 쓴다. 서버는 안 쓴다
 }
 
@@ -57,6 +58,7 @@ func Load() (Config, error) {
 		SubwayRealtimeKey:   get("SEOUL_SUBWAY_REALTIME_KEY", ""),
 		GTFSZip:             get("GTFS_ZIP", defaultGTFS),
 		CrossingsCSV:        get("CROSSINGS_CSV", filepath.Join(filepath.Dir(defaultGTFS), "crossings.csv")),
+		FastExitJSON:        get("FAST_EXIT_JSON", filepath.Join(filepath.Dir(defaultGTFS), "fast-exit.json")),
 		ODsayKey:            get("ODSAY_API_KEY", ""),
 	}
 	c.PublicURL = strings.TrimRight(get("PUBLIC_URL", "http://localhost:"+c.Port), "/")

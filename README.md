@@ -97,6 +97,8 @@ Set-Location gtfs
 go run ./cmd/gtfsgen fetch
 go run ./cmd/gtfsgen build
 Copy-Item out/seoul-gtfs.zip ../otp/data/seoul-gtfs.zip
+Set-Location ../backend
+go run ./cmd/fastexit   # 지하철 하차역 설비 앞 칸(선택, 공공데이터포털 「서울교통공사_빠른하차정보」 활용신청 필요)
 Set-Location ..
 ```
 
@@ -217,6 +219,7 @@ flutter test
 - [경로 정확도 평가](docs/routing-accuracy.md)
 - [횡단보도 대기 모델](docs/crossing-wait.md)
 - [안내 궤적과 속도 학습](docs/speed-learning.md)
+- [지하철 하차역 설비 앞 칸](docs/fast-exit.md)
 - [Flutter 앱 실행 검증](docs/app-phase2.md)
 
 ## 개발 규칙
