@@ -28,7 +28,8 @@ type Server struct {
 	Log     *slog.Logger
 	Planner *route.Planner
 	GBFS    http.Handler // nil 이면 /gbfs/* 은 503
-	KakaoKey  string // 비면 /places/search 503
+	KakaoKey  string // 비면 /places/search·/places/reverse 503
+	KakaoBase string // 카카오 로컬 API 주소. 비면 KakaoBaseURL(테스트에서만 바꾼다)
 	VWorldKey string // 비면 /tiles/* 503
 }
 
@@ -58,6 +59,7 @@ func (s *Server) Router() http.Handler {
 		r.With(short).Post("/trips/{id}/traces", s.handleUploadTraces)
 		r.With(short).Post("/trips/{id}/end", s.handleEndTrip)
 		r.With(short).Get("/places/search", s.handlePlacesSearch)
+		r.With(short).Get("/places/reverse", s.handlePlacesReverse)
 		r.With(short).Get("/tiles/{z}/{x}/{y}.png", s.handleTile)
 		// via 대중교통 탐색이 OTP 에서 15~37초 걸린다(실측) → 이 경로만 상한이 길다.
 		r.With(middleware.Timeout(PlanTimeout)).Post("/routes/plan", s.handlePlan)

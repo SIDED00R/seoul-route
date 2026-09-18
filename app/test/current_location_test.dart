@@ -5,6 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package:geolocator/geolocator.dart';
+
+import 'package:seoul_route/api/client.dart';
 import 'package:seoul_route/location/current_location.dart';
 import 'package:seoul_route/models/place.dart';
 import 'package:seoul_route/screens/place_search_screen.dart';
@@ -33,14 +36,69 @@ Future<void> _pick(WidgetTester t, Finder tile, Place p) async {
 
 bool _planEnabled(WidgetTester t) => t.widget<FilledButton>(find.byType(FilledButton)).onPressed != null;
 
+/// 위치 권한·서비스는 켜진 것으로 보고 고정 좌표를 돌려준다.
+class FakeGeolocator extends GeolocatorPlatform {
+  @override
+  Future<bool> isLocationServiceEnabled() async => true;
+
+  @override
+  Future<LocationPermission> checkPermission() async => LocationPermission.whileInUse;
+
+  @override
+  Future<Position> getCurrentPosition({LocationSettings? locationSettings}) async => Position(
+        latitude: 37.5547,
+        longitude: 126.9707,
+        timestamp: DateTime.now(),
+        accuracy: 12,
+        altitude: 0,
+        altitudeAccuracy: 0,
+        heading: 0,
+        headingAccuracy: 0,
+        speed: 0,
+        speedAccuracy: 0,
+      );
+}
+
+/// 좌표 → 이름 조회 결과를 정해 주는 서버. name 이 null 이면 조회가 실패한다.
+class NamingApi extends ApiClient {
+  NamingApi({this.name, this.address = ''}) : super(baseUrl: 'http://x', token: 't');
+
+  final String? name;
+  final String address;
+
+  @override
+  Future<({String address, String name})> reversePlace(double lat, double lon) async {
+    final n = name;
+    if (n == null) throw ApiException(503, '장소 검색 미설정');
+    return (name: n, address: address);
+  }
+}
+
 void main() {
+  test('현재 위치에 건물 이름과 도로명 주소를 붙인다', () async {
+    GeolocatorPlatform.instance = FakeGeolocator();
+    final p = await currentPlace(NamingApi(name: '서울역', address: '서울 중구 세종대로 2'));
+    // 이름은 반드시 "현재 위치" 로 시작한다 — 서버는 첫 낱말이 "…역" 인 이름만 근처 역으로 앵커링한다(#12).
+    expect(p.name, '현재 위치 · 서울역');
+    expect(p.address, '서울 중구 세종대로 2 · 정확도 약 12m');
+    expect(p.lat, 37.5547);
+  });
+
+  test('이름을 못 받으면 좌표만 쓴다', () async {
+    GeolocatorPlatform.instance = FakeGeolocator();
+    expect((await currentPlace(NamingApi(name: null))).name, '현재 위치'); // 서버 미설정·오류
+    final empty = await currentPlace(NamingApi(name: ''));
+    expect(empty.name, '현재 위치'); // 건물도 주소도 없는 좌표
+    expect(empty.address, '정확도 약 12m');
+  });
+
   testWidgets('현재 위치 버튼: 받는 동안 진행 표시, 받으면 출발지가 현재 위치가 된다', (tester) async {
     final done = Completer<Place>();
     var calls = 0;
     await tester.pumpWidget(MaterialApp(
       home: PlanScreen(
         settings: _settings,
-        locate: () {
+        locate: (_) {
           calls++;
           return done.future;
         },
@@ -65,7 +123,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: PlanScreen(
         settings: _settings,
-        locate: () async => throw const LocationException('위치 권한이 없습니다. 설정에서 허용한 뒤 다시 누르세요.'),
+        locate: (_) async => throw const LocationException('위치 권한이 없습니다. 설정에서 허용한 뒤 다시 누르세요.'),
       ),
     ));
     await tester.tap(find.byTooltip('현재 위치'));
@@ -77,7 +135,7 @@ void main() {
 
   testWidgets('위치를 받는 동안 경로 찾기는 꺼지고, 끝나면(성공·실패) 다시 켜진다', (tester) async {
     var loc = Completer<Place>();
-    await tester.pumpWidget(MaterialApp(home: PlanScreen(settings: _settings, locate: () => loc.future)));
+    await tester.pumpWidget(MaterialApp(home: PlanScreen(settings: _settings, locate: (_) => loc.future)));
     await _pick(tester, find.text('출발지 선택'), _a);
     await _pick(tester, find.text('도착지 선택'), _b);
     expect(_planEnabled(tester), isTrue);
@@ -102,7 +160,7 @@ void main() {
 
   testWidgets('위치를 받는 동안 출발지 검색은 열리지 않아 늦게 온 위치가 수동 선택을 덮지 않는다', (tester) async {
     final loc = Completer<Place>();
-    await tester.pumpWidget(MaterialApp(home: PlanScreen(settings: _settings, locate: () => loc.future)));
+    await tester.pumpWidget(MaterialApp(home: PlanScreen(settings: _settings, locate: (_) => loc.future)));
     await tester.tap(find.byTooltip('현재 위치'));
     await tester.pump();
     await tester.tap(find.text('출발지 선택'));
@@ -120,7 +178,7 @@ void main() {
     final reply = Completer<http.Response>();
     final mock = MockClient((_) => reply.future);
     await http.runWithClient(() async {
-      await tester.pumpWidget(MaterialApp(home: PlanScreen(settings: _settings, locate: () async => _here)));
+      await tester.pumpWidget(MaterialApp(home: PlanScreen(settings: _settings, locate: (_) async => _here)));
       await _pick(tester, find.text('출발지 선택'), _a);
       await _pick(tester, find.text('도착지 선택'), _b);
       IconButton here() => tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.my_location));

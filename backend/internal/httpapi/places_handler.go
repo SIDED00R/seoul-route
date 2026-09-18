@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -45,7 +46,11 @@ func (s *Server) handlePlacesSearch(w http.ResponseWriter, r *http.Request) {
 	req.Header.Set("Authorization", "KakaoAK "+s.KakaoKey)
 	resp, err := s.HTTP.Do(req)
 	if err != nil {
-		// url.Error 는 요청 URL 을 포함하지만 키는 헤더에 있어 로그에 남지 않는다.
+		// url.Error 에는 검색어가 든 요청 URL 이 실리므로 그 껍질을 벗기고 원인만 남긴다.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			err = ue.Err
+		}
 		s.Log.Warn("kakao search", "err", err)
 		writeError(w, http.StatusBadGateway, "장소 검색 실패")
 		return
