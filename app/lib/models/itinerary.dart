@@ -24,6 +24,7 @@ class Leg {
     this.realtimeArrivalsSec = const [],
     this.crossings = 0,
     this.crossingWaitSec = 0,
+    this.inStation = false,
     this.color = '',
     this.textColor = '',
     this.headsign = '',
@@ -52,6 +53,7 @@ class Leg {
   final List<int> realtimeArrivalsSec; // 첫 탑승 정류장의 실시간 다음 차(초)
   final int crossings; // 도보·따릉이 leg 가 지나는 신호 횡단보도 수
   final double crossingWaitSec; // 그 기대 대기(초). durationSec 에 이미 포함
+  final bool inStation; // 역 출입구를 지나지 않는 역 안 환승 통로 도보(지하라 위치가 잡히지 않는다)
   final String color; // 노선 색(GTFS route_color, # 없는 6자리 16진수). 없으면 수단별 기본 팔레트를 쓴다
   final String textColor; // 그 색 위에 얹을 글자색
   final String headsign; // 탑승 차량의 행선지(대중교통)
@@ -82,6 +84,7 @@ class Leg {
             .toList(),
         crossings: (j['crossings'] as num?)?.toInt() ?? 0,
         crossingWaitSec: (j['crossing_wait_sec'] as num?)?.toDouble() ?? 0,
+        inStation: (j['in_station'] as bool?) ?? false,
         color: (j['color'] as String?) ?? '',
         textColor: (j['text_color'] as String?) ?? '',
         headsign: (j['headsign'] as String?) ?? '',

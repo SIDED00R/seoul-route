@@ -3,14 +3,15 @@ import '../models/leg_detail.dart';
 import '../models/plan_request.dart';
 import '../util/leg_names.dart';
 
-/// 안내 카드에 넣을 문구. now 는 실시간 남은 거리가 들어가 매 위치마다 바뀌고, utterance 는 단계마다 고정이라
-/// 같은 단계에서는 한 번만 읽힌다(VoiceGuide 가 직전 문장과 같으면 건너뛴다).
+/// 안내 카드에 넣을 문구. now 는 실시간 남은 거리·정거장 수가 들어가 매 위치마다 바뀐다. utterance 는 읽어 줄 문장이고
+/// cueKey 는 그 안내 시점의 이름(탑승·하차·몇 번째 회전)이다 — VoiceGuide 는 같은 cueKey 를 한 번만 읽는다.
 class Instruction {
-  const Instruction({required this.now, required this.next, this.utterance});
+  const Instruction({required this.now, required this.next, this.utterance, this.cueKey = ''});
 
   final String now;
   final String next;
   final String? utterance;
+  final String cueKey;
 }
 
 /// 회전 방향 문구(OTP relativeDirection). entrance 는 역 출입구 이름, exit 은 회전교차로 출구 번호.
@@ -54,9 +55,9 @@ String turnPhrase(String dir, {String entrance = '', String exit = ''}) {
 /// 거리 문구. 10m 단위로 끊고, 그보다 짧으면 "잠시".
 String _distText(double m) => m < 10 ? '잠시' : '${(m / 10).round() * 10}m';
 
-String _go(WalkStep step, double distM, {required bool bike}) {
+String _go(String street, double distM, {required bool bike}) {
   final verb = bike ? '주행' : '직진';
-  final head = step.street.isEmpty ? '' : '${step.street} 따라 ';
+  final head = street.isEmpty ? '' : '$street 따라 ';
   return '$head${_distText(distM)} $verb';
 }
 
@@ -77,47 +78,103 @@ Instruction buildInstruction({
   if (leg.transitLeg) {
     final to = legEndpointName(request, leg.toName, leg.toLat, leg.toLon);
     final unit = leg.mode == 'BUS' ? '정류장' : '역';
+    final ride = '${leg.label}${_headsignText(leg)}';
+    final total = leg.stops.length + 1; // 하차역 포함 전체 정거장 수
     if (remainingStops <= 1) {
+      // 한 정거장짜리 구간은 탑승 안내 없이 바로 여기로 오므로 무엇을 타는지도 함께 읽는다.
+      final head = total <= 1 ? '${withObjectParticle(ride)} 타고 ' : '';
       return Instruction(
         now: '다음 $unit에서 내리세요 · $to',
         next: next,
-        utterance: '다음 $unit에서 내리세요. $next',
+        utterance: '$head다음 $unit에서 내리세요. $next',
+        cueKey: 'L$legIndex:alight',
       );
     }
     final via = nextStopName == null ? '' : ' · 다음 정차 $nextStopName';
     return Instruction(
       now: '$remainingStops정거장 뒤 $to에서 내리기$via',
       next: next,
-      utterance: '${leg.label}${_headsignText(leg)}을 타고 $remainingStops정거장 뒤 $to에서 내리세요',
+      // 탑승 안내는 구간에 들어올 때 한 번만 읽는다. 문장의 정거장 수는 구간 전체 값이라 역을 지나도 바뀌지 않는다.
+      utterance: '${withObjectParticle(ride)} 타고 $total정거장 뒤 $to에서 내리세요',
+      cueKey: 'L$legIndex:board',
     );
   }
   final to = legEndpointName(request, leg.toName, leg.toLat, leg.toLon);
   if (leg.steps.isEmpty) {
     final mins = (leg.durationSec / 60).round();
     final text = '$to까지 ${leg.label} $mins분';
-    return Instruction(now: text, next: next, utterance: text);
+    return Instruction(now: text, next: next, utterance: text, cueKey: 'L$legIndex:walk');
   }
   final i = stepIndex.clamp(0, leg.steps.length - 1);
   final step = leg.steps[i];
   final bike = leg.mode == 'BICYCLE';
-  if (i + 1 >= leg.steps.length) {
-    final go = _go(step, stepRemainM ?? step.distanceM, bike: bike);
+  // 다음 "실제 회전"까지 이어지는 직진 단계들은 한 안내로 합친다(OTP 는 길 이름·종류가 바뀔 때마다 CONTINUE 를 낸다).
+  var j = i + 1;
+  var ahead = 0.0; // 현재 단계 뒤, 회전 전까지의 직진 단계 거리 합
+  // 길 이름은 합친 단계 중 가장 긴 단계의 것을 쓴다(7m 짜리 광장 이름으로 120m 를 부르지 않게).
+  var street = step.street;
+  var longest = step.distanceM;
+  while (j < leg.steps.length && leg.steps[j].dir == 'CONTINUE') {
+    final s = leg.steps[j];
+    ahead += s.distanceM;
+    if (s.distanceM > longest) {
+      longest = s.distanceM;
+      street = s.street;
+    }
+    j++;
+  }
+  final live = (stepRemainM ?? step.distanceM) + ahead;
+  final fixed = step.distanceM + ahead;
+  final lead = _actionLead(step);
+  if (j >= leg.steps.length) {
     return Instruction(
-      now: '$go 하면 $to 도착',
+      now: '$lead${_go(street, live, bike: bike)} 하면 $to 도착',
       next: next,
-      utterance: '${_go(step, step.distanceM, bike: bike)} 하면 $to 도착',
+      utterance: '$lead${_go(street, fixed, bike: bike)} 하면 $to 도착',
+      cueKey: 'L$legIndex:arrive',
     );
   }
-  final after = leg.steps[i + 1];
+  final after = leg.steps[j];
   final turn = turnPhrase(after.dir, entrance: after.entrance, exit: after.exit);
   return Instruction(
-    now: '${_go(step, stepRemainM ?? step.distanceM, bike: bike)} 후 $turn',
+    now: '$lead${_go(street, live, bike: bike)} 후 $turn',
     next: next,
-    utterance: '${_go(step, step.distanceM, bike: bike)} 후 $turn',
+    utterance: '$lead${_go(street, fixed, bike: bike)} 후 $turn',
+    cueKey: 'L$legIndex:T$j', // 같은 회전을 향하는 동안은 단계가 바뀌어도 같은 안내다
   );
 }
 
+/// 현재 단계가 그 자리에서 하는 동작(출입구·엘리베이터)이면 문장 앞에 붙일 말. 그 단계의 거리는 0 인 경우가 많아
+/// 뒤따르는 직진 안내만 내면 동작이 빠진다.
+String _actionLead(WalkStep step) {
+  switch (step.dir) {
+    case 'EXIT_STATION':
+      return step.entrance.isEmpty ? '역에서 나가서 ' : '${step.entrance}로 나가서 ';
+    case 'ENTER_STATION':
+      return step.entrance.isEmpty ? '역으로 들어가서 ' : '${step.entrance}로 들어가서 ';
+    case 'ELEVATOR':
+      return '엘리베이터를 타고 ';
+    default:
+      return '';
+  }
+}
+
 String _headsignText(Leg leg) => leg.headsign.isEmpty ? '' : ' ${leg.headsign} 방면';
+
+/// 목적격 조사를 붙인다("2호선을"·"버스 402를"). 받침이 있으면 을, 없으면 를. 숫자는 읽는 소리로 가린다.
+String withObjectParticle(String word) {
+  if (word.isEmpty) return word;
+  final c = word.codeUnitAt(word.length - 1);
+  bool hasFinal;
+  if (c >= 0xAC00 && c <= 0xD7A3) {
+    hasFinal = (c - 0xAC00) % 28 != 0;
+  } else if (c >= 0x30 && c <= 0x39) {
+    hasFinal = '013678'.contains(String.fromCharCode(c)); // 영·일·삼·육·칠·팔
+  } else {
+    hasFinal = false;
+  }
+  return '$word${hasFinal ? '을' : '를'}';
+}
 
 /// 이 구간 다음에 할 일. 환승·하차 후 출구·대여·반납·도착.
 String _nextAction(PlanRequest request, Itinerary itinerary, int legIndex) {

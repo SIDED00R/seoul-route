@@ -48,6 +48,11 @@ void main() {
     expect(parseHexColor('GGGGGG'), isNull);
   });
 
+  test('역 안 환승 통로 표시(in_station)를 읽는다', () {
+    expect(Leg.fromJson({..._coloredLeg(), 'in_station': true}).inStation, isTrue);
+    expect(Leg.fromJson(_coloredLeg()).inStation, isFalse);
+  });
+
   test('leg 색이 있으면 그 색, 없으면 수단 기본색', () {
     final colored = Leg.fromJson(_coloredLeg(color: '00A84D', textColor: 'FFFFFF'));
     expect(modeColor(colored), const Color(0xFF00A84D));

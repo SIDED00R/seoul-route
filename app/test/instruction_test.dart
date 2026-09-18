@@ -105,10 +105,10 @@ void main() {
       expect(i.now, '잠시 직진 후 강남 8번 출구로 들어가기');
     });
 
-    test('마지막 단계는 도착 문구', () {
+    test('마지막 단계는 도착 문구, 출입구 단계면 그 동작을 앞에 붙인다', () {
       final i = buildInstruction(
           request: request, itinerary: plan, legIndex: 0, stepIndex: 2, stepRemainM: 0);
-      expect(i.now, '잠시 직진 하면 강남(2호선) 도착');
+      expect(i.now, '강남 8번 출구로 들어가서 잠시 직진 하면 강남(2호선) 도착');
     });
 
     test('단계가 없으면(역 안 통로) 구간 요약을 쓴다', () {
@@ -129,7 +129,10 @@ void main() {
 
   group('대중교통 구간', () {
     final transfer = it([
-      mk('SUBWAY', route: '4호선', headsign: '당고개', transit: true, toName: '동대문'),
+      mk('SUBWAY', route: '4호선', headsign: '당고개', transit: true, toName: '동대문', stops: const [
+        TransitStop(name: '혜화', lat: 37.5, lon: 127.0),
+        TransitStop(name: '동묘앞', lat: 37.5, lon: 127.0),
+      ]),
       mk('WALK', durationSec: 120, fromName: '동대문', toName: '동대문'),
       mk('SUBWAY', route: '1호선', headsign: '소요산', transit: true, fromName: '동대문', toName: '종로3가'),
     ]);
@@ -140,9 +143,12 @@ void main() {
       expect(i.now, '3정거장 뒤 동대문에서 내리기 · 다음 정차 혜화');
       expect(i.utterance, '4호선 당고개 방면을 타고 3정거장 뒤 동대문에서 내리세요');
       expect(i.next, '환승 · 1호선 소요산 방면 · 동대문');
-      // 정거장이 줄어도 발화는 같은 문장을 유지한다(중복 제거로 다시 읽히지 않는다)
+      expect(i.cueKey, 'L0:board');
+      // 역을 지나 남은 정거장이 줄어도 같은 안내 시점이고 문장도 그대로다 — 역마다 다시 읽지 않는다.
       final closer = buildInstruction(
-          request: request, itinerary: transfer, legIndex: 0, remainingStops: 3, nextStopName: '동묘앞');
+          request: request, itinerary: transfer, legIndex: 0, remainingStops: 2, nextStopName: '동묘앞');
+      expect(closer.now, '2정거장 뒤 동대문에서 내리기 · 다음 정차 동묘앞');
+      expect(closer.cueKey, i.cueKey);
       expect(closer.utterance, i.utterance);
     });
 
@@ -150,6 +156,16 @@ void main() {
       final i = buildInstruction(request: request, itinerary: transfer, legIndex: 0, remainingStops: 1);
       expect(i.now, '다음 역에서 내리세요 · 동대문');
       expect(i.utterance, '다음 역에서 내리세요. 환승 · 1호선 소요산 방면 · 동대문');
+      expect(i.cueKey, 'L0:alight');
+    });
+
+    test('한 정거장짜리 구간은 탑승과 하차를 한 문장으로 읽는다', () {
+      final oneStop = it([
+        mk('SUBWAY', route: '4호선', headsign: '오이도', transit: true, toName: '총신대입구(이수)'),
+        mk('WALK', toName: '회사'),
+      ]);
+      final i = buildInstruction(request: request, itinerary: oneStop, legIndex: 0, remainingStops: 1);
+      expect(i.utterance, '4호선 오이도 방면을 타고 다음 역에서 내리세요. 회사까지 도보');
     });
 
     test('버스는 "정류장", 내린 뒤 도보면 출구 안내', () {
@@ -172,8 +188,39 @@ void main() {
       ]);
       final i = buildInstruction(request: request, itinerary: plain, legIndex: 0, remainingStops: 1);
       expect(i.next, '회사까지 도보'); // 버스 정류장에는 출구가 없다
-      expect(i.utterance, '다음 정류장에서 내리세요. 회사까지 도보');
+      expect(i.utterance, '버스 402를 타고 다음 정류장에서 내리세요. 회사까지 도보');
     });
+  });
+
+  test('목적격 조사: 받침이 있으면 을, 없으면 를(숫자는 읽는 소리)', () {
+    expect(withObjectParticle('2호선 성수 방면'), '2호선 성수 방면을');
+    expect(withObjectParticle('버스 402'), '버스 402를'); // 이
+    expect(withObjectParticle('버스 470'), '버스 470을'); // 영
+    expect(withObjectParticle('버스 9401'), '버스 9401을'); // 일
+    expect(withObjectParticle('공항철도'), '공항철도를');
+  });
+
+  test('이어지는 직진 단계는 다음 회전까지 한 안내로 합친다', () {
+    final walk = it([
+      mk('WALK', toName: '역', steps: const [
+        WalkStep(dir: 'DEPART', distanceM: 96, lat: 37.5, lon: 127.0),
+        WalkStep(dir: 'CONTINUE', distanceM: 19, lat: 37.5009, lon: 127.0),
+        WalkStep(dir: 'CONTINUE', street: '서울역광장', distanceM: 7, lat: 37.501, lon: 127.0),
+        WalkStep(dir: 'LEFT', distanceM: 32, lat: 37.5011, lon: 127.0),
+      ]),
+    ]);
+    final first =
+        buildInstruction(request: request, itinerary: walk, legIndex: 0, stepIndex: 0, stepRemainM: 96);
+    expect(first.now, '120m 직진 후 좌회전'); // 96 + 19 + 7
+    expect(first.cueKey, 'L0:T3');
+    // 직진 단계로 넘어가도 향하는 회전이 같으면 같은 안내 시점이다(다시 읽지 않는다)
+    final second =
+        buildInstruction(request: request, itinerary: walk, legIndex: 0, stepIndex: 1, stepRemainM: 10);
+    expect(second.now, '20m 직진 후 좌회전'); // 10 + 7
+    expect(second.cueKey, first.cueKey);
+    final last =
+        buildInstruction(request: request, itinerary: walk, legIndex: 0, stepIndex: 3, stepRemainM: 32);
+    expect(last.cueKey, 'L0:arrive');
   });
 
   test('따릉이 대여·반납이 다음 할 일에 나온다', () {

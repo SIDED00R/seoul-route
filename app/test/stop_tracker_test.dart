@@ -51,6 +51,12 @@ void main() {
     expect(t.nextStopName(), '역3');
   });
 
+  test('다음 차를 탔으면 정차 시각도 그만큼 늦다', () {
+    final t = StopTracker(leg, line, shift: const Duration(minutes: 4));
+    expect(t.remaining(null, null, 0, at(250)), 4); // 밀지 않았다면 2 였을 시각
+    expect(t.remaining(null, null, 0, at(250 + 240)), 2);
+  });
+
   test('한 번 줄어든 값은 다시 늘지 않는다', () {
     final t = StopTracker(leg, line);
     expect(t.remaining(37.5035, 127.0, 8, at(300)), 1);

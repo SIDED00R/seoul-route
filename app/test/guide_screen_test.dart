@@ -295,6 +295,77 @@ void main() {
     await close(tester);
   });
 
+  testWidgets('지하철에서 역을 지날 때마다 다시 읽지 않는다', (tester) async {
+    await pumpGuide(tester);
+    await tester.tap(find.text('다음 구간'));
+    await _settle(tester);
+    final boarded = spoken.length;
+    expect(spoken.last, '2호선 성수 방면을 타고 3정거장 뒤 역삼에서 내리세요');
+    await _push(tester, geo, pos(37.5025, 127.0)); // 출발 직후
+    await _push(tester, geo, pos(37.5035, 127.0)); // 교대를 지남 → 남은 2정거장
+    expect(find.textContaining('2정거장 뒤 역삼에서 내리기'), findsOneWidget);
+    expect(spoken.length, boarded); // 화면 숫자만 바뀌고 읽지는 않는다
+    await _push(tester, geo, pos(37.5052, 127.0)); // 서초를 지남 → 다음이 하차역
+    expect(spoken.length, boarded + 1);
+    expect(spoken.last, startsWith('다음 역에서 내리세요'));
+    await close(tester);
+  });
+
+  testWidgets('위치가 끊겨도 시간표로 구간이 넘어가고 알림창 내용이 따라온다', (tester) async {
+    const status = MethodChannel('seoul_route/guide_status');
+    final shown = <String>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(status, (call) async {
+      if (call.method == 'show') shown.add((call.arguments as Map)['title'] as String);
+      return null;
+    });
+    addTearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(status, null));
+    var now = _base;
+    await tester.pumpWidget(MaterialApp(
+      home: GuideScreen(
+        api: api,
+        request: _request,
+        itinerary: _itinerary,
+        speak: (t) async => spoken.add(t),
+        clock: () => now,
+      ),
+    ));
+    await _settle(tester);
+    await tester.tap(find.text('다음 구간')); // 지하철 탑승(계획 +6분 출발, +16분 도착)
+    await _settle(tester);
+    expect(find.textContaining('구간 2/3'), findsOneWidget);
+    expect(shown.last, contains('역삼에서 내리기'));
+
+    now = _base.add(const Duration(minutes: 15));
+    await tester.pump(const Duration(seconds: 10)); // 아직 도착 전
+    expect(find.textContaining('구간 2/3'), findsOneWidget);
+
+    now = _base.add(const Duration(minutes: 16, seconds: 5));
+    await tester.pump(const Duration(seconds: 10)); // 위치 표본 없이 시간만 흘렀다
+    await _settle(tester);
+    expect(find.textContaining('구간 3/3'), findsOneWidget);
+    expect(shown.last, endsWith('역삼 1번 출구로 나가서 테헤란로 따라 220m 직진 하면 도착지 도착'));
+    expect(shown.last, startsWith('남은 ')); // 접힌 알림에서도 남은 시간이 보인다
+    await close(tester);
+  });
+
+  testWidgets('안내를 늦게 시작하면 도착 예정도 그만큼 늦다', (tester) async {
+    final started = _base.add(const Duration(minutes: 3));
+    await tester.pumpWidget(MaterialApp(
+      home: GuideScreen(
+        api: api,
+        request: _request,
+        itinerary: _itinerary,
+        speak: (t) async => spoken.add(t),
+        clock: () => started,
+      ),
+    ));
+    await _settle(tester);
+    final eta = GuideCard.hhmm(_base.add(const Duration(minutes: 24))); // 계획 도착 +21분에 밀린 3분
+    expect(find.textContaining('도착 예정 $eta'), findsOneWidget);
+    await close(tester);
+  });
+
   testWidgets('음성 안내가 꺼져 있으면 읽지 않는다', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{'voice_guide': false});
     await pumpGuide(tester, voice: false);
