@@ -138,6 +138,8 @@ docker compose --env-file .env -f deploy/compose.yml ps
 
 `otp/graph.obj`, `otp/data/seoul-gtfs.zip`, `otp/data/crossings.csv`가 먼저 있어야 합니다. 호스트 포트 8080·8081은 loopback에만 공개됩니다.
 
+세 서비스는 `restart: unless-stopped` 라 한 번 띄워 두면 PC 를 다시 켠 뒤 Docker Desktop 이 뜰 때 같이 뜹니다(Docker Desktop 설정의 "Start Docker Desktop when you sign in" 을 켜 두어야 합니다). `docker compose ... stop`·`down` 으로 내린 것은 다시 뜨지 않습니다.
+
 ### 6. Android 앱 실행
 
 ```powershell

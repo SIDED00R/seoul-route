@@ -31,6 +31,7 @@ type Server struct {
 	KakaoKey  string // 비면 /places/search·/places/reverse 503
 	KakaoBase string // 카카오 로컬 API 주소. 비면 KakaoBaseURL(테스트에서만 바꾼다)
 	VWorldKey string // 비면 /tiles/* 503
+	VWorldBase string // VWorld API 주소. 비면 VWorldBaseURL(테스트에서만 바꾼다)
 }
 
 func (s *Server) Router() http.Handler {
