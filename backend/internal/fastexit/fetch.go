@@ -31,6 +31,47 @@ type page struct {
 	} `json:"response"`
 }
 
+// FetchEscalators 는 에스컬레이터 설치현황 전체를 API 응답 그대로 모아 돌려준다. 열린데이터광장은 1콜 1,000행이고
+// 2026-09-19 전체 1,882행이었다. 키는 URL 경로에 들어가므로 오류에 URL 을 싣지 않는다.
+func FetchEscalators(hc *http.Client, base, key string) ([]json.RawMessage, error) {
+	var out []json.RawMessage
+	for start := 1; ; start += pageSize {
+		u := fmt.Sprintf("%s/%s/json/%s/%d/%d/", base, url.PathEscape(key), EscalatorService, start, start+pageSize-1)
+		resp, err := hc.Get(u)
+		if err != nil {
+			var ue *url.Error
+			if errors.As(err, &ue) {
+				err = ue.Err
+			}
+			return nil, fmt.Errorf("에스컬레이터 API %d행부터: %w", start, err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("에스컬레이터 API %d행부터: %w", start, err)
+		}
+		var p struct {
+			Body struct {
+				Result struct {
+					Code    string `json:"CODE"`
+					Message string `json:"MESSAGE"`
+				} `json:"RESULT"`
+				Row []json.RawMessage `json:"row"`
+			} `json:"tbTrfcEscalInstlPrst"`
+		}
+		if err := json.Unmarshal(body, &p); err != nil {
+			return nil, fmt.Errorf("에스컬레이터 API %d행부터: HTTP %d, JSON 아님: %.120s", start, resp.StatusCode, body)
+		}
+		if c := p.Body.Result.Code; c != "" && c != "INFO-000" {
+			return nil, fmt.Errorf("에스컬레이터 API %d행부터: %s %s", start, c, p.Body.Result.Message)
+		}
+		out = append(out, p.Body.Row...)
+		if len(p.Body.Row) < pageSize {
+			return out, nil
+		}
+	}
+}
+
 // Fetch 는 전체 행을 API 응답 그대로 모아 돌려준다. 키는 요청 URL 에만 들어가므로 오류에는 URL 을 싣지 않는다.
 func Fetch(hc *http.Client, base, key string) ([]json.RawMessage, error) {
 	var out []json.RawMessage

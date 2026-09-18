@@ -21,7 +21,7 @@ func TestPlanAnnotatesFastExits(t *testing.T) {
 	ix := fastexit.NewIndex([]fastexit.Row{
 		{Line: "2호선", Station: "사당", Side: "상행", Toward: "방배", Door: "3-3", Facility: "계단"},
 		{Line: "2호선", Station: "사당", Side: "하행", Toward: "낙성대", Door: "5-2", Facility: "계단"},
-	})
+	}, nil)
 	p := &Planner{OTP: f, FastExits: ix}
 	its, err := p.Plan(context.Background(), PlanRequest{Origin: seoulStn, Destination: gangnam})
 	if err != nil {

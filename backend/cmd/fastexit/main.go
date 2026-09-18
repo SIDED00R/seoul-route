@@ -41,13 +41,30 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	if err := writeJSON(cfg.FastExitJSON, rows); err != nil {
+		return err
+	}
+	fmt.Printf("빠른하차 %d행 → %s\n", len(rows), cfg.FastExitJSON)
+	if cfg.SeoulOpenAPIKey == "" {
+		fmt.Println("경고: SEOUL_OPENAPI_KEY 없음 — 에스컬레이터 운행방향은 받지 못했다(계단만 표시된다)")
+		return nil
+	}
+	esc, err := fastexit.FetchEscalators(&http.Client{Timeout: 60 * time.Second},
+		fastexit.EscalatorAPIURL, cfg.SeoulOpenAPIKey)
+	if err != nil {
+		return err
+	}
+	if err := writeJSON(cfg.EscalatorJSON, esc); err != nil {
+		return err
+	}
+	fmt.Printf("에스컬레이터 %d행 → %s\n", len(esc), cfg.EscalatorJSON)
+	return nil
+}
+
+func writeJSON(path string, rows []json.RawMessage) error {
 	b, err := json.Marshal(rows)
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(cfg.FastExitJSON, b, 0o644); err != nil {
-		return err
-	}
-	fmt.Printf("빠른하차 %d행 → %s\n", len(rows), cfg.FastExitJSON)
-	return nil
+	return os.WriteFile(path, b, 0o644)
 }

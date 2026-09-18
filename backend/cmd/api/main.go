@@ -98,7 +98,7 @@ func main() {
 		log.Info("route colors loaded", "routes", len(st))
 	}
 	// 지하철 하차역의 설비 앞 칸(cmd/fastexit 이 받아 둔 파일). 없으면 표시만 빠진다.
-	if fx, err := fastexit.Load(cfg.FastExitJSON); err != nil {
+	if fx, err := fastexit.Load(cfg.FastExitJSON, cfg.EscalatorJSON); err != nil {
 		log.Warn("fast exit disabled", "path", cfg.FastExitJSON, "err", err)
 	} else {
 		planner.FastExits = fx
