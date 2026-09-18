@@ -90,6 +90,7 @@ API 키에 `$`가 들어가면 Docker Compose가 변수로 해석하지 않도�
 python otp/extract_seoul.py
 python otp/extract_entrances.py
 python otp/extract_crossings.py
+python otp/extract_rail.py
 python otp/fetch_metro_timetable.py
 python otp/fetch_kric_timetable.py
 
@@ -208,7 +209,7 @@ flutter test
 - 앱은 현재 로컬 개발을 위해 평문 HTTP를 허용합니다. 공개 배포 전에는 TLS와 Android network security 설정을 적용해야 합니다.
 - 버스 GTFS는 평균 배차와 구간 속도를 기반으로 한 근사이며 실제 운행 시각표가 아닙니다.
 - 서해선 일부 연장 구간과 GTX-A는 요일별 원천 시간표가 없어 파일럿 데이터가 남아 있습니다.
-- 생성 GTFS에 `shapes.txt`가 없어 버스·지하철 폴리라인은 정류장 사이 직선입니다.
+- 경로선(`shapes.txt`)은 버스는 노선 경로 API, 도시철도는 OSM 선로로 만듭니다. 경로가 정류장과 맞지 않는 버스 방향과 서울 bbox 밖 도시철도 구간은 정류장 사이 직선입니다.
 
 ## 문서
 
