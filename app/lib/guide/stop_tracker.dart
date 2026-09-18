@@ -8,9 +8,10 @@ import 'geo.dart';
 /// 투영해 지나온 정차를 빼고, 지하라 위치가 멈춘 구간에서는 시간표(정차별 출발 기준 초)로 센다.
 /// 한 번 줄어든 값은 다시 늘지 않는다 — 튀는 표본으로 "다음 역" 안내가 두 번 나가지 않게.
 class StopTracker {
-  StopTracker(Leg leg, List<LatLng> points)
+  /// shift 는 계획보다 밀린 시간(LegTracker.shift) — 다음 차를 탔으면 정차 시각도 그만큼 늦다.
+  StopTracker(Leg leg, List<LatLng> points, {Duration shift = Duration.zero})
       : stops = leg.stops,
-        _legStart = DateTime.tryParse(leg.start),
+        _legStart = DateTime.tryParse(leg.start)?.add(shift),
         _alongStop = [
           for (final s in leg.stops) projectOnPolyline(s.lat, s.lon, points).alongM,
         ],

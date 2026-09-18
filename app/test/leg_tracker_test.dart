@@ -7,7 +7,14 @@ import 'package:seoul_route/util/polyline.dart';
 
 import 'support/polyline_encode.dart';
 
-Leg leg(String mode, double toLat, double toLon, {bool rented = false, String polyline = ''}) => Leg(
+Leg leg(String mode, double toLat, double toLon,
+        {bool rented = false,
+        String polyline = '',
+        String start = '',
+        String end = '',
+        bool inStation = false,
+        List<String> nextDepartures = const []}) =>
+    Leg(
       mode: mode,
       durationSec: 60,
       distanceM: 100,
@@ -21,8 +28,10 @@ Leg leg(String mode, double toLat, double toLon, {bool rented = false, String po
       rentedBike: rented,
       transitLeg: mode == 'BUS' || mode == 'SUBWAY',
       polyline: polyline,
-      start: '',
-      end: '',
+      start: start,
+      end: end,
+      inStation: inStation,
+      nextDepartures: nextDepartures,
     );
 
 void main() {
@@ -138,5 +147,146 @@ void main() {
       }
       expect(parallel.index, 0);
     });
+  });
+
+  group('지하에서는 시간표로 구간을 넘긴다(위치가 잡히지 않는다)', () {
+    // 09:00 도보 → 09:05~09:20 2호선 → 09:20~09:23 역 안 환승 통로 → 09:25~09:28 4호선 → 09:28~ 도보
+    DateTime at(int h, int m, [int s = 0]) => DateTime(2026, 9, 18, h, m, s);
+    String ts(int h, int m) => at(h, m).toIso8601String();
+    List<Leg> ride() => [
+          leg('WALK', 37.501, 127.0, start: ts(9, 0), end: ts(9, 5)),
+          leg('SUBWAY', 37.52, 127.0, start: ts(9, 5), end: ts(9, 20), nextDepartures: [ts(9, 9), ts(9, 13)]),
+          leg('WALK', 37.5201, 127.0, start: ts(9, 20), end: ts(9, 23), inStation: true),
+          leg('SUBWAY', 37.53, 127.0, start: ts(9, 25), end: ts(9, 28)),
+          leg('WALK', 37.531, 127.0, start: ts(9, 28), end: ts(9, 33)),
+        ];
+
+    test('위치가 끊긴 채 도착 시각이 지나면 다음 구간으로 넘어간다', () {
+      final t = LegTracker(ride(), now: at(9, 0));
+      t.next(now: at(9, 4)); // 계획보다 일찍 승강장에 옴 → 계획한 09:05 차를 탄다
+      expect(t.shift, Duration.zero);
+      expect(t.tick(at(9, 19, 59)), isFalse);
+      expect(t.tick(at(9, 20)), isTrue); // 환승 통로
+      expect(t.index, 2);
+      expect(t.tick(at(9, 23)), isTrue); // 4호선
+      expect(t.index, 3);
+      expect(t.tick(at(9, 27)), isFalse);
+      expect(t.tick(at(9, 28)), isTrue);
+      expect(t.index, 4);
+      expect(t.tick(at(10, 0)), isFalse); // 마지막 구간에 머문다
+    });
+
+    test('정확도가 나쁜 표본만 와도 같은 판정을 한다', () {
+      final t = LegTracker(ride(), now: at(9, 0));
+      t.next(now: at(9, 4));
+      expect(t.update(37.5, 127.0, accuracyM: 90, now: at(9, 19)), isFalse);
+      expect(t.update(37.5, 127.0, accuracyM: 90, now: at(9, 20, 5)), isTrue);
+      expect(t.index, 2);
+    });
+
+    test('믿을 만한 위치가 방금까지 있었으면 시간표로 넘기지 않는다(지상 구간)', () {
+      final t = LegTracker(ride(), now: at(9, 0));
+      t.next(now: at(9, 4));
+      // 끝점에서도 다음 경로선에서도 먼 곳의 좋은 표본
+      expect(t.update(37.51, 127.01, accuracyM: 8, now: at(9, 20, 5)), isFalse);
+      expect(t.tick(at(9, 20, 10)), isFalse);
+      expect(t.tick(at(9, 20, 30)), isTrue); // 좋은 위치가 20초 넘게 끊기면 지하로 본다
+    });
+
+    test('도보·자전거 구간은 시간이 지나도 시간표로 넘기지 않는다', () {
+      final t = LegTracker(ride(), now: at(9, 0));
+      expect(t.tick(at(9, 30)), isFalse);
+      expect(t.index, 0);
+    });
+
+    test('승강장에 늦게 닿으면(자동 넘김) 다음 차 시각만큼 뒤 구간을 민다', () {
+      final t = LegTracker(ride(), now: at(9, 0));
+      expect(t.update(37.501, 127.0, accuracyM: 8, now: at(9, 7)), isTrue); // 09:05 차를 놓침 → 09:09 차
+      expect(t.shift, const Duration(minutes: 4));
+      expect(t.tick(at(9, 20, 30)), isFalse);
+      expect(t.tick(at(9, 24)), isTrue); // 09:20 + 4분
+      expect(t.index, 2);
+    });
+
+    test('다음 차 시각을 모르면 늦은 만큼 민다', () {
+      final legs = ride()..[1] = leg('SUBWAY', 37.52, 127.0, start: ts(9, 5), end: ts(9, 20));
+      final t = LegTracker(legs, now: at(9, 0));
+      expect(t.update(37.501, 127.0, accuracyM: 8, now: at(9, 8)), isTrue);
+      expect(t.shift, const Duration(minutes: 3));
+    });
+
+    test('안내를 늦게 시작하면 첫 구간부터 그만큼 민다', () {
+      expect(LegTracker(ride(), now: at(9, 3)).shift, const Duration(minutes: 3));
+      expect(LegTracker(ride(), now: at(8, 58)).shift, Duration.zero);
+    });
+
+    test('손으로 넘기면 이미 탄 것으로 보고 가장 최근에 떠난 차를 기준으로 한다', () {
+      final onPlanned = LegTracker(ride(), now: at(9, 0));
+      onPlanned.next(now: at(9, 8)); // 계획한 09:05 차에 탄 채 화면이 늦어 누름
+      expect(onPlanned.shift, Duration.zero);
+      final onLater = LegTracker(ride(), now: at(9, 0));
+      onLater.next(now: at(9, 10)); // 09:09 차
+      expect(onLater.shift, const Duration(minutes: 4));
+    });
+
+    test('손으로 되돌린 구간은 시간표 인계가 곧바로 다시 넘기지 않는다', () {
+      final t = LegTracker(ride(), now: at(9, 0));
+      t.next(now: at(9, 4));
+      expect(t.tick(at(9, 20)), isTrue); // 열차가 늦었는데 시간표로 환승 통로까지 넘어감
+      t.prev(now: at(9, 21));
+      expect(t.index, 1);
+      expect(t.tick(at(9, 21, 10)), isFalse);
+      expect(t.tick(at(9, 27)), isFalse); // 가장 최근 차(09:13) 기준 예상 도착 09:28
+      expect(t.tick(at(9, 28)), isTrue);
+    });
+
+    test('손으로 되돌렸을 때 예상 종료가 이미 지났으면 늦은 만큼 밀어 곧바로 다시 넘기지 않는다', () {
+      final t = LegTracker(ride(), now: at(9, 0));
+      t.next(now: at(9, 4));
+      expect(t.tick(at(9, 20)), isTrue);
+      t.prev(now: at(9, 29)); // 가장 최근 차(09:13) 기준 예상 도착 09:28 이 이미 지났다
+      expect(t.shift, const Duration(minutes: 24));
+      expect(t.tick(at(9, 29, 5)), isFalse);
+      expect(t.index, 1);
+    });
+
+    test('버스 구간도 위치가 끊기면 시간표로 넘긴다', () {
+      final t = LegTracker([
+        leg('BUS', 37.52, 127.0, start: ts(9, 5), end: ts(9, 20)),
+        leg('WALK', 37.521, 127.0, start: ts(9, 20), end: ts(9, 25)),
+      ], now: at(9, 4));
+      expect(t.tick(at(9, 19)), isFalse);
+      expect(t.tick(at(9, 20)), isTrue);
+    });
+  });
+
+  test('지상에 나와 뒤쪽 도보 구간 경로선 위에 있으면 그 구간으로 건너뛴다', () {
+    // 지하에서 구간이 밀려 첫 지하철에 머문 채, 마지막 도보(37.53 에서 북쪽으로) 경로선 위 67m 지점에 나타난다.
+    final last = encodePolyline([const LatLng(37.53, 127.0), const LatLng(37.532, 127.0)]);
+    final t = LegTracker([
+      leg('SUBWAY', 37.52, 127.0),
+      leg('WALK', 37.5201, 127.0, inStation: true),
+      leg('SUBWAY', 37.53, 127.0),
+      leg('WALK', 37.532, 127.0, polyline: last),
+    ]);
+    expect(t.update(37.5306, 127.0, accuracyM: 8), isFalse);
+    expect(t.update(37.5306, 127.0, accuracyM: 8), isTrue);
+    expect(t.index, 3);
+  });
+
+  test('지상 도보 중에는 두 구간 뒤 도보 경로선 위에 있어도 건너뛰지 않는다', () {
+    // 첫 도보 경로선에서 동쪽으로 약 150m 떨어진 나란한 길이 마지막 도보 구간이다.
+    const eastLon = 127.0017;
+    final t = LegTracker([
+      leg('WALK', 37.502, 127.0,
+          polyline: encodePolyline([const LatLng(37.5, 127.0), const LatLng(37.502, 127.0)])),
+      leg('SUBWAY', 37.52, 127.0),
+      leg('WALK', 37.502, eastLon,
+          polyline: encodePolyline([const LatLng(37.5, eastLon), const LatLng(37.502, eastLon)])),
+    ]);
+    for (var i = 0; i < 3; i++) {
+      t.update(37.5006, eastLon, accuracyM: 8);
+    }
+    expect(t.index, 0);
   });
 }

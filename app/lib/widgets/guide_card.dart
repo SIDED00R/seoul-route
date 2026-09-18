@@ -14,7 +14,7 @@ class GuideCard extends StatelessWidget {
 
   final IconData icon;
   final Color color;
-  final DateTime? eta; // 계획 기준 도착 시각. 없으면 남은 시간만 보여 준다
+  final DateTime? eta; // 도착 예정 시각(밀린 시간 반영). 없으면 남은 시간만 보여 준다
   final int remainMin;
   final String now;
   final String next;

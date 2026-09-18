@@ -12,6 +12,7 @@ import '../guide/background_location.dart';
 import '../guide/end_confirm.dart';
 import '../guide/instruction.dart';
 import '../guide/leg_tracker.dart';
+import '../guide/status_notification.dart';
 import '../guide/step_tracker.dart';
 import '../guide/stop_tracker.dart';
 import '../guide/trace_uploader.dart';
@@ -29,13 +30,22 @@ import '../widgets/mode_icon.dart';
 /// 서버 trip 에 샘플을 올린다. 위치는 포그라운드 서비스(상단 알림)로 받아 화면이 꺼지거나 다른 앱으로 넘어가도 이어진다.
 /// "안내 종료" 를 누르면 남은 샘플을 보내고 trip 을 닫는다 — 서버가 그때 이번 안내의 걷기·자전거 속도를 내 프로파일에 반영한다.
 class GuideScreen extends StatefulWidget {
-  const GuideScreen({super.key, required this.api, required this.request, required this.itinerary, this.speak});
+  const GuideScreen({
+    super.key,
+    required this.api,
+    required this.request,
+    required this.itinerary,
+    this.speak,
+    this.clock,
+  });
 
   final ApiClient api;
   final PlanRequest request;
   final Itinerary itinerary;
   // 음성 안내 발화. 기본은 폰 내장 음성(TtsSpeaker)이고 테스트에서 바꿔 끼운다.
   final Speak? speak;
+  // 현재 시각. 시간표로 구간을 넘기는 판정에 쓰며 테스트에서 바꿔 끼운다.
+  final DateTime Function()? clock;
 
   @override
   State<GuideScreen> createState() => _GuideScreenState();
@@ -48,9 +58,14 @@ class _GuideScreenState extends State<GuideScreen> {
   // 따라가기 모드에서 지도를 이 배율 밑으로는 줄이지 않는다(도보 안내에서 모퉁이가 보이는 정도).
   static const followZoom = 17.0;
 
-  late final LegTracker _tracker = LegTracker(widget.itinerary.legs);
+  // 위치가 아예 끊기는 지하에서도 시간표로 구간을 넘기려고 이 간격으로 한 번씩 본다.
+  static const tickInterval = Duration(seconds: 10);
+
+  late final LegTracker _tracker = LegTracker(widget.itinerary.legs, now: _now());
   late StepTracker _steps = _stepTrackerFor(_tracker.current);
-  late StopTracker _stops = StopTracker(_tracker.current, _tracker.currentPoints);
+  late StopTracker _stops = StopTracker(_tracker.current, _tracker.currentPoints, shift: _tracker.shift);
+  final GuideStatusNotification _statusNotification = GuideStatusNotification();
+  Timer? _ticker;
   late final DateTime? _eta = DateTime.tryParse(widget.itinerary.end);
   final ActivityClassifier _activity = ActivityClassifier();
   final MapController _map = MapController();
@@ -120,6 +135,7 @@ class _GuideScreenState extends State<GuideScreen> {
       return;
     }
     setState(() => _status = '안내 중');
+    _ticker = Timer.periodic(tickInterval, (_) => _onTick());
     await _startVoice();
     await _startActivity();
   }
@@ -140,7 +156,7 @@ class _GuideScreenState extends State<GuideScreen> {
       _voice.speak = _speaker!.speak;
       _voice.enabled = true;
     }
-    await _voice.say(_instr.utterance);
+    await _voice.say(_instr.utterance, cueKey: _instr.cueKey);
   }
 
   /// 활동 인식은 있으면 좋은 것이라 권한이 없어도 안내는 계속한다(샘플의 activity 만 빠진다).
@@ -165,19 +181,21 @@ class _GuideScreenState extends State<GuideScreen> {
     }
   }
 
+  DateTime _now() => (widget.clock ?? DateTime.now)();
+
   void _onPosition(Position p) {
     if (!mounted || _ending) return;
-    _activity.settle(DateTime.now());
+    final now = _now();
+    _activity.settle(now);
     final here = LatLng(p.latitude, p.longitude);
-    final changed = _tracker.update(p.latitude, p.longitude, accuracyM: p.accuracy);
+    final changed = _tracker.update(p.latitude, p.longitude, accuracyM: p.accuracy, now: now);
     if (changed) {
       _enterLeg();
     } else {
       _steps.update(p.latitude, p.longitude, accuracyM: p.accuracy);
     }
-    _remainingStops = _tracker.current.transitLeg
-        ? _stops.remaining(p.latitude, p.longitude, p.accuracy, DateTime.now())
-        : 0;
+    _remainingStops =
+        _tracker.current.transitLeg ? _stops.remaining(p.latitude, p.longitude, p.accuracy, now) : 0;
     _uploader?.add(TraceSample(
       ts: p.timestamp,
       lat: p.latitude,
@@ -194,21 +212,43 @@ class _GuideScreenState extends State<GuideScreen> {
       _samples++;
       _instr = _buildInstruction(here: here);
     });
-    _voice.say(_instr.utterance);
+    _announce();
     if (_follow && _mapReady) {
       _map.move(here, _map.camera.zoom < followZoom ? followZoom : _map.camera.zoom);
     }
+  }
+
+  /// 위치가 끊긴 동안에도 시간표로 구간·남은 정거장을 따라간다(지하).
+  void _onTick() {
+    if (!mounted || _ending) return;
+    final now = _now();
+    if (_tracker.tick(now)) _enterLeg();
+    if (_tracker.current.transitLeg) _remainingStops = _stops.remaining(null, null, 0, now);
+    setState(() => _instr = _buildInstruction());
+    _announce();
   }
 
   /// 구간이 바뀌었을 때(자동·버튼 공통) 단계·정차 추적을 새 구간으로 갈아 끼우고 문구를 다시 만든다.
   void _enterLeg() {
     final leg = _tracker.current;
     _steps = _stepTrackerFor(leg);
-    _stops = StopTracker(leg, _tracker.currentPoints);
+    _stops = StopTracker(leg, _tracker.currentPoints, shift: _tracker.shift);
     _remainingStops = leg.transitLeg ? leg.stops.length + 1 : 0;
     _instr = _buildInstruction();
-    _voice.say(_instr.utterance);
+    _announce();
   }
+
+  /// 지금 안내를 읽고(같은 안내 시점은 한 번만) 알림창 내용을 맞춘다.
+  void _announce() {
+    _voice.say(_instr.utterance, cueKey: _instr.cueKey);
+    // 알림창은 접힌 상태에서 제목 한 줄만 보이므로 남은 시간을 제목 앞에 둔다.
+    final at = _etaNow;
+    final eta = at == null ? '' : '도착 예정 ${GuideCard.hhmm(at.toLocal())} · ';
+    _statusNotification.show('남은 $_remainMin분 · ${_instr.now}', '$eta다음: ${_instr.next}');
+  }
+
+  /// 도착 예정 시각. 놓친 열차만큼 밀린 시간(LegTracker.shift)을 더한다.
+  DateTime? get _etaNow => _eta?.add(_tracker.shift);
 
   StepTracker _stepTrackerFor(Leg leg) =>
       StepTracker(leg.steps, endLat: leg.toLat, endLon: leg.toLon);
@@ -226,18 +266,20 @@ class _GuideScreenState extends State<GuideScreen> {
     );
   }
 
-  /// 남은 시간(분). 계획 기준 도착 시각까지 남은 값이라 안내를 늦게 시작하면 낙관적이다.
+  /// 남은 시간(분). 도착 예정 시각까지 남은 값이다.
   int get _remainMin {
-    final at = _eta;
+    final at = _etaNow;
     if (at == null) return 0;
-    final left = at.difference(DateTime.now()).inSeconds;
+    final left = at.difference(_now()).inSeconds;
     return left <= 0 ? 0 : (left / 60).round();
   }
 
   Future<void> _end() async {
     final up = _uploader;
     _voice.enabled = false;
+    _ticker?.cancel();
     await _speaker?.stop();
+    await _statusNotification.cancel();
     setState(() {
       _ending = true;
       _status = '샘플 전송 중…';
@@ -322,7 +364,9 @@ class _GuideScreenState extends State<GuideScreen> {
     _activities?.cancel();
     _uploader?.dispose();
     _voice.enabled = false;
+    _ticker?.cancel();
     _speaker?.stop();
+    _statusNotification.cancel();
     _map.dispose();
     super.dispose();
   }
@@ -363,7 +407,7 @@ class _GuideScreenState extends State<GuideScreen> {
           GuideCard(
             icon: modeIcon(leg),
             color: modeColor(leg),
-            eta: _eta,
+            eta: _etaNow,
             remainMin: _remainMin,
             now: _instr.now,
             next: _instr.next,
@@ -445,7 +489,8 @@ class _GuideScreenState extends State<GuideScreen> {
                     children: [
                       OutlinedButton(
                         onPressed: _tracker.index > 0 && !_ending ? () => setState(() {
-                              _tracker.prev();
+                              _tracker.prev(now: _now());
+                              _voice.forget('L${_tracker.index}:');
                               _enterLeg();
                             }) : null,
                         child: const Text('이전 구간'),
@@ -453,7 +498,8 @@ class _GuideScreenState extends State<GuideScreen> {
                       const SizedBox(width: 8),
                       OutlinedButton(
                         onPressed: !_tracker.isLast && !_ending ? () => setState(() {
-                              _tracker.next();
+                              _tracker.next(now: _now());
+                              _voice.forget('L${_tracker.index}:');
                               _enterLeg();
                             }) : null,
                         child: const Text('다음 구간'),
