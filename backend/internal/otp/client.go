@@ -70,8 +70,11 @@ type Leg struct {
 	NextStop   string  `json:"next_stop,omitempty"`    // 탑승 후 첫 정차역 이름(지하철 방면 판별용)
 	InStation  bool    `json:"in_station,omitempty"`   // 양끝이 같은 부모역의 정류장이고 역 출입구를 지나지 않는 도보(역 안 환승 통로)
 	RentedBike bool    `json:"rented_bike,omitempty"`
-	TransitLeg bool    `json:"transit_leg"`
-	Polyline   string  `json:"polyline,omitempty"` // Google encoded polyline
+	// 따릉이 대여 구간에서 빌릴 대여소의 남은 자전거 대수. 대여소를 못 찾거나 실시간 값이 오래됐으면 안 싣는다.
+	BikesAvailable int    `json:"bikes_available,omitempty"`
+	HasBikeCount   bool   `json:"has_bike_count,omitempty"` // 0대와 "모름" 을 구분한다
+	TransitLeg     bool   `json:"transit_leg"`
+	Polyline       string `json:"polyline,omitempty"` // Google encoded polyline
 	// 앞뒤 차: 같은 탑승·하차 정류장의 이전/다음 출발(RFC3339). 시간표 기반(지하철)에서만 채운다 — 배차간격 기반
 	// 버스는 OTP 가 막차 trip 만 돌려줘(실측) 비워 두고 HeadwaySec 을 쓴다. leg 출발 ±3시간 밖과, 소요시간이
 	// 현재 leg 의 0.5~2배 밖인 것(순환선 반대 방향 열차)은 버린다.
@@ -86,8 +89,8 @@ type Leg struct {
 	// 노선 색(생성 GTFS routes.txt, # 없는 6자리 16진수). 앱이 구간 칩·경로선을 이 색으로 칠한다(route/plan.go 가 붙인다).
 	Color     string `json:"color,omitempty"`
 	TextColor string `json:"text_color,omitempty"`
-	Steps        []Step  `json:"steps,omitempty"`    // 도보·자전거 leg 의 안내 단계
-	Stops        []Stop  `json:"stops,omitempty"`    // 대중교통 leg 의 중간 정차(탑승·하차 제외)
+	Steps     []Step `json:"steps,omitempty"` // 도보·자전거 leg 의 안내 단계
+	Stops     []Stop `json:"stops,omitempty"` // 대중교통 leg 의 중간 정차(탑승·하차 제외)
 }
 
 // Step 은 도보·자전거 leg 의 안내 단계. Dir 은 이 단계 시작점에서의 회전(OTP relativeDirection),

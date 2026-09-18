@@ -390,7 +390,10 @@ class _GuideScreenState extends State<GuideScreen> {
     }
     final here = _here;
     final leg = _tracker.current;
-    final remainM = here == null ? null : LegTracker.distanceM(here.latitude, here.longitude, leg.toLat, leg.toLon);
+    // 끝까지 남은 거리는 걷거나 타고 가는 구간에서만 쓸모가 있다.
+    final remainM = here == null || !leg.selfPowered
+        ? null
+        : LegTracker.distanceM(here.latitude, here.longitude, leg.toLat, leg.toLon);
     final up = _uploader;
     final mismatch = _activityOn && ActivityClassifier.mismatch(_tracker.mode, _activity.current);
     // trip 을 발급받은 뒤에는 뒤로가기(시스템 제스처·앱바 화살표)로 바로 나가지 않고 종료할지 묻는다.
@@ -483,7 +486,8 @@ class _GuideScreenState extends State<GuideScreen> {
                     title: Text('${leg.label} · ${(leg.durationSec / 60).round()}분'),
                     subtitle: Text('${legEndpointName(widget.request, leg.fromName, leg.fromLat, leg.fromLon)} → '
                         '${legEndpointName(widget.request, leg.toName, leg.toLat, leg.toLon)}'
-                        '${remainM == null ? '' : ' · 끝까지 ${remainM.round()}m'}'),
+                        '${remainM == null ? '' : ' · 끝까지 ${remainM.round()}m'}'
+                        '${leg.bikesLabel == null ? '' : '\n${leg.bikesLabel}'}'),
                   ),
                   Row(
                     children: [

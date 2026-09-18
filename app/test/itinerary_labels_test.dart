@@ -40,6 +40,22 @@ Map<String, dynamic> _coloredLeg({String color = '', String textColor = ''}) => 
     };
 
 void main() {
+  test('따릉이 남은 대수: 0대와 "모름" 을 구분한다', () {
+    Leg bike(Map<String, dynamic> extra) => Leg.fromJson({..._coloredLeg(), 'mode': 'BICYCLE', 'rented_bike': true,
+          'transit_leg': false, ...extra});
+    expect(bike({'has_bike_count': true, 'bikes_available': 3}).bikesLabel, '남은 자전거 3대');
+    expect(bike({'has_bike_count': true}).bikesLabel, '남은 자전거 0대'); // 빈 대여소
+    expect(bike({}).bikesLabel, isNull); // 실시간 값을 모른다
+    expect(bike({'bikes_available': 5}).bikesLabel, isNull); // has_bike_count 없이 온 값은 안 믿는다
+  });
+
+  test('거리는 내 발로 움직이는 구간에서만 쓴다', () {
+    expect(Leg.fromJson(_coloredLeg()).selfPowered, isFalse); // 지하철
+    expect(Leg.fromJson({..._coloredLeg(), 'mode': 'BUS'}).selfPowered, isFalse);
+    expect(Leg.fromJson({..._coloredLeg(), 'mode': 'WALK'}).selfPowered, isTrue);
+    expect(Leg.fromJson({..._coloredLeg(), 'mode': 'BICYCLE'}).selfPowered, isTrue);
+  });
+
   test('색 문자열 해석: 6자리 16진수만 받는다', () {
     expect(parseHexColor('00A84D'), const Color(0xFF00A84D));
     expect(parseHexColor(''), isNull);

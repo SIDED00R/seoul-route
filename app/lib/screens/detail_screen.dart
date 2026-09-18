@@ -107,13 +107,16 @@ class DetailScreen extends StatelessWidget {
                 return ListTile(
                   dense: true,
                   leading: Icon(modeIcon(leg), color: modeColor(leg)),
-                  title: Text('${leg.label} · ${(leg.durationSec / 60).round()}분 · '
-                      '${(leg.distanceM / 1000).toStringAsFixed(1)}km'),
+                  title: Text('${leg.label} · ${(leg.durationSec / 60).round()}분'
+                      '${leg.selfPowered ? ' · ${(leg.distanceM / 1000).toStringAsFixed(1)}km' : ''}'),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('${_name(leg.fromName, leg.fromLat, leg.fromLon)} → '
                           '${_name(leg.toName, leg.toLat, leg.toLon)}'),
+                      // 따릉이: 빌릴 대여소에 지금 남아 있는 자전거
+                      if (leg.bikesLabel != null)
+                        Text(leg.bikesLabel!, style: TextStyle(color: Colors.green.shade800)),
                       // 앞뒤 차·배차: 실시간 다음 차 / 시간표 앞·뒤 열차 / 배차간격
                       if (leg.scheduleLabel != null)
                         Text(leg.scheduleLabel!, style: TextStyle(color: Colors.teal.shade700)),
@@ -122,7 +125,7 @@ class DetailScreen extends StatelessWidget {
                         Text(leg.crossingLabel!, style: TextStyle(color: Colors.orange.shade800)),
                     ],
                   ),
-                  isThreeLine: leg.scheduleLabel != null || leg.crossingLabel != null,
+                  isThreeLine: leg.scheduleLabel != null || leg.crossingLabel != null || leg.bikesLabel != null,
                 );
               },
             ),
