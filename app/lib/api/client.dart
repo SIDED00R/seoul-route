@@ -67,6 +67,15 @@ class ApiClient {
     return _decode(r);
   }
 
+  /// 좌표를 건물·주소 이름으로 바꾼다(GET /places/reverse). 이름을 못 찾으면 빈 문자열이 온다.
+  Future<({String name, String address})> reversePlace(double lat, double lon) async {
+    final uri = Uri.parse('$baseUrl/places/reverse')
+        .replace(queryParameters: {'lat': '$lat', 'lon': '$lon'});
+    final r = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
+    final j = _decode(r);
+    return (name: (j['name'] as String?) ?? '', address: (j['address'] as String?) ?? '');
+  }
+
   Future<List<Place>> searchPlaces(String q) async {
     final uri = Uri.parse('$baseUrl/places/search').replace(queryParameters: {'q': q});
     final r = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 15));

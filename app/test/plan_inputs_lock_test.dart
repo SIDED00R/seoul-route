@@ -38,7 +38,7 @@ void main() {
   testWidgets('경로 요청 중에는 도착지·경유지 추가·삭제·구간 수단을 바꿀 수 없고, 끝나면 다시 된다', (tester) async {
     final reply = Completer<http.Response>();
     await http.runWithClient(() async {
-      await tester.pumpWidget(MaterialApp(home: PlanScreen(settings: _settings, locate: () async => _a)));
+      await tester.pumpWidget(MaterialApp(home: PlanScreen(settings: _settings, locate: (_) async => _a)));
       await _pick(tester, find.text('출발지 선택'), _a);
       await _pick(tester, find.text('도착지 선택'), _b);
       await _pick(tester, find.text('경유지 추가'), _c);

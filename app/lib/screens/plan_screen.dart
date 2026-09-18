@@ -22,7 +22,7 @@ class PlanScreen extends StatefulWidget {
   final SettingsStore settingsStore;
 
   /// 현재 위치를 Place 로 받는다. 실패하면 LocationException. 테스트가 가짜로 바꾼다.
-  final Future<Place> Function() locate;
+  final Future<Place> Function(ApiClient api) locate;
 
   @override
   State<PlanScreen> createState() => _PlanScreenState();
@@ -86,7 +86,7 @@ class _PlanScreenState extends State<PlanScreen> {
       _error = '';
     });
     try {
-      final p = await widget.locate();
+      final p = await widget.locate(_api);
       if (mounted) setState(() => _origin = p);
     } on LocationException catch (e) {
       if (mounted) setState(() => _error = e.message);
