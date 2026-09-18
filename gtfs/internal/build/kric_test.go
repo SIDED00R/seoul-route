@@ -82,7 +82,8 @@ func TestKricRows(t *testing.T) {
 		}
 		return strings.Join(s, "\n")
 	}
-	if join(routes) != "K_KJ,A_KR,경의중앙선,경의중앙선,1\nK_WS,A_UI,우이신설,우이신설,1" {
+	// 노선 코드별 색과 글자색이 붙는다. 우이신설은 노선 WS·기관 UI 라 기관 코드로 색을 찾으면 어긋난다(이슈 #71).
+	if join(routes) != "K_KJ,A_KR,경의중앙선,경의중앙선,1,77C4A3,000000\nK_WS,A_UI,우이신설,우이신설,1,B0CE18,000000" {
 		t.Fatalf("routes=\n%s", join(routes))
 	}
 	if join(trips) != "K_KJ,WEEKDAY,K_KJ_WEEKDAY_K5003,파주(두원대학),0\nK_KJ,SATSUN,K_KJ_SATSUN_K5166,용산,1\n"+
@@ -159,8 +160,14 @@ func TestBuildReplacesPilotKricTrips(t *testing.T) {
 		t.Fatalf("파일럿 경의중앙 trip 은 빠지고 신분당선·시각표 trip 은 남아야: %v", tripIDs)
 	}
 	var ids []string
+	pilotColors := map[string]string{}
 	for _, r := range readTable(t, zr, "routes.txt")[1:] {
 		ids = append(ids, r[0]+"/"+r[1]+"/"+r[2])
+		pilotColors[r[0]] = r[5] + "/" + r[6]
+	}
+	// 시각표가 없어 파일럿으로 남는 노선도 코드로 색을 찾는다(이슈 #71)
+	if pilotColors["RR_ACC1_S-1-SB-1D"] != "D4003B/FFFFFF" {
+		t.Errorf("신분당선 파일럿 색=%q", pilotColors["RR_ACC1_S-1-SB-1D"])
 	}
 	all := strings.Join(ids, ",")
 	if strings.Contains(all, "RR_ACC1_S-1-KJ") || !strings.Contains(all, "K_KJ/A_KR/경의중앙선") ||

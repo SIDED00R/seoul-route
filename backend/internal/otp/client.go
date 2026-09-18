@@ -83,6 +83,9 @@ type Leg struct {
 	Crossings    int     `json:"crossings,omitempty"`
 	CrossingWait float64 `json:"crossing_wait_sec,omitempty"`
 	Headsign     string  `json:"headsign,omitempty"` // 탑승 차량이 정류장에 내거는 행선지(대중교통 leg)
+	// 노선 색(생성 GTFS routes.txt, # 없는 6자리 16진수). 앱이 구간 칩·경로선을 이 색으로 칠한다(route/plan.go 가 붙인다).
+	Color     string `json:"color,omitempty"`
+	TextColor string `json:"text_color,omitempty"`
 	Steps        []Step  `json:"steps,omitempty"`    // 도보·자전거 leg 의 안내 단계
 	Stops        []Stop  `json:"stops,omitempty"`    // 대중교통 leg 의 중간 정차(탑승·하차 제외)
 }
