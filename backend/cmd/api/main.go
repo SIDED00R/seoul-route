@@ -149,6 +149,7 @@ func main() {
 		poller := gbfs.NewPoller(cfg.SeoulOpenAPIKey, log)
 		go poller.Run(ctx)
 		srv.GBFS = &gbfs.Handler{Poller: poller, BaseURL: cfg.PublicURL + "/gbfs"}
+		planner.Bikes = poller // 따릉이 구간에 남은 대수를 붙인다
 	} else {
 		log.Warn("gbfs disabled", "reason", "SEOUL_OPENAPI_KEY 없음")
 	}

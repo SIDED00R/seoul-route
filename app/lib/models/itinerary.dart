@@ -27,6 +27,7 @@ class Leg {
     this.inStation = false,
     this.color = '',
     this.textColor = '',
+    this.bikesAvailable,
     this.headsign = '',
     this.steps = const [],
     this.stops = const [],
@@ -56,6 +57,7 @@ class Leg {
   final bool inStation; // 역 출입구를 지나지 않는 역 안 환승 통로 도보(지하라 위치가 잡히지 않는다)
   final String color; // 노선 색(GTFS route_color, # 없는 6자리 16진수). 없으면 수단별 기본 팔레트를 쓴다
   final String textColor; // 그 색 위에 얹을 글자색
+  final int? bikesAvailable; // 따릉이 대여 구간에서 빌릴 대여소의 남은 대수. 모르면 null(0대와 구분한다)
   final String headsign; // 탑승 차량의 행선지(대중교통)
   final List<WalkStep> steps; // 도보·자전거 안내 단계
   final List<TransitStop> stops; // 중간 정차(탑승·하차 제외)
@@ -87,6 +89,7 @@ class Leg {
         inStation: (j['in_station'] as bool?) ?? false,
         color: (j['color'] as String?) ?? '',
         textColor: (j['text_color'] as String?) ?? '',
+        bikesAvailable: (j['has_bike_count'] as bool?) ?? false ? (j['bikes_available'] as num?)?.toInt() ?? 0 : null,
         headsign: (j['headsign'] as String?) ?? '',
         steps: ((j['steps'] as List<dynamic>?) ?? const [])
             .map((e) => WalkStep.fromJson(e as Map<String, dynamic>))
@@ -99,6 +102,12 @@ class Leg {
   /// "횡단보도 3곳 · 신호 대기 약 2분". 신호 횡단보도가 없으면 null.
   String? get crossingLabel =>
       crossings == 0 ? null : '횡단보도 $crossings곳 · 신호 대기 약 ${(crossingWaitSec / 60).round()}분';
+
+  /// 내 발로 움직이는 구간(도보·자전거). 거리는 이때만 보여 준다 — 타고 가는 구간의 거리는 쓸 일이 없다.
+  bool get selfPowered => mode == 'WALK' || mode == 'BICYCLE';
+
+  /// "남은 자전거 3대". 실시간 대수를 모르면 null.
+  String? get bikesLabel => bikesAvailable == null ? null : '남은 자전거 $bikesAvailable대';
 
   /// 앞뒤 차 안내 한 줄. 실시간 > 시간표 앞뒤 차 > 배차간격 순으로 있는 것만 보여준다. 없으면 null.
   String? get scheduleLabel {
