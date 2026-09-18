@@ -10,45 +10,67 @@ import '../api/client.dart';
 import '../guide/activity_classifier.dart';
 import '../guide/background_location.dart';
 import '../guide/end_confirm.dart';
+import '../guide/instruction.dart';
 import '../guide/leg_tracker.dart';
+import '../guide/step_tracker.dart';
+import '../guide/stop_tracker.dart';
 import '../guide/trace_uploader.dart';
+import '../guide/tts_speaker.dart';
+import '../guide/voice_guide.dart';
 import '../models/itinerary.dart';
 import '../models/plan_request.dart';
 import '../models/trace_sample.dart';
+import '../settings/settings_store.dart';
 import '../util/leg_names.dart';
-import '../util/polyline.dart';
+import '../widgets/guide_card.dart';
 import '../widgets/mode_icon.dart';
 
-/// 안내 화면. 5초마다 위치를 받아 현재 구간을 넘기고 서버 trip 에 샘플을 올린다. 위치는 포그라운드 서비스(상단 알림)로
-/// 받아 화면이 꺼지거나 다른 앱으로 넘어가도 이어진다.
+/// 안내 화면. 위치를 받아 현재 구간·단계를 따라가며 상단 카드에 지금 할 일을 보여 주고(설정에 따라 읽어 주고),
+/// 서버 trip 에 샘플을 올린다. 위치는 포그라운드 서비스(상단 알림)로 받아 화면이 꺼지거나 다른 앱으로 넘어가도 이어진다.
 /// "안내 종료" 를 누르면 남은 샘플을 보내고 trip 을 닫는다 — 서버가 그때 이번 안내의 걷기·자전거 속도를 내 프로파일에 반영한다.
 class GuideScreen extends StatefulWidget {
-  const GuideScreen({super.key, required this.api, required this.request, required this.itinerary});
+  const GuideScreen({super.key, required this.api, required this.request, required this.itinerary, this.speak});
 
   final ApiClient api;
   final PlanRequest request;
   final Itinerary itinerary;
+  // 음성 안내 발화. 기본은 폰 내장 음성(TtsSpeaker)이고 테스트에서 바꿔 끼운다.
+  final Speak? speak;
 
   @override
   State<GuideScreen> createState() => _GuideScreenState();
 }
 
 class _GuideScreenState extends State<GuideScreen> {
-  // 5초 간격: 서버 speed 패키지의 연속 쌍 간격(2~30초) 안에서 배터리와 표본 수의 절충. 서버 상수를 바꾸면 같이 본다.
-  static const sampleInterval = Duration(seconds: 5);
+  // 위치 요청 간격 2초: 화면의 내 위치와 구간 넘김이 바로 따라오게. 서버로 올리는 표본은 TraceUploader 가
+  // minGap(5초)으로 솎는다 — 서버 speed 패키지의 표본 수 기준이 5초 간격을 전제한다.
+  static const sampleInterval = Duration(seconds: 2);
+  // 따라가기 모드에서 지도를 이 배율 밑으로는 줄이지 않는다(도보 안내에서 모퉁이가 보이는 정도).
+  static const followZoom = 17.0;
 
   late final LegTracker _tracker = LegTracker(widget.itinerary.legs);
+  late StepTracker _steps = _stepTrackerFor(_tracker.current);
+  late StopTracker _stops = StopTracker(_tracker.current, _tracker.currentPoints);
+  late final DateTime? _eta = DateTime.tryParse(widget.itinerary.end);
   final ActivityClassifier _activity = ActivityClassifier();
   final MapController _map = MapController();
+  final VoiceGuide _voice = VoiceGuide(enabled: false);
+  TtsSpeaker? _speaker;
   TraceUploader? _uploader;
   StreamSubscription<Position>? _positions;
   StreamSubscription<Activity>? _activities;
   bool _activityOn = false; // 활동 인식 권한을 받아 스트림을 켰는지. 아니면 샘플에 activity 를 싣지 않는다
+  (String, String)? _rawActivity; // 활동 인식 원시 판정·신뢰도(서버 진단용)
   LatLng? _here;
   double? _accuracyM;
   int _samples = 0;
+  // 첫 구간이 대중교통이면 첫 위치 표본 전에도 정거장 수를 세 두어야 한다(0 이면 곧바로 하차 안내가 나간다).
+  late int _remainingStops = _tracker.current.transitLeg ? _tracker.current.stops.length + 1 : 0;
   String _status = '준비 중…';
   bool _ending = false;
+  bool _follow = true; // 지도가 내 위치를 따라간다. 손으로 지도를 옮기면 꺼진다
+  bool _mapReady = false;
+  late Instruction _instr = _buildInstruction();
 
   @override
   void initState() {
@@ -98,7 +120,27 @@ class _GuideScreenState extends State<GuideScreen> {
       return;
     }
     setState(() => _status = '안내 중');
+    await _startVoice();
     await _startActivity();
+  }
+
+  /// 음성 안내 준비. 설정이 꺼져 있거나 폰에 쓸 수 있는 음성 엔진이 없으면 소리 없이 진행한다.
+  Future<void> _startVoice() async {
+    if (widget.speak != null) {
+      _voice.speak = widget.speak;
+      _voice.enabled = true;
+    } else {
+      if (!await SettingsStore.loadVoiceGuide()) return;
+      _speaker = await TtsSpeaker.create();
+      if (!mounted) return;
+      if (_speaker == null) {
+        setState(() => _status = '안내 중 · 음성 엔진 없음');
+        return;
+      }
+      _voice.speak = _speaker!.speak;
+      _voice.enabled = true;
+    }
+    await _voice.say(_instr.utterance);
   }
 
   /// 활동 인식은 있으면 좋은 것이라 권한이 없어도 안내는 계속한다(샘플의 activity 만 빠진다).
@@ -113,6 +155,7 @@ class _GuideScreenState extends State<GuideScreen> {
       // 판정이 바뀔 때만 오는 스트림. 확정은 위치 샘플 시점(_onPosition 의 settle)에 한다.
       _activities = ar.activityStream.listen((a) {
         if (mounted) {
+          _rawActivity = (a.type.name, a.confidence.name);
           _activity.observe(a.type.name, a.confidence.name, DateTime.now());
         }
       }, onError: (_) {});
@@ -125,7 +168,16 @@ class _GuideScreenState extends State<GuideScreen> {
   void _onPosition(Position p) {
     if (!mounted || _ending) return;
     _activity.settle(DateTime.now());
-    final changed = _tracker.update(p.latitude, p.longitude);
+    final here = LatLng(p.latitude, p.longitude);
+    final changed = _tracker.update(p.latitude, p.longitude, accuracyM: p.accuracy);
+    if (changed) {
+      _enterLeg();
+    } else {
+      _steps.update(p.latitude, p.longitude, accuracyM: p.accuracy);
+    }
+    _remainingStops = _tracker.current.transitLeg
+        ? _stops.remaining(p.latitude, p.longitude, p.accuracy, DateTime.now())
+        : 0;
     _uploader?.add(TraceSample(
       ts: p.timestamp,
       lat: p.latitude,
@@ -133,25 +185,59 @@ class _GuideScreenState extends State<GuideScreen> {
       accuracyM: p.accuracy,
       mode: _tracker.mode,
       activity: _activityOn ? _activity.current : null,
+      activityRaw: _rawActivity?.$1,
+      activityConf: _rawActivity?.$2,
     ));
     setState(() {
-      _here = LatLng(p.latitude, p.longitude);
+      _here = here;
       _accuracyM = p.accuracy;
       _samples++;
+      _instr = _buildInstruction(here: here);
     });
-    if (changed) _fitCurrentLeg();
+    _voice.say(_instr.utterance);
+    if (_follow && _mapReady) {
+      _map.move(here, _map.camera.zoom < followZoom ? followZoom : _map.camera.zoom);
+    }
   }
 
-  void _fitCurrentLeg() {
+  /// 구간이 바뀌었을 때(자동·버튼 공통) 단계·정차 추적을 새 구간으로 갈아 끼우고 문구를 다시 만든다.
+  void _enterLeg() {
     final leg = _tracker.current;
-    final pts = leg.polyline.isEmpty
-        ? [LatLng(leg.fromLat, leg.fromLon), LatLng(leg.toLat, leg.toLon)]
-        : decodePolyline(leg.polyline);
-    _map.fitCamera(CameraFit.bounds(bounds: LatLngBounds.fromPoints(pts), padding: const EdgeInsets.all(48)));
+    _steps = _stepTrackerFor(leg);
+    _stops = StopTracker(leg, _tracker.currentPoints);
+    _remainingStops = leg.transitLeg ? leg.stops.length + 1 : 0;
+    _instr = _buildInstruction();
+    _voice.say(_instr.utterance);
+  }
+
+  StepTracker _stepTrackerFor(Leg leg) =>
+      StepTracker(leg.steps, endLat: leg.toLat, endLon: leg.toLon);
+
+  Instruction _buildInstruction({LatLng? here}) {
+    final at = here ?? _here;
+    return buildInstruction(
+      request: widget.request,
+      itinerary: widget.itinerary,
+      legIndex: _tracker.index,
+      stepIndex: _steps.index,
+      stepRemainM: at == null || _steps.isEmpty ? null : _steps.remainM(at.latitude, at.longitude),
+      remainingStops: _remainingStops,
+      nextStopName: _stops.nextStopName(),
+    );
+  }
+
+  /// 남은 시간(분). 계획 기준 도착 시각까지 남은 값이라 안내를 늦게 시작하면 낙관적이다.
+  int get _remainMin {
+    final at = _eta;
+    if (at == null) return 0;
+    final left = at.difference(DateTime.now()).inSeconds;
+    return left <= 0 ? 0 : (left / 60).round();
   }
 
   Future<void> _end() async {
     final up = _uploader;
+    _voice.enabled = false;
+    await _speaker?.stop();
     setState(() {
       _ending = true;
       _status = '샘플 전송 중…';
@@ -235,6 +321,8 @@ class _GuideScreenState extends State<GuideScreen> {
     _positions?.cancel();
     _activities?.cancel();
     _uploader?.dispose();
+    _voice.enabled = false;
+    _speaker?.stop();
     _map.dispose();
     super.dispose();
   }
@@ -246,9 +334,7 @@ class _GuideScreenState extends State<GuideScreen> {
     final all = <LatLng>[];
     for (var i = 0; i < legs.length; i++) {
       final leg = legs[i];
-      final pts = leg.polyline.isEmpty
-          ? [LatLng(leg.fromLat, leg.fromLon), LatLng(leg.toLat, leg.toLon)]
-          : decodePolyline(leg.polyline);
+      final pts = _tracker.points[i];
       all.addAll(pts);
       final isCurrent = i == _tracker.index;
       polylines.add(Polyline(
@@ -274,12 +360,26 @@ class _GuideScreenState extends State<GuideScreen> {
       appBar: AppBar(title: Text('안내 · 구간 ${_tracker.index + 1}/${legs.length}')),
       body: Column(
         children: [
+          GuideCard(
+            icon: modeIcon(leg),
+            color: modeColor(leg),
+            eta: _eta,
+            remainMin: _remainMin,
+            now: _instr.now,
+            next: _instr.next,
+          ),
           Expanded(
-            child: FlutterMap(
+            child: Stack(children: [
+            FlutterMap(
               mapController: _map,
               options: MapOptions(
                 initialCameraFit:
                     CameraFit.bounds(bounds: LatLngBounds.fromPoints(all), padding: const EdgeInsets.all(32)),
+                onMapReady: () => _mapReady = true,
+                // 손으로 지도를 옮기면 따라가기를 멈춘다. 다시 켜는 버튼은 지도 오른쪽 아래에 나온다.
+                onPositionChanged: (_, hasGesture) {
+                  if (hasGesture && _follow) setState(() => _follow = false);
+                },
               ),
               children: [
                 TileLayer(
@@ -309,6 +409,21 @@ class _GuideScreenState extends State<GuideScreen> {
                 ),
               ],
             ),
+            if (!_follow && here != null)
+              Positioned(
+                right: 12,
+                bottom: 12,
+                child: FloatingActionButton.small(
+                  heroTag: 'recenter',
+                  tooltip: '내 위치로',
+                  onPressed: () {
+                    setState(() => _follow = true);
+                    if (_mapReady) _map.move(here, followZoom);
+                  },
+                  child: const Icon(Icons.my_location),
+                ),
+              ),
+            ]),
           ),
           // 실기기(S23 울트라)의 시스템 내비게이션 바가 하단 패널을 덮으므로 아래 인셋만큼 띄운다(에뮬레이터에는 바가 없다).
           SafeArea(
@@ -329,12 +444,18 @@ class _GuideScreenState extends State<GuideScreen> {
                   Row(
                     children: [
                       OutlinedButton(
-                        onPressed: _tracker.index > 0 && !_ending ? () => setState(_tracker.prev) : null,
+                        onPressed: _tracker.index > 0 && !_ending ? () => setState(() {
+                              _tracker.prev();
+                              _enterLeg();
+                            }) : null,
                         child: const Text('이전 구간'),
                       ),
                       const SizedBox(width: 8),
                       OutlinedButton(
-                        onPressed: !_tracker.isLast && !_ending ? () => setState(_tracker.next) : null,
+                        onPressed: !_tracker.isLast && !_ending ? () => setState(() {
+                              _tracker.next();
+                              _enterLeg();
+                            }) : null,
                         child: const Text('다음 구간'),
                       ),
                       const Spacer(),

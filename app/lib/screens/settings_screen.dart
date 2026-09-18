@@ -29,8 +29,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _token = TextEditingController(text: widget.initial.token);
   String _status = '';
   bool _busy = false;
+  late bool _voiceGuide = widget.initial.voiceGuide;
 
-  Settings get _current => Settings(baseUrl: normalizeBaseUrl(_url.text), token: _token.text.trim());
+  Settings get _current =>
+      Settings(baseUrl: normalizeBaseUrl(_url.text), token: _token.text.trim(), voiceGuide: _voiceGuide);
 
   Future<void> _check() async {
     setState(() {
@@ -130,7 +132,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             maxLines: 3,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('음성 안내'),
+            subtitle: const Text('안내 중 구간 전환·방향 전환·하차를 소리로 읽어 줍니다'),
+            value: _voiceGuide,
+            onChanged: _busy ? null : (v) => setState(() => _voiceGuide = v),
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
               OutlinedButton(onPressed: _busy ? null : _check, child: const Text('연결 확인')),

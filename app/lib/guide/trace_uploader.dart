@@ -11,12 +11,16 @@ class TraceUploader {
     required this.tripId,
     this.batchSize = 20,
     this.interval = const Duration(seconds: 30),
+    this.minGap = const Duration(seconds: 5),
   });
 
   final ApiClient api;
   final String tripId;
   final int batchSize; // 5초 샘플 20개 = 100초
   final Duration interval;
+  // 샘플 사이 최소 간격. 화면은 더 자주 위치를 받지만 서버에 올리는 표본은 5초 간격을 지킨다 —
+  // 서버 speed 패키지의 연속 쌍 간격(2~30초)과 표본 수 기준(MinPairs 12 = 5초 1분치)이 그 간격을 전제한다.
+  final Duration minGap;
 
   final List<TraceSample> _pending = [];
   Timer? _timer;
@@ -31,7 +35,12 @@ class TraceUploader {
     _timer ??= Timer.periodic(interval, (_) => _send());
   }
 
+  DateTime? _lastTs;
+
   void add(TraceSample s) {
+    final last = _lastTs;
+    if (last != null && s.ts.difference(last) < minGap) return;
+    _lastTs = s.ts;
     _pending.add(s);
     if (_pending.length >= batchSize) _send();
   }

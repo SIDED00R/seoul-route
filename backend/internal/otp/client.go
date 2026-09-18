@@ -82,6 +82,32 @@ type Leg struct {
 	// 도보·따릉이 leg 가 지나는 신호 횡단보도 수와 그 기대 대기(초). Duration 에 이미 더해져 있다(route/crossing_hook.go).
 	Crossings    int     `json:"crossings,omitempty"`
 	CrossingWait float64 `json:"crossing_wait_sec,omitempty"`
+	Headsign     string  `json:"headsign,omitempty"` // 탑승 차량이 정류장에 내거는 행선지(대중교통 leg)
+	Steps        []Step  `json:"steps,omitempty"`    // 도보·자전거 leg 의 안내 단계
+	Stops        []Stop  `json:"stops,omitempty"`    // 대중교통 leg 의 중간 정차(탑승·하차 제외)
+}
+
+// Step 은 도보·자전거 leg 의 안내 단계. Dir 은 이 단계 시작점에서의 회전(OTP relativeDirection),
+// Distance 는 그 뒤로 가는 거리. Street 는 OTP 가 bogusName 으로 표시한 생성 이름(path·sidewalk 등)이면 비운다.
+type Step struct {
+	Dir      string  `json:"dir"`
+	Abs      string  `json:"abs,omitempty"`
+	Street   string  `json:"street,omitempty"`
+	Distance float64 `json:"distance_m"`
+	Lat      float64 `json:"lat"`
+	Lon      float64 `json:"lon"`
+	Exit     string  `json:"exit,omitempty"`     // 회전교차로 출구 번호
+	Entrance string  `json:"entrance,omitempty"` // 역 출입구 이름(ENTER_STATION·EXIT_STATION), 예 "강남 8번 출구"
+}
+
+// Stop 은 대중교통 leg 의 중간 정차. OffsetSec 은 leg 출발(Start) 기준 도착까지의 초 — 상대값이라
+// 실시간 보정이 Start·End 를 함께 옮겨도 그대로 쓴다(realtime/corrector.go).
+type Stop struct {
+	Name      string  `json:"name"`
+	Lat       float64 `json:"lat"`
+	Lon       float64 `json:"lon"`
+	StopID    string  `json:"stop_id,omitempty"`
+	OffsetSec int     `json:"offset_sec,omitempty"`
 }
 
 type Itinerary struct {
@@ -123,7 +149,10 @@ query Plan($origin: PlanLabeledLocationInput!, $destination: PlanLabeledLocation
              start { scheduledTime } end { scheduledTime }
              from { name lat lon stop { gtfsId parentStation { gtfsId } } }
              to { name lat lon stop { gtfsId parentStation { gtfsId } } } route { shortName gtfsId }
-             intermediateStops { name } legGeometry { points } steps { relativeDirection }
+             headsign intermediatePlaces { name lat lon stop { gtfsId } arrival { scheduledTime } }
+             legGeometry { points }
+             steps { relativeDirection absoluteDirection streetName bogusName distance lat lon exit
+                     feature { ... on Entrance { name } } }
              previousLegs(numberOfLegs: 5) { start { scheduledTime } duration }
              nextLegs(numberOfLegs: 7) { start { scheduledTime } duration } }
     } }
@@ -286,12 +315,32 @@ type node struct {
 			ShortName string
 			GtfsID    string `json:"gtfsId"`
 		}
-		IntermediateStops []struct{ Name string }
-		LegGeometry       *struct{ Points string }
-		Steps             []struct{ RelativeDirection string }
-		PreviousLegs      []legTime
-		NextLegs          []legTime
+		Headsign           string
+		IntermediatePlaces []struct {
+			Name     string
+			Lat, Lon float64
+			Stop     *struct {
+				GtfsID string `json:"gtfsId"`
+			}
+			Arrival *struct{ ScheduledTime string }
+		}
+		LegGeometry  *struct{ Points string }
+		Steps        []legStep
+		PreviousLegs []legTime
+		NextLegs     []legTime
 	}
+}
+
+// legStep 은 OTP step 원문. Feature 는 union(Entrance·StairsUse 등)이라 Entrance 가 아니면 Name 이 빈다.
+type legStep struct {
+	RelativeDirection string
+	AbsoluteDirection string
+	StreetName        string
+	BogusName         bool
+	Distance          float64
+	Lat, Lon          float64
+	Exit              string
+	Feature           *struct{ Name string }
 }
 
 // legStop 은 leg 양끝의 정류장(없으면 nil — 좌표 출발·도착). 생성 GTFS 의 지하철 승강장은 부모역(ST_…)을 가진다.
@@ -309,7 +358,7 @@ func sameParentStation(a, b *legStop) bool {
 }
 
 // leavesStation 은 도보 steps 에 역 출입구로 나가거나 들어오는 지점(EXIT_STATION·ENTER_STATION)이 있는지.
-func leavesStation(steps []struct{ RelativeDirection string }) bool {
+func leavesStation(steps []legStep) bool {
 	for _, s := range steps {
 		if s.RelativeDirection == "EXIT_STATION" || s.RelativeDirection == "ENTER_STATION" {
 			return true
@@ -367,13 +416,38 @@ func (n node) itinerary() Itinerary {
 			leg.FromStopID = l.From.Stop.GtfsID
 		}
 		leg.InStation = l.Mode == "WALK" && sameParentStation(l.From.Stop, l.To.Stop) && !leavesStation(l.Steps)
-		if len(l.IntermediateStops) > 0 {
-			leg.NextStop = l.IntermediateStops[0].Name
+		if len(l.IntermediatePlaces) > 0 {
+			leg.NextStop = l.IntermediatePlaces[0].Name
 		} else if l.TransitLeg {
 			leg.NextStop = l.To.Name
 		}
 		if l.LegGeometry != nil {
 			leg.Polyline = l.LegGeometry.Points
+		}
+		leg.Headsign = l.Headsign
+		for _, s := range l.Steps {
+			step := Step{Dir: s.RelativeDirection, Abs: s.AbsoluteDirection, Distance: s.Distance,
+				Lat: s.Lat, Lon: s.Lon, Exit: s.Exit}
+			if !s.BogusName { // OTP 가 이름 없는 길에 붙이는 생성 이름(path·sidewalk·pathway)은 안내에 쓰지 않는다
+				step.Street = s.StreetName
+			}
+			if s.Feature != nil {
+				step.Entrance = s.Feature.Name
+			}
+			leg.Steps = append(leg.Steps, step)
+		}
+		legStart, startErr := time.Parse(time.RFC3339, leg.Start)
+		for _, p := range l.IntermediatePlaces {
+			stop := Stop{Name: p.Name, Lat: p.Lat, Lon: p.Lon}
+			if p.Stop != nil {
+				stop.StopID = p.Stop.GtfsID
+			}
+			if startErr == nil && p.Arrival != nil {
+				if t, err := time.Parse(time.RFC3339, p.Arrival.ScheduledTime); err == nil {
+					stop.OffsetSec = int(t.Sub(legStart).Seconds())
+				}
+			}
+			leg.Stops = append(leg.Stops, stop)
 		}
 		it.Legs = append(it.Legs, leg)
 	}

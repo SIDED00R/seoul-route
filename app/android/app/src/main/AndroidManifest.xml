@@ -56,5 +56,9 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- 음성 안내가 쓰는 음성 합성 엔진 목록. Android 11+ 는 이 선언이 없으면 설치된 엔진이 안 보인다. -->
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE"/>
+        </intent>
     </queries>
 </manifest>
