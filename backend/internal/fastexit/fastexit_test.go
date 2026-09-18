@@ -29,6 +29,9 @@ func sample() *Index {
 		row("3호선", "종로3가", "상행", "안국", "3-2,3-3 사이", "엘리베이터"),
 		row("3호선", "종로3가", "상행", "안국", "1-1", "엘리베이터"),
 		row("3호선", "종로3가", "하행", "을지로3가", "7-1", "엘리베이터"),
+		row("3호선", "충무로", "상행", "을지로3가", "10-2", "계단"),
+		row("3호선", "충무로", "상행", "을지로3가", "3-2,3-3 사이", "계단"),
+		row("3호선", "충무로", "하행", "동대입구", "5-2", "계단"),
 	})
 }
 
@@ -36,16 +39,20 @@ func TestLookupDirectionAndOrder(t *testing.T) {
 	ix := sample()
 	// 낙성대를 지나 사당에 내리면 방배 방면(상행) 승강장이다. 설비 순서는 에스컬레이터·계단·엘리베이터, 칸은 앞에서부터.
 	got := ix.Lookup("2호선", "사당(2호선)", "낙성대")
-	want := []Facility{{"에스컬레이터", []string{"3-3"}}, {"계단", []string{"3-3", "8-1"}}, {"엘리베이터", []string{"10-4"}}}
+	want := []Facility{{"에스컬레이터", []string{"3-3"}}, {"계단", []string{"3-3", "8-1"}}} // 엘리베이터는 안 싣는다
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("상행: %+v", got)
 	}
 	if got := ix.Lookup("2호선", "사당", "방배"); !reflect.DeepEqual(got, []Facility{{"계단", []string{"5-2"}}}) {
 		t.Errorf("하행: %+v", got)
 	}
+	// 엘리베이터만 있는 역은 비운다.
+	if got := ix.Lookup("3호선", "종로3가", "을지로3가"); got != nil {
+		t.Errorf("엘리베이터만: %+v", got)
+	}
 	// 두 문 사이 표기는 그대로 싣고 첫 칸-문으로 줄 세운다.
-	got = ix.Lookup("3호선", "종로3가", "을지로3가")
-	if !reflect.DeepEqual(got, []Facility{{"엘리베이터", []string{"1-1", "3-2,3-3 사이"}}}) {
+	got = ix.Lookup("3호선", "충무로", "동대입구")
+	if !reflect.DeepEqual(got, []Facility{{"계단", []string{"3-2,3-3 사이", "10-2"}}}) {
 		t.Errorf("사이 표기: %+v", got)
 	}
 }

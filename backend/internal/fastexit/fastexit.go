@@ -36,8 +36,8 @@ type Index struct {
 // 276개 역을 GTFS 1~8호선 역과 대조해 이름이 안 맞은 것이 이 셋뿐이었다. GTFS 역 이름 출처를 바꾸면 다시 대조한다.
 var renamed = map[string]string{"불암산": "당고개", "자양": "뚝섬유원지", "이수": "총신대입구"}
 
-// facilityOrder 는 응답에 싣는 순서.
-var facilityOrder = []string{"에스컬레이터", "계단", "엘리베이터"}
+// facilityOrder 는 응답에 싣는 설비와 그 순서. 엘리베이터는 넣지 않는다(사용자 결정 2026-09-19).
+var facilityOrder = []string{"에스컬레이터", "계단"}
 
 // Load 는 cmd/fastexit 이 저장한 JSON(행 배열)을 읽는다.
 func Load(path string) (*Index, error) {
