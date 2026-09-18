@@ -483,7 +483,8 @@ class _GuideScreenState extends State<GuideScreen> {
                     title: Text('${leg.label} · ${(leg.durationSec / 60).round()}분'),
                     subtitle: Text('${legEndpointName(widget.request, leg.fromName, leg.fromLat, leg.fromLon)} → '
                         '${legEndpointName(widget.request, leg.toName, leg.toLat, leg.toLon)}'
-                        '${remainM == null ? '' : ' · 끝까지 ${remainM.round()}m'}'),
+                        '${remainM == null ? '' : ' · 끝까지 ${remainM.round()}m'}'
+                        '${leg.fastExitLabel == null ? '' : '\n${leg.fastExitLabel}'}'),
                   ),
                   Row(
                     children: [

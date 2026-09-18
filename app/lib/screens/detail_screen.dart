@@ -101,6 +101,7 @@ class DetailScreen extends StatelessWidget {
           Expanded(
             flex: 2,
             child: ListView.builder(
+              padding: const EdgeInsets.only(bottom: 88), // 마지막 구간 줄이 "안내 시작" 버튼에 가리지 않게
               itemCount: itinerary.legs.length,
               itemBuilder: (context, i) {
                 final leg = itinerary.legs[i];
@@ -117,12 +118,15 @@ class DetailScreen extends StatelessWidget {
                       // 앞뒤 차·배차: 실시간 다음 차 / 시간표 앞·뒤 열차 / 배차간격
                       if (leg.scheduleLabel != null)
                         Text(leg.scheduleLabel!, style: TextStyle(color: Colors.teal.shade700)),
+                      // 지하철: 하차역에서 계단·에스컬레이터·엘리베이터가 있는 칸-문
+                      if (leg.fastExitLabel != null)
+                        Text(leg.fastExitLabel!, style: TextStyle(color: Colors.indigo.shade700)),
                       // 도보·따릉이: 지나는 신호 횡단보도와 그 대기(소요에 포함)
                       if (leg.crossingLabel != null)
                         Text(leg.crossingLabel!, style: TextStyle(color: Colors.orange.shade800)),
                     ],
                   ),
-                  isThreeLine: leg.scheduleLabel != null || leg.crossingLabel != null,
+                  isThreeLine: leg.scheduleLabel != null || leg.crossingLabel != null || leg.fastExitLabel != null,
                 );
               },
             ),
