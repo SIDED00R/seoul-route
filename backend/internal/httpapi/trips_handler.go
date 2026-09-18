@@ -45,6 +45,22 @@ type traceSample struct {
 	AccuracyM float64   `json:"accuracy_m"`
 	Mode      string    `json:"mode"`
 	Activity  string    `json:"activity"` // 폰 활동 인식 판정(speed.Activities), 없으면 빈 값
+	// 앱이 활동 인식에서 받은 원시 판정과 신뢰도 등급(WALKING·IN_VEHICLE·HIGH 등). 진단용이라 값 목록을 검사하지 않고
+	// 길이만 본다. 속도 학습은 Activity 만 쓴다.
+	ActivityRaw  string `json:"activity_raw"`
+	ActivityConf string `json:"activity_conf"`
+}
+
+// MaxActivityRawLen 은 activity_raw·activity_conf 의 최대 길이. 활동 인식 type·confidence 이름(IN_VEHICLE·HIGH)은
+// 20자를 넘지 않는다.
+const MaxActivityRawLen = 32
+
+// nullIfEmpty 는 빈 문자열을 NULL 로 넣는다(traces 의 선택 열은 NULL 이 "없음").
+func nullIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 // ownTrip 은 trip 이 요청 사용자 것인지와 종료 여부를 돌려준다. 남의 trip 은 404 로 숨긴다.
@@ -88,7 +104,8 @@ func (s *Server) handleUploadTraces(w http.ResponseWriter, r *http.Request) {
 	for _, p := range body.Samples {
 		if p.TS.IsZero() || p.TS.After(latest) || p.Lat < route.MinLat || p.Lat > route.MaxLat ||
 			p.Lon < route.MinLon || p.Lon > route.MaxLon || p.AccuracyM < 0 ||
-			speed.MaxSpeed[p.Mode] == 0 && p.Mode != "transit" || p.Activity != "" && !speed.Activities[p.Activity] {
+			speed.MaxSpeed[p.Mode] == 0 && p.Mode != "transit" || p.Activity != "" && !speed.Activities[p.Activity] ||
+			len(p.ActivityRaw) > MaxActivityRawLen || len(p.ActivityConf) > MaxActivityRawLen {
 			writeError(w, http.StatusBadRequest,
 				"샘플 오류(ts 미래·서울 밖 좌표·accuracy_m·mode walk/bicycle/transit·activity walk/bicycle/vehicle/still/unknown)")
 			return
@@ -96,12 +113,10 @@ func (s *Server) handleUploadTraces(w http.ResponseWriter, r *http.Request) {
 	}
 	batch := &pgx.Batch{}
 	for _, p := range body.Samples {
-		var activity *string
-		if p.Activity != "" {
-			activity = &p.Activity
-		}
-		batch.Queue(`INSERT INTO traces(trip_id, ts, lat, lon, accuracy_m, mode, activity) VALUES ($1, $2, $3, $4, $5, $6, $7)
-			ON CONFLICT DO NOTHING`, id, p.TS, p.Lat, p.Lon, p.AccuracyM, p.Mode, activity)
+		batch.Queue(`INSERT INTO traces(trip_id, ts, lat, lon, accuracy_m, mode, activity, activity_raw, activity_conf)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT DO NOTHING`,
+			id, p.TS, p.Lat, p.Lon, p.AccuracyM, p.Mode, nullIfEmpty(p.Activity), nullIfEmpty(p.ActivityRaw),
+			nullIfEmpty(p.ActivityConf))
 	}
 	if err := s.DB.SendBatch(r.Context(), batch).Close(); err != nil {
 		s.Log.Error("upload traces", "err", err)

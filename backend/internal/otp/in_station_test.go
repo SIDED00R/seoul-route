@@ -13,7 +13,7 @@ func TestInStationWalkLeg(t *testing.T) {
 	if strings.Count(query, "parentStation { gtfsId }") != 2 {
 		t.Fatalf("쿼리가 from·to 의 parentStation 을 요청하지 않는다:\n%s", query)
 	}
-	if !strings.Contains(query, "steps { relativeDirection }") {
+	if !strings.Contains(query, "steps { relativeDirection") {
 		t.Fatalf("쿼리가 steps 의 relativeDirection 을 요청하지 않는다:\n%s", query)
 	}
 	raw := `{"start":"s","end":"e","legs":[

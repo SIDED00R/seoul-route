@@ -27,6 +27,20 @@ TraceSample sample(int i) =>
     TraceSample(ts: DateTime.utc(2026, 9, 13, 9, 0, i * 5), lat: 37.55, lon: 126.97, accuracyM: 5, mode: 'walk');
 
 void main() {
+  test('5초보다 촘촘한 샘플은 솎아 올린다(서버 속도 학습 표본 간격 유지)', () async {
+    final api = FlakyApi();
+    final up = TraceUploader(api: api, tripId: 'T', batchSize: 100);
+    const base = 0;
+    for (final sec in [0, 2, 4, 5, 6, 10]) {
+      up.add(TraceSample(
+          ts: DateTime.utc(2026, 9, 13, 9, base, sec), lat: 37.55, lon: 126.97, accuracyM: 5, mode: 'walk'));
+    }
+    expect(up.pending, 3); // 0·5·10초만 남는다
+    await up.flush();
+    expect(api.batches.single.map((s) => s.ts.second).toList(), [0, 5, 10]);
+    up.dispose();
+  });
+
   test('배치 크기에 닿으면 보내고, 실패분은 다음 배치와 합쳐 재전송한다', () async {
     final api = FlakyApi(failFirst: 1);
     final up = TraceUploader(api: api, tripId: 'T', batchSize: 3);

@@ -1,3 +1,5 @@
+import 'leg_detail.dart';
+
 // 백엔드 /routes/plan 응답 모델. 필드명은 backend/internal/otp/client.go 의 JSON 태그와 같다.
 class Leg {
   const Leg({
@@ -22,6 +24,9 @@ class Leg {
     this.realtimeArrivalsSec = const [],
     this.crossings = 0,
     this.crossingWaitSec = 0,
+    this.headsign = '',
+    this.steps = const [],
+    this.stops = const [],
   });
 
   final String mode; // WALK / BICYCLE / BUS / SUBWAY ...
@@ -45,6 +50,9 @@ class Leg {
   final List<int> realtimeArrivalsSec; // 첫 탑승 정류장의 실시간 다음 차(초)
   final int crossings; // 도보·따릉이 leg 가 지나는 신호 횡단보도 수
   final double crossingWaitSec; // 그 기대 대기(초). durationSec 에 이미 포함
+  final String headsign; // 탑승 차량의 행선지(대중교통)
+  final List<WalkStep> steps; // 도보·자전거 안내 단계
+  final List<TransitStop> stops; // 중간 정차(탑승·하차 제외)
 
   factory Leg.fromJson(Map<String, dynamic> j) => Leg(
         mode: j['mode'] as String,
@@ -70,6 +78,13 @@ class Leg {
             .toList(),
         crossings: (j['crossings'] as num?)?.toInt() ?? 0,
         crossingWaitSec: (j['crossing_wait_sec'] as num?)?.toDouble() ?? 0,
+        headsign: (j['headsign'] as String?) ?? '',
+        steps: ((j['steps'] as List<dynamic>?) ?? const [])
+            .map((e) => WalkStep.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        stops: ((j['stops'] as List<dynamic>?) ?? const [])
+            .map((e) => TransitStop.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
 
   /// "횡단보도 3곳 · 신호 대기 약 2분". 신호 횡단보도가 없으면 null.

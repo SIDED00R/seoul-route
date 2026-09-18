@@ -23,6 +23,24 @@ class MemoryTokenStorage implements TokenStorage {
 }
 
 void main() {
+  testWidgets('음성 안내 토글은 저장되고 다시 읽힌다', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final store = SettingsStore(tokenStorage: MemoryTokenStorage());
+    expect(await SettingsStore.loadVoiceGuide(), isTrue); // 설정한 적 없으면 켜짐
+    await tester.pumpWidget(MaterialApp(
+      home: SettingsScreen(
+        initial: const Settings(baseUrl: 'http://10.0.2.2:8081', token: 'tok'),
+        settingsStore: store,
+      ),
+    ));
+    await tester.tap(find.text('음성 안내'));
+    await tester.pump();
+    await tester.tap(find.text('저장'));
+    await tester.pumpAndSettle();
+    expect((await store.load()).voiceGuide, isFalse);
+    expect(await SettingsStore.loadVoiceGuide(), isFalse);
+  });
+
   testWidgets('서버 주소 끝의 / 는 저장값과 현재 세션 양쪽에서 지워진다', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final store = SettingsStore(tokenStorage: MemoryTokenStorage());

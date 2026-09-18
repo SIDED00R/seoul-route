@@ -129,7 +129,8 @@ func TestTripTracesAndSpeedLearning(t *testing.T) {
 		if i > 0 {
 			vehicle += ","
 		}
-		vehicle += fmt.Sprintf(`{"ts":%q,"lat":%.6f,"lon":126.97,"accuracy_m":5,"mode":"walk","activity":"vehicle"}`,
+		vehicle += fmt.Sprintf(`{"ts":%q,"lat":%.6f,"lon":126.97,"accuracy_m":5,"mode":"walk","activity":"vehicle",`+
+			`"activity_raw":"IN_VEHICLE","activity_conf":"HIGH"}`,
 			t0.Add(3*time.Hour+time.Duration(i)*5*time.Second).Format(time.RFC3339), 37.55+1.6*5*float64(i)/111195)
 	}
 	vehicle += "]}"
@@ -141,11 +142,21 @@ func TestTripTracesAndSpeedLearning(t *testing.T) {
 	if n != 45 {
 		t.Fatalf("재전송이 중복 저장됐다: traces=%d", n)
 	}
-	var stored string
-	pool.QueryRow(context.Background(), `SELECT activity FROM traces WHERE trip_id = $1 AND activity IS NOT NULL LIMIT 1`,
-		tripID).Scan(&stored)
+	var stored, rawStored, confStored string
+	pool.QueryRow(context.Background(), `SELECT activity, COALESCE(activity_raw, ''), COALESCE(activity_conf, '')
+		FROM traces WHERE trip_id = $1 AND activity IS NOT NULL LIMIT 1`,
+		tripID).Scan(&stored, &rawStored, &confStored)
 	if stored != "vehicle" {
 		t.Fatalf("activity 저장 안 됨: %q", stored)
+	}
+	if rawStored != "IN_VEHICLE" || confStored != "HIGH" { // 원시 판정은 그대로 저장한다(이슈 #67)
+		t.Fatalf("activity_raw/conf 저장 안 됨: %q %q", rawStored, confStored)
+	}
+	// 원시 판정은 목록 검사를 하지 않지만 길이 상한은 있다
+	long := fmt.Sprintf(`{"samples":[{"ts":"2026-09-13T09:00:00Z","lat":37.55,"lon":126.97,"accuracy_m":5,`+
+		`"mode":"walk","activity_raw":%q}]}`, strings.Repeat("A", MaxActivityRawLen+1))
+	if rr, _ := do(t, h, http.MethodPost, "/trips/"+tripID+"/traces", long, token); rr.Code != 400 {
+		t.Fatalf("긴 activity_raw code=%d", rr.Code)
 	}
 
 	rr, out = do(t, h, http.MethodPost, "/trips/"+tripID+"/end", "", token)
