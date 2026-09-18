@@ -106,7 +106,8 @@ func kricRows(tt *kric.Timetable, pilotStops map[string][]pilotStop, pilotNames 
 		if name == "" {
 			name = l.Name
 		}
-		routes = append(routes, []string{"K_" + code, "A_" + l.Opr, name, name, "1"})
+		c := kricColor(code)
+		routes = append(routes, []string{"K_" + code, "A_" + l.Opr, name, name, "1", c, textColor(c)})
 	}
 	for _, t := range tt.Trains {
 		l := tt.Lines[t.Line]

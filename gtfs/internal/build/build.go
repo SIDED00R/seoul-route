@@ -172,7 +172,9 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 				}
 				continue
 			}
-			routes = append(routes, []string{r["route_id"], SubwayAgencyID, r["route_short_name"], r["route_long_name"], "1"})
+			c := pilotColor(r["route_id"], r["route_short_name"])
+			routes = append(routes, []string{r["route_id"], SubwayAgencyID, r["route_short_name"], r["route_long_name"],
+				"1", c, textColor(c)})
 		}
 		tripLine := map[string]string{} // 대체되는 파일럿 trip → 노선 코드(정차역 수집용)
 		for _, t := range subway.Trips {
@@ -272,7 +274,9 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 		rep.NSubwayStops = len(subway.Stops)
 	}
 
-	w.table("routes.txt", []string{"route_id", "agency_id", "route_short_name", "route_long_name", "route_type"}, routes)
+	w.table("routes.txt",
+		[]string{"route_id", "agency_id", "route_short_name", "route_long_name", "route_type", "route_color",
+			"route_text_color"}, routes)
 	w.table("trips.txt", []string{"route_id", "service_id", "trip_id", "trip_headsign", "direction_id"}, trips)
 	w.table("stop_times.txt", []string{"trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence"}, stopTimes)
 	w.table("frequencies.txt", []string{"trip_id", "start_time", "end_time", "headway_secs", "exact_times"}, freqs)
@@ -328,7 +332,8 @@ func busRoute(b BusRoute, routes [][]string, trips, stopTimes, freqs *[][]string
 		last += 24 * 3600
 	}
 	routeID := "B_" + r.ID
-	routes = append(routes, []string{routeID, BusAgencyID, r.Name, r.StartName + " ~ " + r.EndName, "3"})
+	c := busColor(r.Type)
+	routes = append(routes, []string{routeID, BusAgencyID, r.Name, r.StartName + " ~ " + r.EndName, "3", c, textColor(c)})
 
 	// 누적 소요(초)는 전 구간으로 계산한다. bbox 밖 정류장을 기록에서 빼도 그 구간의 주행시간은 이어져야 한다.
 	times := make([]int, len(b.Stops))

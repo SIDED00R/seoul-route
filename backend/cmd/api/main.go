@@ -22,6 +22,7 @@ import (
 	"github.com/SIDED00R/seoul-route/backend/internal/otp"
 	"github.com/SIDED00R/seoul-route/backend/internal/realtime"
 	"github.com/SIDED00R/seoul-route/backend/internal/route"
+	"github.com/SIDED00R/seoul-route/backend/internal/routestyle"
 	"github.com/SIDED00R/seoul-route/backend/internal/speed"
 )
 
@@ -87,6 +88,13 @@ func main() {
 	} else {
 		planner.Headways = hw
 		log.Info("headways loaded", "routes", len(hw))
+	}
+	// 노선 색도 같은 zip 의 routes.txt 에서 읽는다(OTP 그래프와 무관 — zip 만 갈아 끼우면 색이 바뀐다).
+	if st, err := routestyle.Load(cfg.GTFSZip); err != nil {
+		log.Warn("route colors disabled", "path", cfg.GTFSZip, "err", err)
+	} else {
+		planner.RouteStyles = st
+		log.Info("route colors loaded", "routes", len(st))
 	}
 	// 첫 탑승 실시간 보정. 키가 있는 수단만 켠다. 외부 API 는 응답이 느릴 수 있어 짧은 타임아웃.
 	rt := &realtime.Corrector{Log: log}

@@ -91,7 +91,8 @@ func metroRows(tt *seoulmetro.Timetable, stopIDs map[string]bool, stopByName map
 		}
 		if !seenRoute[routeID] {
 			seenRoute[routeID] = true
-			routes = append(routes, []string{routeID, MetroAgencyID, t.Line + "호선", name, "1"})
+			c := metroColor(t.Line)
+			routes = append(routes, []string{routeID, MetroAgencyID, t.Line + "호선", name, "1", c, textColor(c)})
 		}
 		tripID := "M_" + t.Line + "_" + t.Day + "_" + t.Code
 		dir := "0"

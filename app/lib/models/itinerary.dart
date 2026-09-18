@@ -24,6 +24,8 @@ class Leg {
     this.realtimeArrivalsSec = const [],
     this.crossings = 0,
     this.crossingWaitSec = 0,
+    this.color = '',
+    this.textColor = '',
     this.headsign = '',
     this.steps = const [],
     this.stops = const [],
@@ -50,6 +52,8 @@ class Leg {
   final List<int> realtimeArrivalsSec; // 첫 탑승 정류장의 실시간 다음 차(초)
   final int crossings; // 도보·따릉이 leg 가 지나는 신호 횡단보도 수
   final double crossingWaitSec; // 그 기대 대기(초). durationSec 에 이미 포함
+  final String color; // 노선 색(GTFS route_color, # 없는 6자리 16진수). 없으면 수단별 기본 팔레트를 쓴다
+  final String textColor; // 그 색 위에 얹을 글자색
   final String headsign; // 탑승 차량의 행선지(대중교통)
   final List<WalkStep> steps; // 도보·자전거 안내 단계
   final List<TransitStop> stops; // 중간 정차(탑승·하차 제외)
@@ -78,6 +82,8 @@ class Leg {
             .toList(),
         crossings: (j['crossings'] as num?)?.toInt() ?? 0,
         crossingWaitSec: (j['crossing_wait_sec'] as num?)?.toDouble() ?? 0,
+        color: (j['color'] as String?) ?? '',
+        textColor: (j['text_color'] as String?) ?? '',
         headsign: (j['headsign'] as String?) ?? '',
         steps: ((j['steps'] as List<dynamic>?) ?? const [])
             .map((e) => WalkStep.fromJson(e as Map<String, dynamic>))

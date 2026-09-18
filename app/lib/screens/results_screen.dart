@@ -54,10 +54,14 @@ class ResultsScreen extends StatelessWidget {
                             padding: EdgeInsets.zero,
                             visualDensity: VisualDensity.compact,
                           ),
+                      // 노선 색이 있으면 칩을 그 색으로 칠한다(2호선 초록처럼). 없으면 기본 흰 칩에 수단 색 아이콘.
                       for (final leg in it.legs)
                         Chip(
-                          avatar: Icon(modeIcon(leg), size: 16, color: modeColor(leg)),
-                          label: Text('${leg.label} ${(leg.durationSec / 60).round()}분'),
+                          avatar: Icon(modeIcon(leg), size: 16,
+                              color: leg.color.isEmpty ? modeColor(leg) : legTextColor(leg)),
+                          label: Text('${leg.label} ${(leg.durationSec / 60).round()}분',
+                              style: leg.color.isEmpty ? null : TextStyle(color: legTextColor(leg))),
+                          backgroundColor: leg.color.isEmpty ? null : modeColor(leg),
                           padding: EdgeInsets.zero,
                           visualDensity: VisualDensity.compact,
                         ),
