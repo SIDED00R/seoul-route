@@ -5,7 +5,7 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:seoul_route/screens/place_search_screen.dart';
-import 'package:seoul_route/screens/plan_screen.dart';
+import 'package:seoul_route/screens/home_screen.dart';
 import 'package:seoul_route/screens/settings_screen.dart';
 import 'package:seoul_route/settings/settings_store.dart';
 
@@ -45,7 +45,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final store = SettingsStore(tokenStorage: MemoryTokenStorage());
     await tester.pumpWidget(MaterialApp(
-      home: PlanScreen(
+      home: HomeScreen(
         settings: const Settings(baseUrl: 'http://10.0.2.2:8081', token: 'tok'),
         settingsStore: store,
       ),

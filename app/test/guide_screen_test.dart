@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:seoul_route/api/client.dart';
+import 'package:seoul_route/guide/active_guide.dart';
 import 'package:seoul_route/models/itinerary.dart';
 import 'package:seoul_route/models/leg_detail.dart';
 import 'package:seoul_route/models/place.dart';
@@ -172,6 +173,8 @@ void main() {
   late List<String> spoken;
 
   setUp(() {
+    // 안내는 앱에 하나뿐이라 테스트마다 치운다 — 안 그러면 앞 테스트의 안내를 이어받는다.
+    ActiveGuide.instance.clear();
     SharedPreferences.setMockInitialValues(<String, Object>{});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async => true);
@@ -182,6 +185,7 @@ void main() {
   });
 
   tearDown(() {
+    ActiveGuide.instance.clear(); // 세션의 10초 타이머가 테스트 뒤에 남지 않게
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
   });
 
@@ -197,7 +201,9 @@ void main() {
     await _settle(tester);
   }
 
+  /// 화면을 닫고 안내도 치운다. 안내는 화면과 별개로 살아 있어(ActiveGuide) 치우지 않으면 10초 타이머가 남는다.
   Future<void> close(WidgetTester tester) async {
+    ActiveGuide.instance.clear();
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 10));
   }

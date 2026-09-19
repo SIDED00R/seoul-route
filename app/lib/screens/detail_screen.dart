@@ -3,6 +3,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../api/client.dart';
+import '../guide/active_guide.dart';
+import '../guide/replace_guide_confirm.dart';
 import '../models/itinerary.dart';
 import '../models/plan_request.dart';
 import '../util/leg_names.dart';
@@ -24,6 +26,22 @@ class DetailScreen extends StatelessWidget {
   final PlanRequest request;
   final Itinerary itinerary;
   final int index;
+
+  /// 안내를 시작한다. 다른 여정으로 이미 안내 중이면 물어보고, 그 안내를 끝낸 뒤에 시작한다 —
+  /// 안내는 한 번에 하나뿐이다(위치 스트림·알림창이 하나).
+  Future<void> _startGuide(BuildContext context) async {
+    final running = ActiveGuide.instance.current;
+    if (running != null && !running.ended && !identical(running.itinerary, itinerary)) {
+      if (!await confirmReplaceGuide(context)) return;
+      await running.end();
+      ActiveGuide.instance.clear();
+    }
+    if (!context.mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => GuideScreen(api: api, request: request, itinerary: itinerary)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,10 +81,7 @@ class DetailScreen extends StatelessWidget {
             '${itinerary.realtimeLabel == null ? '' : ' · ${itinerary.realtimeLabel}'}'),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => GuideScreen(api: api, request: request, itinerary: itinerary)),
-        ),
+        onPressed: () => _startGuide(context),
         icon: const Icon(Icons.navigation),
         label: const Text('안내 시작'),
       ),

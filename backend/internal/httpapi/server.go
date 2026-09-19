@@ -63,6 +63,9 @@ func (s *Server) Router() http.Handler {
 		r.With(short).Get("/tiles/{z}/{x}/{y}.png", s.handleTile)
 		// via 대중교통 탐색이 OTP 에서 15~37초 걸린다(실측) → 이 경로만 상한이 길다.
 		r.With(middleware.Timeout(PlanTimeout)).Post("/routes/plan", s.handlePlan)
+		// 최근 경로: 성공한 검색을 기록하고(handlePlan) 홈의 "최근 경로" 탭이 읽는다. recent_routes_handler.go
+		r.With(short).Get("/routes/recent", s.handleGetRecentRoutes)
+		r.With(short).Delete("/routes/recent", s.handleDeleteRecentRoutes)
 	})
 	return r
 }
