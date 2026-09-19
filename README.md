@@ -20,6 +20,7 @@
 ## 주요 기능
 
 - 대중교통·따릉이·도보 후보를 함께 탐색하고 출발 대기까지 포함해 정렬
+- 안내를 시작한 뒤에도 다른 경로를 찾아볼 수 있고(안내는 "안내 종료" 로만 끝납니다), 홈은 최근 경로·현재 경로·길찾기 탭입니다
 - 경유지 최대 5개와 구간별 수단 고정
 - 서울 버스·지하철 첫 탑승 실시간 도착 보정
 - 지하철 앞뒤 열차와 버스 배차간격 표시
@@ -159,6 +160,8 @@ flutter run
 | `POST /auth/google` | 아니요 | Google ID token → 서버 JWT |
 | `GET /gbfs/*.json` | 아니요 | OTP용 따릉이 GBFS 2.3 |
 | `POST /routes/plan` | 예 | 멀티모달 경로 탐색 |
+| `GET /routes/recent` | 예 | 지난 검색 목록(새 것부터 20) |
+| `DELETE /routes/recent` | 예 | 지난 검색 전부 삭제 |
 | `GET /places/search` | 예 | 카카오 장소 검색 프록시 |
 | `GET /tiles/{z}/{x}/{y}.png` | 예 | VWorld 타일 프록시 |
 | `POST /trips` | 예 | 안내 trip 시작 |
@@ -217,6 +220,7 @@ flutter test
 - [경로 정확도 평가](docs/routing-accuracy.md)
 - [횡단보도 대기 모델](docs/crossing-wait.md)
 - [안내 궤적과 속도 학습](docs/speed-learning.md)
+- [안내 유지와 홈 탭](docs/home-tabs-guide-session.md)
 - [Flutter 앱 실행 검증](docs/app-phase2.md)
 
 ## 개발 규칙
