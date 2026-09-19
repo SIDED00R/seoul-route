@@ -168,7 +168,7 @@ class _GuideScreenState extends State<GuideScreen> {
         perm = await ar.requestPermission();
       }
       if (!mounted || perm != ActivityPermission.GRANTED) return;
-      // 판정이 바뀔 때만 오는 스트림. 확정은 위치 샘플 시점(_onPosition 의 settle)에 한다.
+      // 판정이 바뀔 때만 오는 스트림. 확정·정지 감쇠는 settle 시점(위치 샘플과 10초 주기 점검)에 한다.
       _activities = ar.activityStream.listen((a) {
         if (mounted) {
           _rawActivity = (a.type.name, a.confidence.name);
@@ -222,6 +222,8 @@ class _GuideScreenState extends State<GuideScreen> {
   void _onTick() {
     if (!mounted || _ending) return;
     final now = _now();
+    // 위치가 아예 끊긴 지하에서도 활동 판정이 흐르게 한다 — 그러지 않으면 정지 감쇠가 멈춰 직전 활동이 화면에 박힌다.
+    _activity.settle(now);
     if (_tracker.tick(now)) _enterLeg();
     if (_tracker.current.transitLeg) _remainingStops = _stops.remaining(null, null, 0, now);
     setState(() => _instr = _buildInstruction());
