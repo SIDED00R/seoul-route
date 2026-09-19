@@ -44,24 +44,29 @@ func TestTripSpeedsMedianOfMovingPairs(t *testing.T) {
 	}
 }
 
-// 도보 구간인데 활동 인식이 vehicle 인 샘플 쌍은 세지 않고 Mismatch 로 센다. still/unknown/빈 값은 그대로 센다.
+// 도보 구간에서는 활동 인식이 walk 인 샘플만 센다. still·unknown·vehicle 은 Mismatch 로 빠지고,
+// 활동 인식이 없는 샘플(빈 값)은 그대로 센다.
 func TestTripSpeedsExcludesActivityMismatch(t *testing.T) {
 	t0 := time.Date(2026, 9, 15, 9, 0, 0, 0, time.UTC)
-	s := walkSamples(t0, "walk", 1.4, 5, 21, 10) // 20쌍
+	s := walkSamples(t0, "walk", 1.4, 5, 31, 10) // 30쌍
 	for i := range s {
 		switch {
-		case i < 5:
-			s[i].Activity = "walk"
-		case i < 8:
-			s[i].Activity = "still"
 		case i < 10:
+			s[i].Activity = "walk" // 쌍 (0,1)~(9,10) 중 (9,10) 은 10 이 still 이라 빠진다
+		case i < 13:
+			s[i].Activity = "still"
+		case i < 15:
 			s[i].Activity = "unknown"
-		case i >= 15:
-			s[i].Activity = "vehicle" // 15~20: 쌍 (14,15)~(19,20) 6개가 빠진다
+		case i < 25:
+			s[i].Activity = "" // 활동 인식 없음 — 그대로 센다
+		default:
+			s[i].Activity = "vehicle"
 		}
 	}
+	// 남는 쌍: walk 구간 9개 + 빈 값 구간 9개 = 18. 빠지는 쌍: still·unknown 경계 11개 + vehicle 경계 6개 = 17 중
+	// 연속 쌍 30개에서 18을 뺀 12개가 Mismatch 다.
 	w := TripSpeeds(s)["walk"]
-	if !w.OK || w.Pairs != 14 || w.Mismatch != 6 || math.Abs(w.SpeedMps-1.4) > 0.01 {
+	if !w.OK || w.Pairs != 18 || w.Mismatch != 12 || math.Abs(w.SpeedMps-1.4) > 0.01 {
 		t.Fatalf("walk=%+v", w)
 	}
 	// 전부 불일치면 추정은 없고 Mismatch 만 남는다
@@ -69,7 +74,7 @@ func TestTripSpeedsExcludesActivityMismatch(t *testing.T) {
 		s[i].Activity = "bicycle"
 	}
 	w = TripSpeeds(s)["walk"]
-	if w.OK || w.Pairs != 0 || w.Mismatch != 20 {
+	if w.OK || w.Pairs != 0 || w.Mismatch != 30 {
 		t.Fatalf("walk=%+v", w)
 	}
 	// 간격이 30초를 넘는 쌍은 애초에 연속 쌍이 아니라 불일치로도 세지 않는다(키도 생기지 않는다)
@@ -121,6 +126,22 @@ func TestTripSpeedsGapAndBikeMovingThreshold(t *testing.T) {
 	// 자전거 0.4 m/s 는 정지로 본다(MinMoving 0.5)
 	if _, ok := TripSpeeds(walkSamples(t0, "bicycle", 0.4, 5, 30, 5))["bicycle"]; ok {
 		t.Fatal("자전거 0.4 m/s 가 이동으로 세졌다")
+	}
+}
+
+// 활동 인식이 내내 정지·미상이면 그 trip 은 속도를 내지 않는다. 자전거도 같다.
+func TestTripSpeedsNoSpeedFromStillOrUnknownOnlyTrip(t *testing.T) {
+	t0 := time.Date(2026, 9, 20, 9, 0, 0, 0, time.UTC)
+	for _, c := range []struct{ mode, activity string }{
+		{"walk", "still"}, {"walk", "unknown"}, {"bicycle", "still"}, {"bicycle", "unknown"},
+	} {
+		s := walkSamples(t0, c.mode, 2.0, 5, 40, 10)
+		for i := range s {
+			s[i].Activity = c.activity
+		}
+		if e := TripSpeeds(s)[c.mode]; e.OK || e.Pairs != 0 {
+			t.Errorf("%s/%s: %+v", c.mode, c.activity, e)
+		}
 	}
 }
 
