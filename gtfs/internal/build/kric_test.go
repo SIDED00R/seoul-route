@@ -138,7 +138,7 @@ func TestBuildReplacesPilotKricTrips(t *testing.T) {
 			{Code: "K110", Dep: "05:01:00"}, {Code: "K111", Arr: "05:04:00"}}}},
 	}
 	out := filepath.Join(t.TempDir(), "g.zip")
-	rep, err := Build(out, []BusRoute{sampleRoute()}, sub, nil, nil, tt)
+	rep, err := Build(out, []BusRoute{sampleRoute()}, sub, nil, nil, tt, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

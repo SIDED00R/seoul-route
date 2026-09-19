@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 
 import 'package:seoul_route/api/client.dart';
+import 'package:seoul_route/guide/active_guide.dart';
 import 'package:seoul_route/models/itinerary.dart';
 import 'package:seoul_route/models/place.dart';
 import 'package:seoul_route/models/plan_request.dart';
@@ -90,6 +91,8 @@ void main() {
   const channel = MethodChannel('seoul_route/notification_permission');
 
   setUp(() {
+    // 안내는 앱에 하나뿐이라 테스트마다 치운다 — 안 그러면 앞 테스트의 안내를 이어받는다.
+    ActiveGuide.instance.clear();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async => true);
   });
@@ -114,6 +117,7 @@ void main() {
     expect(find.textContaining('안내 중'), findsOneWidget);
     expect(geo.cancelled, isFalse);
 
+    ActiveGuide.instance.clear();
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 10));
   });
@@ -134,11 +138,13 @@ void main() {
     expect(geo.cancelled, isTrue);
     expect(find.textContaining('trip 발급 실패'), findsOneWidget);
 
+    ActiveGuide.instance.clear();
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 10));
   });
 
-  testWidgets('trip 발급을 기다리는 동안 화면이 닫히면 늦게 발급된 trip을 종료한다', (tester) async {
+  // 화면을 닫는 것만으로는 안내가 끝나지 않는다(뒤로가기로 나가도 안내는 이어진다). 안내 자체를 놓았을 때만 정리한다.
+  testWidgets('trip 발급을 기다리는 동안 안내를 놓으면 늦게 발급된 trip을 종료한다', (tester) async {
     final geo = FakeGeolocator();
     GeolocatorPlatform.instance = geo;
     final api = HeldTripApi();
@@ -146,6 +152,7 @@ void main() {
     await _settle(tester);
     expect(api.startCalls, 1);
 
+    ActiveGuide.instance.clear();
     await tester.pumpWidget(const SizedBox());
     api.trip.complete('trip-after-pop');
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));

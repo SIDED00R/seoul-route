@@ -121,7 +121,7 @@ OTP 2.10 의 Range RAPTOR(대중교통)와 A*(도보·자전거)는 주어진 �
 ## 남은 결함 (이슈)
 
 - ~~#12 역 구내 스냅~~: 좌표 대신 역 ID(`stopLocation`)로 요청하면 54.3→39.8분. GTFS 부모역 + 백엔드 앵커링으로 해결했다. 장소명이 `…역`이고 1km 안에 같은 이름의 부모역이 있을 때 적용한다.
-- ~~GTFS 정류장 23% 가 OSM bbox 밖(`IsolatedStop 5,264`)~~ → 이슈 #20 에서 bbox 밖 정류장을 생성 단계에서 제외: `IsolatedStop` 5,264 → 273, `StopNotLinkedForTransfers` 5,685 → 538, 정류장 23,443 → 18,255. 지하철 승강장은 bbox 로 거르지 않아 762 중 194개가 서울 bbox 밖(OSM 추출 범위 밖이라 도로망 없음)이고 남은 `IsolatedStop` 의 상당수가 이쪽이다(정확한 내역은 `dataImportReport` 로 재빌드해야 안다). shapes.txt 부재로 버스 leg 거리 19% 과소는 그대로.
+- ~~GTFS 정류장 23% 가 OSM bbox 밖(`IsolatedStop 5,264`)~~ → 이슈 #20 에서 bbox 밖 정류장을 생성 단계에서 제외: `IsolatedStop` 5,264 → 273, `StopNotLinkedForTransfers` 5,685 → 538, 정류장 23,443 → 18,255. 지하철 승강장은 bbox 로 거르지 않아 762 중 194개가 서울 bbox 밖(OSM 추출 범위 밖이라 도로망 없음)이고 남은 `IsolatedStop` 의 상당수가 이쪽이다(정확한 내역은 `dataImportReport` 로 재빌드해야 안다). shapes.txt 부재로 버스 leg 거리 19% 과소는 그대로. → 이슈 #75 에서 shapes.txt 를 넣었다(`docs/gtfs-generator.md`).
 - ~~실측 대조(ground truth) 없음~~ → 이슈 #22 `cmd/odcompare`(위 절). ~~역 진입시간~~ → 이슈 #24(위 절). ~~환승 통로 도보 7분~~ → 이슈 #25 pathways.txt(위 절). ~~좌표 출발의 역 접근 도보~~ → 이슈 #27 OSM 실제 출입구(강남역 옆 8.3 → 5.7분).
 - ~~파일럿 지하철 시간표 구멍(청담 7호선 오전 열차 0)~~ → 이슈 #30 서울교통공사 시각표(위 절). ~~코레일 노선(경의중앙·경춘·수인분당)·신분당선·공항철도는 파일럿 1일 표본 그대로~~ → 이슈 #34 레일포털 시각표(아래 절). 남은 것: 서해선(대곡 연장 구간이 레일포털에 없음)·GTX-A(레일포털에 없음)만 파일럿.
 

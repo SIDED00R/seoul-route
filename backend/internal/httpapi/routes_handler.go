@@ -61,6 +61,7 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "경로 엔진 오류")
 		return
 	}
+	s.saveRecentRoute(r.Context(), userID, req)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"itineraries": its,
 		"walk_speed":  req.WalkSpeed,

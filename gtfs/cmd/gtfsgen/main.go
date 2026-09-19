@@ -1,6 +1,7 @@
 // gtfsgen: 서울 운영 GTFS 생성기.
 //
-//	gtfsgen fetch   서울 버스 API 를 호출해 gtfs/cache/ 에 저장한다(있으면 건너뜀). 일일 한도에 걸리면 중단, 다음 날 재실행.
+//	gtfsgen fetch   서울 버스 API(노선·정류장·노선 경로)를 호출해 gtfs/cache/ 에 저장한다(있으면 건너뜀). 일일 한도에 걸리면 중단,
+//	                다음 날 재실행.
 //	gtfsgen build   캐시 + 국가교통DB 도시철도 파일럿(otp/data/202503_GTFS_DataSet) → gtfs/out/seoul-gtfs.zip
 //
 // 키는 .env 의 DATA_GO_KR_KEY. 키·URL 은 출력하지 않는다.
@@ -76,6 +77,16 @@ func fetch(c *seoulbus.Client) error {
 			fmt.Printf("  %d/%d (%s)\n", i+1, len(routes), time.Since(start).Round(time.Second))
 		}
 	}
+	// 노선 경로(shape 용). 정류장과 같은 방식으로 이어 받는다.
+	for i, r := range routes {
+		if _, err := c.RoutePath(r.ID); err != nil {
+			if errors.Is(err, seoulbus.ErrQuota) {
+				fmt.Printf("한도 도달: 노선 경로 %d/%d 캐시됨. 내일 다시 fetch 하면 이어서 받는다.\n", i, len(routes))
+				return err
+			}
+			fmt.Printf("  %s(%s) 경로: %v\n", r.Name, r.ID, err)
+		}
+	}
 	fmt.Println("fetch 완료")
 	return nil
 }
@@ -87,7 +98,7 @@ func buildAll(root, cache string) error {
 		return fmt.Errorf("노선 목록 캐시 없음, 먼저 fetch: %w", err)
 	}
 	var buses []build.BusRoute
-	missing := 0
+	missing, noPath := 0, 0
 	for _, r := range routes {
 		if !c.Cached("stops_" + r.ID + ".json") {
 			missing++
@@ -97,10 +108,21 @@ func buildAll(root, cache string) error {
 		if err != nil {
 			return err
 		}
-		buses = append(buses, build.BusRoute{Route: r, Stops: stops})
+		var path []seoulbus.PathPoint
+		if c.Cached("path_" + r.ID + ".json") {
+			if path, err = c.RoutePath(r.ID); err != nil {
+				return err
+			}
+		} else {
+			noPath++
+		}
+		buses = append(buses, build.BusRoute{Route: r, Stops: stops, Path: path})
 	}
 	if missing > 0 {
 		fmt.Printf("경고: 정류장 캐시 없는 노선 %d개 제외 (fetch 미완)\n", missing)
+	}
+	if noPath > 0 {
+		fmt.Printf("경고: 노선 경로 캐시 없는 노선 %d개 — 그 노선은 정류장 사이를 직선으로 잇는다 (fetch 미완)\n", noPath)
 	}
 	pilot := filepath.Join(root, "otp", "data", "202503_GTFS_DataSet")
 	var subway *ktdb.Subway
@@ -151,7 +173,15 @@ func buildAll(root, cache string) error {
 	} else {
 		fmt.Println("경고: otp/data/kric-timetable.csv 없음 — 코레일·민자 노선은 파일럿 시간표 (python otp/fetch_kric_timetable.py)")
 	}
-	rep, err := build.Build(out, buses, subway, entrances, metro, kricTT)
+	// OSM 노선 선로(otp/extract_rail.py 산출). 없으면 도시철도는 역 사이를 직선으로 잇는다.
+	railCSV := filepath.Join(root, "otp", "data", "rail-ways.csv")
+	rail, err := osm.LoadRailWays(railCSV)
+	if errors.Is(err, os.ErrNotExist) {
+		fmt.Println("경고: otp/data/rail-ways.csv 없음 — 도시철도 shape 없이 생성 (python otp/extract_rail.py)")
+	} else if err != nil {
+		return err
+	}
+	rep, err := build.Build(out, buses, subway, entrances, metro, kricTT, rail)
 	if err != nil {
 		return err
 	}
@@ -171,13 +201,15 @@ func printReport(rep *build.Report, out string) {
 		"빠진 열차 %d, 이름으로 찾은 정차 %d, 시각 역행으로 뺀 열차 %d, 급행 통과역 %d, 시각 없는 정차 %d), 역 %d, "+
 		"출입구 %d(OSM 출입구 붙은 역 %d, 승강장 좌표 폴백 %d, 출입구 통로 없는 승강장 %d), "+
 		"통로 %d(부모역이 갈려 빠진 환승 %d, 거리 상한으로 뺀 쌍 %d) | 레일포털 노선 %d, trip %d(빠진 정차 %d, 빠진 열차 %d, "+
-		"좌표로 붙인 역 %d, 시각 역행으로 뺀 열차 %d, 중복 행 %d) → %s\n",
+		"좌표로 붙인 역 %d, 시각 역행으로 뺀 열차 %d, 중복 행 %d) | shape 버스 %d(없는 방향 %d), 도시철도 %d(선로를 못 찾은 "+
+		"역 간 구간 %d, shape 없는 trip %d) → %s\n",
 		rep.NBusRoutes, skipped, rep.NBusStops, rep.NSubwayTrips, rep.NPilotTripsReplaced, rep.NMetroTrips,
 		rep.NMetroSkippedStops, rep.NMetroSkippedTrips, rep.NMetroNameMatched, rep.NMetroNonMonotonic, rep.NMetroPassing,
 		rep.NMetroNoTime, rep.NSubwayStops, rep.NEntrances,
 		rep.NRealEntranceStations, rep.NFallbackEntranceStations, rep.NNoEntrancePlatforms, rep.NPathways,
 		rep.NUnpairedTransfers, rep.NFarPairs, rep.NKricLines, rep.NKricTrips, rep.NKricSkippedStops, rep.NKricSkippedTrips,
-		rep.NKricNearestMatched, rep.NKricNonMonotonic, rep.NKricDupRows, out)
+		rep.NKricNearestMatched, rep.NKricNonMonotonic, rep.NKricDupRows, rep.NBusShapes, rep.NBusNoShapeDirections,
+		rep.NRailShapes, rep.NRailStraightHops, rep.NRailNoShapeTrips, out)
 }
 
 func envKey(path, name string) (string, error) {

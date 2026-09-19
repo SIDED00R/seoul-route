@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'screens/plan_screen.dart';
+import 'screens/home_screen.dart';
 import 'settings/settings_store.dart';
 
 // 서울 길찾기 앱. 화면은 screens/, 서버 호출은 api/, 응답 모델은 models/ 에 둔다.
@@ -20,7 +20,7 @@ class SeoulRouteApp extends StatelessWidget {
     return MaterialApp(
       title: '서울 길찾기',
       theme: ThemeData(colorSchemeSeed: Colors.teal, useMaterial3: true),
-      home: PlanScreen(settings: settings),
+      home: HomeScreen(settings: settings),
     );
   }
 }
