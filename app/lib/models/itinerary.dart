@@ -1,3 +1,4 @@
+import 'fast_exit.dart';
 import 'leg_detail.dart';
 
 // 백엔드 /routes/plan 응답 모델. 필드명은 backend/internal/otp/client.go 의 JSON 태그와 같다.
@@ -27,6 +28,7 @@ class Leg {
     this.inStation = false,
     this.color = '',
     this.textColor = '',
+    this.fastExit = const [],
     this.headsign = '',
     this.steps = const [],
     this.stops = const [],
@@ -56,6 +58,7 @@ class Leg {
   final bool inStation; // 역 출입구를 지나지 않는 역 안 환승 통로 도보(지하라 위치가 잡히지 않는다)
   final String color; // 노선 색(GTFS route_color, # 없는 6자리 16진수). 없으면 수단별 기본 팔레트를 쓴다
   final String textColor; // 그 색 위에 얹을 글자색
+  final List<FastExitFacility> fastExit; // 지하철 하차역의 설비 앞 칸-문(자료가 있는 1~8호선 역만)
   final String headsign; // 탑승 차량의 행선지(대중교통)
   final List<WalkStep> steps; // 도보·자전거 안내 단계
   final List<TransitStop> stops; // 중간 정차(탑승·하차 제외)
@@ -87,6 +90,9 @@ class Leg {
         inStation: (j['in_station'] as bool?) ?? false,
         color: (j['color'] as String?) ?? '',
         textColor: (j['text_color'] as String?) ?? '',
+        fastExit: ((j['fast_exit'] as List<dynamic>?) ?? const [])
+            .map((e) => FastExitFacility.fromJson(e as Map<String, dynamic>))
+            .toList(),
         headsign: (j['headsign'] as String?) ?? '',
         steps: ((j['steps'] as List<dynamic>?) ?? const [])
             .map((e) => WalkStep.fromJson(e as Map<String, dynamic>))
@@ -99,6 +105,11 @@ class Leg {
   /// "횡단보도 3곳 · 신호 대기 약 2분". 신호 횡단보도가 없으면 null.
   String? get crossingLabel =>
       crossings == 0 ? null : '횡단보도 $crossings곳 · 신호 대기 약 ${(crossingWaitSec / 60).round()}분';
+
+  /// "내릴 때 · 에스컬레이터 3-3, 8-1 · 계단 2-1". 하차역 설비 앞 칸-문. 자료가 없으면 null.
+  String? get fastExitLabel => fastExit.isEmpty
+      ? null
+      : '내릴 때 · ${fastExit.map((f) => '${f.name} ${f.doors.join(', ')}').join(' · ')}';
 
   /// 앞뒤 차 안내 한 줄. 실시간 > 시간표 앞뒤 차 > 배차간격 순으로 있는 것만 보여준다. 없으면 null.
   String? get scheduleLabel {

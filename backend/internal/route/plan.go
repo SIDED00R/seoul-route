@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/SIDED00R/seoul-route/backend/internal/otp"
+	"github.com/SIDED00R/seoul-route/backend/internal/fastexit"
 	"github.com/SIDED00R/seoul-route/backend/internal/routestyle"
 )
 
@@ -68,6 +69,8 @@ type Planner struct {
 	Headways map[string]int   // GTFS route_id(예 "B_100100063") → 배차간격(초). 버스 leg 의 "배차 약 N분" 표시용
 	// RouteStyles: GTFS route_id → 노선 색(routestyle.Style). 앱이 구간 칩·경로선을 그 색으로 칠한다.
 	RouteStyles map[string]routestyle.Style
+	// FastExits: 지하철 하차역의 설비(계단·에스컬레이터·엘리베이터) 앞 칸-문. nil 이면 붙이지 않는다.
+	FastExits *fastexit.Index
 	mu       sync.RWMutex
 	stations []otp.Station // 앵커링용 부모역 목록(SetStations). 비면 항상 좌표로 요청한다
 }
@@ -139,6 +142,7 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) ([]otp.Itinerary, e
 	its = rank(its)
 	p.annotateHeadways(its)
 	p.annotateRouteStyles(its)
+	p.annotateFastExits(its)
 	return its, nil
 }
 

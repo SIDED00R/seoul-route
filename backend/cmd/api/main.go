@@ -22,6 +22,7 @@ import (
 	"github.com/SIDED00R/seoul-route/backend/internal/otp"
 	"github.com/SIDED00R/seoul-route/backend/internal/realtime"
 	"github.com/SIDED00R/seoul-route/backend/internal/route"
+	"github.com/SIDED00R/seoul-route/backend/internal/fastexit"
 	"github.com/SIDED00R/seoul-route/backend/internal/routestyle"
 	"github.com/SIDED00R/seoul-route/backend/internal/speed"
 )
@@ -95,6 +96,13 @@ func main() {
 	} else {
 		planner.RouteStyles = st
 		log.Info("route colors loaded", "routes", len(st))
+	}
+	// 지하철 하차역의 설비 앞 칸(cmd/fastexit 이 받아 둔 파일). 없으면 표시만 빠진다.
+	if fx, err := fastexit.Load(cfg.FastExitJSON, cfg.EscalatorJSON); err != nil {
+		log.Warn("fast exit disabled", "path", cfg.FastExitJSON, "err", err)
+	} else {
+		planner.FastExits = fx
+		log.Info("fast exits loaded", "stations", fx.Len())
 	}
 	// 첫 탑승 실시간 보정. 키가 있는 수단만 켠다. 외부 API 는 응답이 느릴 수 있어 짧은 타임아웃.
 	rt := &realtime.Corrector{Log: log}

@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/SIDED00R/seoul-route/backend/internal/fastexit"
 )
 
 type Coord struct {
@@ -86,6 +88,8 @@ type Leg struct {
 	// 노선 색(생성 GTFS routes.txt, # 없는 6자리 16진수). 앱이 구간 칩·경로선을 이 색으로 칠한다(route/plan.go 가 붙인다).
 	Color     string `json:"color,omitempty"`
 	TextColor string `json:"text_color,omitempty"`
+	// 지하철 하차역에서 설비(계단·에스컬레이터·엘리베이터)가 있는 칸-문. 자료가 있는 역(1~8호선)만 채운다.
+	FastExit []fastexit.Facility `json:"fast_exit,omitempty"`
 	Steps        []Step  `json:"steps,omitempty"`    // 도보·자전거 leg 의 안내 단계
 	Stops        []Stop  `json:"stops,omitempty"`    // 대중교통 leg 의 중간 정차(탑승·하차 제외)
 }
