@@ -66,9 +66,11 @@ type Planner struct {
 	Crossings   Crossings
 	CrossingSec float64          // 횡단보도 하나의 기대 대기(초). 0 이면 crossing.ExpectedWaitSec 을 main 이 넣는다
 	Now         func() time.Time // 테스트용 현재 시각. nil 이면 time.Now
-	Headways map[string]int   // GTFS route_id(예 "B_100100063") → 배차간격(초). 버스 leg 의 "배차 약 N분" 표시용
+	Headways    map[string]int   // GTFS route_id(예 "B_100100063") → 배차간격(초). 버스 leg 의 "배차 약 N분" 표시용
 	// RouteStyles: GTFS route_id → 노선 색(routestyle.Style). 앱이 구간 칩·경로선을 그 색으로 칠한다.
 	RouteStyles map[string]routestyle.Style
+	// Bikes: 따릉이 실시간 대여소 스냅샷. nil 이면 남은 대수를 붙이지 않는다.
+	Bikes    BikeStations
 	// FastExits: 지하철 하차역의 설비(계단·에스컬레이터·엘리베이터) 앞 칸-문. nil 이면 붙이지 않는다.
 	FastExits *fastexit.Index
 	mu       sync.RWMutex
@@ -142,6 +144,7 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) ([]otp.Itinerary, e
 	its = rank(its)
 	p.annotateHeadways(its)
 	p.annotateRouteStyles(its)
+	p.annotateBikeStations(its)
 	p.annotateFastExits(its)
 	return its, nil
 }
