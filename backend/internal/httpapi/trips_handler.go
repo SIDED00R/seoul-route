@@ -21,8 +21,9 @@ const (
 	MaxClockSkew  = 5 * time.Minute
 )
 
-// 수단별 사전값. 프로파일이 없거나 표본이 없는 사용자는 이 값으로 경로를 받는다(route 와 같은 상수).
-var priors = map[string]float64{"walk": route.DefaultWalk, "bicycle": route.DefaultBike}
+// Priors: 수단별 사전값. 프로파일이 없거나 표본이 없는 사용자는 이 값으로 경로를 받는다(route 와 같은 상수).
+// cmd/api 의 오래 조용한 trip 마감도 같은 값을 써야 해서 내보낸다.
+var Priors = map[string]float64{"walk": route.DefaultWalk, "bicycle": route.DefaultBike}
 
 // handleStartTrip 은 안내 1회를 trip 으로 발급한다. 앱은 이 id 로만 궤적을 올린다.
 func (s *Server) handleStartTrip(w http.ResponseWriter, r *http.Request) {
@@ -138,27 +139,9 @@ func (s *Server) handleEndTrip(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	userID := userIDFrom(ctx)
-	rows, err := s.DB.Query(ctx, `SELECT ts, lat, lon, accuracy_m, mode, COALESCE(activity, '') FROM traces
-		WHERE trip_id = $1 ORDER BY ts`, id)
+	samples, err := speed.LoadSamples(ctx, s.DB, id)
 	if err != nil {
 		s.Log.Error("end trip query", "err", err)
-		writeError(w, http.StatusInternalServerError, "종료 실패")
-		return
-	}
-	var samples []speed.Sample
-	for rows.Next() {
-		var p speed.Sample
-		var acc float32
-		if err := rows.Scan(&p.TS, &p.Lat, &p.Lon, &acc, &p.Mode, &p.Activity); err != nil {
-			rows.Close()
-			writeError(w, http.StatusInternalServerError, "종료 실패")
-			return
-		}
-		p.AccuracyM = float64(acc)
-		samples = append(samples, p)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
 		writeError(w, http.StatusInternalServerError, "종료 실패")
 		return
 	}
@@ -170,7 +153,6 @@ func (s *Server) handleEndTrip(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(ctx)
 	tripOut := map[string]any{}
-	var walkV, bikeV *float64
 	for _, mode := range []string{"walk", "bicycle"} {
 		e, has := est[mode]
 		entry := map[string]any{"pairs": e.Pairs, "mismatch": e.Mismatch, "used": has && e.OK}
@@ -178,38 +160,18 @@ func (s *Server) handleEndTrip(w http.ResponseWriter, r *http.Request) {
 			entry["speed_mps"] = e.SpeedMps
 		}
 		tripOut[mode] = entry
-		if !has || !e.OK {
-			continue
-		}
-		v := e.SpeedMps
-		if mode == "walk" {
-			walkV = &v
-		} else {
-			bikeV = &v
-		}
-		_, err := tx.Exec(ctx, `INSERT INTO speed_profiles(user_id, mode, n_trips, sum_speed_mps, speed_mps, updated_at)
-			VALUES ($1, $2, 1, $3, $4, now())
-			ON CONFLICT (user_id, mode) DO UPDATE SET n_trips = speed_profiles.n_trips + 1,
-				sum_speed_mps = speed_profiles.sum_speed_mps + EXCLUDED.sum_speed_mps,
-				speed_mps = ($5::float8 * $6::float8 + speed_profiles.sum_speed_mps + EXCLUDED.sum_speed_mps)
-					/ ($5::float8 + speed_profiles.n_trips + 1),
-				updated_at = now()`,
-			userID, mode, v, speed.Shrink(priors[mode], v, 1), speed.PriorTrips, priors[mode])
-		if err != nil {
-			s.Log.Error("profile upsert", "err", err)
-			writeError(w, http.StatusInternalServerError, "종료 실패")
-			return
-		}
 	}
-	// ended_at IS NULL 조건이 종료 권한이다. 같은 trip 의 /end 가 겹치면(앱 타임아웃 뒤 재시도) 뒤진 쪽은 여기서 0행이라
-	// 프로파일 갱신까지 롤백되고 409 를 받는다 — ownTrip 의 사전 검사는 트랜잭션 밖이라 이를 막지 못한다.
-	tag, err := tx.Exec(ctx, `UPDATE trips SET ended_at = now(), walk_speed_mps = $2, bike_speed_mps = $3
-		WHERE id = $1 AND ended_at IS NULL`, id, walkV, bikeV)
+	// 프로파일 반영과 종료는 speed.Apply 가 한다 — 오래 조용한 trip 을 자동으로 닫는 speed.CloseStaleTrips 와
+	// 같은 계산을 쓰게 한 곳에 뒀다. ended_at IS NULL 조건이 종료 권한이라, 같은 trip 의 /end 가 겹치면(앱 타임아웃
+	// 뒤 재시도) 뒤진 쪽은 false 를 받고 프로파일 갱신까지 롤백된다 — ownTrip 의 사전 검사는 트랜잭션 밖이라 이를
+	// 막지 못한다.
+	closed, err := speed.Apply(ctx, tx, id, userID, est, Priors)
 	if err != nil {
+		s.Log.Error("end trip apply", "err", err)
 		writeError(w, http.StatusInternalServerError, "종료 실패")
 		return
 	}
-	if tag.RowsAffected() == 0 {
+	if !closed {
 		writeError(w, http.StatusConflict, "이미 종료된 trip")
 		return
 	}
@@ -240,7 +202,7 @@ func (s *Server) handleGetSpeed(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) speedProfile(r *http.Request) (map[string]any, error) {
 	out := map[string]any{}
-	for mode, prior := range priors {
+	for mode, prior := range Priors {
 		out[mode] = map[string]any{"speed_mps": prior, "n_trips": 0, "prior_mps": prior}
 	}
 	rows, err := s.DB.Query(r.Context(),
@@ -257,7 +219,7 @@ func (s *Server) speedProfile(r *http.Request) (map[string]any, error) {
 		if err := rows.Scan(&mode, &n, &v); err != nil {
 			return nil, err
 		}
-		out[mode] = map[string]any{"speed_mps": v, "n_trips": n, "prior_mps": priors[mode]}
+		out[mode] = map[string]any{"speed_mps": v, "n_trips": n, "prior_mps": Priors[mode]}
 	}
 	return out, rows.Err()
 }
