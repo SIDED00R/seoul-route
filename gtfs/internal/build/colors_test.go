@@ -9,7 +9,7 @@ import (
 	"github.com/SIDED00R/seoul-route/gtfs/internal/ktdb"
 )
 
-// 시각표 CSV 가 없으면 1~9호선과 레일포털 노선도 파일럿 행으로 나온다. 그때도 노선 코드로 색을 찾아야 한다(이슈 #71).
+// 시각표 CSV 가 없으면 1~9호선과 레일포털 노선도 파일럿 행으로 나온다. 그때도 노선 코드로 색을 찾아야 한다.
 // 파일럿 코드는 0 을 채운 "01"~"09" 라 호선 표 키("1"~"9")와 다르다.
 func TestPilotSubwayColors(t *testing.T) {
 	sub := &ktdb.Subway{

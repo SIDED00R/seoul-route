@@ -12,7 +12,7 @@ import (
 )
 
 // 환승 2회 버스(시간표 도착 6030초) vs 지하철 직행(도착 5700초, 실시간 없음). 첫 버스 실시간이 시간표보다 17.5분 일러도
-// 뒤 환승은 시간표 차라 버스 도착은 그대로여야 하고, 순위는 지하철이 앞이어야 한다(이슈 #52).
+// 뒤 환승은 시간표 차라 버스 도착은 그대로여야 하고, 순위는 지하철이 앞이어야 한다.
 func TestRealtimeDoesNotPullLaterTransfersForward(t *testing.T) {
 	kst := time.FixedZone("KST", 9*3600)
 	now := time.Date(2026, 9, 15, 14, 0, 0, 0, kst)

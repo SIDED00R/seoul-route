@@ -10,11 +10,10 @@ import (
 // StaleAfter: 마지막 표본(없으면 시작 시각)이 이만큼 조용하면 안내가 사라진 것으로 보고 trip 을 닫는다.
 // 안내 중에는 5초마다 표본이 올라오므로(앱 TraceUploader.minGap) 이 간격이 비는 것은 안내가 없다는 뜻이다.
 // 끊긴 동안 쌓아 두었다가 늦게 올리는 경우를 죽이지 않게 넉넉히 잡았다.
-// 2026-09-20 실측: 열린 채 남은 trip 11개 중 10개가 4일 넘게 조용했고, 가장 최근 것도 17시간이었다.
 const StaleAfter = 6 * time.Hour
 
 // CloseStaleTrips 는 오래 조용한 열린 trip 을 /end 와 같은 계산으로 닫는다(속도를 프로파일에 반영한 뒤 ended_at).
-// 닫은 수를 돌려준다. 앱이 종료 요청을 보내지 못하고 죽으면 서버에는 정리할 경로가 없기 때문에 필요하다(이슈 #90).
+// 닫은 수를 돌려준다. 앱이 종료 요청을 보내지 못하고 죽으면 서버에는 정리할 경로가 없기 때문에 필요하다.
 // main 이 궤적 정리와 같은 주기로 부른다.
 func CloseStaleTrips(ctx context.Context, pool *pgxpool.Pool, priors map[string]float64, now time.Time) (int, error) {
 	type trip struct{ id, userID string }

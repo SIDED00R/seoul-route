@@ -82,7 +82,7 @@ func TestKricRows(t *testing.T) {
 		}
 		return strings.Join(s, "\n")
 	}
-	// 노선 코드별 색과 글자색이 붙는다. 우이신설은 노선 WS·기관 UI 라 기관 코드로 색을 찾으면 어긋난다(이슈 #71).
+	// 노선 코드별 색과 글자색이 붙는다. 우이신설은 노선 WS·기관 UI 라 기관 코드로 색을 찾으면 어긋난다.
 	if join(routes) != "K_KJ,A_KR,경의중앙선,경의중앙선,1,77C4A3,000000\nK_WS,A_UI,우이신설,우이신설,1,B0CE18,000000" {
 		t.Fatalf("routes=\n%s", join(routes))
 	}
@@ -165,7 +165,7 @@ func TestBuildReplacesPilotKricTrips(t *testing.T) {
 		ids = append(ids, r[0]+"/"+r[1]+"/"+r[2])
 		pilotColors[r[0]] = r[5] + "/" + r[6]
 	}
-	// 시각표가 없어 파일럿으로 남는 노선도 코드로 색을 찾는다(이슈 #71)
+	// 시각표가 없어 파일럿으로 남는 노선도 코드로 색을 찾는다
 	if pilotColors["RR_ACC1_S-1-SB-1D"] != "D4003B/FFFFFF" {
 		t.Errorf("신분당선 파일럿 색=%q", pilotColors["RR_ACC1_S-1-SB-1D"])
 	}

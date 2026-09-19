@@ -194,7 +194,7 @@ void main() {
   });
 
   /// 시각은 픽스처를 만든 순간(_base)으로 고정한다. 실제 시계를 쓰면 LegTracker 가 구간 1 에 늦게 들어온
-  /// 것으로 보고 도착 예정을 그만큼 밀어, _base 의 초에 따라 카드의 분이 한 칸 올라간다(이슈 #93).
+  /// 것으로 보고 도착 예정을 그만큼 밀어, _base 의 초에 따라 카드의 분이 한 칸 올라간다.
   Future<void> pumpGuide(WidgetTester tester, {bool voice = true}) async {
     await tester.pumpWidget(MaterialApp(
       home: GuideScreen(

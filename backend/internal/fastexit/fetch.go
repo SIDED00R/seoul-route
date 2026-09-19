@@ -31,8 +31,8 @@ type page struct {
 	} `json:"response"`
 }
 
-// FetchEscalators 는 에스컬레이터 설치현황 전체를 API 응답 그대로 모아 돌려준다. 열린데이터광장은 1콜 1,000행이고
-// 2026-09-19 전체 1,882행이었다. 키는 URL 경로에 들어가므로 오류에 URL 을 싣지 않는다.
+// FetchEscalators 는 에스컬레이터 설치현황 전체를 API 응답 그대로 모아 돌려준다. 열린데이터광장은 1콜 1,000행이다.
+// 키는 URL 경로에 들어가므로 오류에 URL 을 싣지 않는다.
 func FetchEscalators(hc *http.Client, base, key string) ([]json.RawMessage, error) {
 	var out []json.RawMessage
 	for start := 1; ; start += pageSize {

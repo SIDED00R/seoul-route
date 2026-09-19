@@ -35,7 +35,7 @@ func TestNearbyDepartures(t *testing.T) {
 	}
 }
 
-// 역 ID 가 있으면 출발·도착·경유 모두 좌표 대신 stopLocation 으로 나가야 한다(역사 좌표 스냅 우회, 이슈 #12).
+// 역 ID 가 있으면 출발·도착·경유 모두 좌표 대신 stopLocation 으로 나가야 한다(역사 좌표 스냅 우회).
 func TestPlanSendsStopLocations(t *testing.T) {
 	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

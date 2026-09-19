@@ -43,7 +43,7 @@ type TransitMode struct {
 type Request struct {
 	Origin, Destination Coord
 	// OriginStop/DestStop 이 있으면 좌표 대신 역(gtfsId, 예 "seoul:ST_서울")으로 요청한다. OTP 가 역 안에서
-	// 여정에 맞는 stop 을 고르므로 역사 좌표가 엉뚱한 도로에 붙는 문제를 피한다(이슈 #12).
+	// 여정에 맞는 stop 을 고르므로 역사 좌표가 엉뚱한 도로에 붙는 문제를 피한다.
 	OriginStop, DestStop string
 	Via                  []Coord
 	ViaStops             []string // Via 와 같은 길이. 비어 있지 않은 항목은 좌표 대신 그 역 ID 로 경유한다

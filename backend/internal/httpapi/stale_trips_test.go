@@ -9,7 +9,6 @@ import (
 )
 
 // 오래 조용한 열린 trip 은 /end 와 같은 계산으로 닫히고, 방금 표본이 올라온 trip 은 건드리지 않는다.
-// 앱이 종료 요청을 보내지 못하고 죽으면 서버에 정리할 경로가 없어 trip 이 영영 열린 채 남았다(이슈 #90).
 func TestCloseStaleTrips(t *testing.T) {
 	_, pool := testServer(t)
 	ctx := context.Background()

@@ -12,7 +12,7 @@ import (
 const AnchorRadiusM = 1000
 
 // anchor 는 장소명이 역이면 그 역의 gtfsId 를, 아니면 "" 를 돌려준다.
-// 역사 건물 좌표는 도로망에서 선로 반대편·승강장·지하상가에 붙어 도보가 1km 넘게 늘어난다(이슈 #12 실측).
+// 역사 건물 좌표는 도로망에서 선로 반대편·승강장·지하상가에 붙어 도보가 1km 넘게 늘어난다(실측).
 // 좌표 대신 역 ID 를 주면 OTP 가 역 안에서 여정에 맞는 stop 을 고른다.
 func (p *Planner) anchor(pt Point) string {
 	base := stationBase(pt.Name)

@@ -8,7 +8,7 @@ import (
 
 // 도보 leg 양끝이 같은 부모역의 정류장이고 steps 에 역 출입구(EXIT_STATION/ENTER_STATION)가 없으면 InStation(역 안 환승
 // 통로). 부모역이 다르거나, 한쪽이 좌표(정류장 없음)거나, 대중교통 leg 거나, 같은 부모역이라도 출입구로 나갔다 들어오는
-// 도보(신촌 2호선↔경의중앙선)면 false. 쿼리가 parentStation 과 steps 를 실제로 요청해야 이 값이 채워진다(이슈 #57).
+// 도보(신촌 2호선↔경의중앙선)면 false. 쿼리가 parentStation 과 steps 를 실제로 요청해야 이 값이 채워진다.
 func TestInStationWalkLeg(t *testing.T) {
 	if strings.Count(query, "parentStation { gtfsId }") != 2 {
 		t.Fatalf("쿼리가 from·to 의 parentStation 을 요청하지 않는다:\n%s", query)
