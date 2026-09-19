@@ -49,6 +49,15 @@ class _SummaryState extends State<_Summary> {
     widget.session.addListener(_changed);
   }
 
+  /// 안내를 갈아타면 이 상태는 그대로 남고 새 세션만 전달된다. 구독을 옮긴다.
+  @override
+  void didUpdateWidget(_Summary old) {
+    super.didUpdateWidget(old);
+    if (identical(old.session, widget.session)) return;
+    old.session.removeListener(_changed);
+    widget.session.addListener(_changed);
+  }
+
   @override
   void dispose() {
     widget.session.removeListener(_changed);

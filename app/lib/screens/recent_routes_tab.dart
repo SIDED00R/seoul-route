@@ -86,9 +86,19 @@ class _RecentRoutesTabState extends State<RecentRoutesTab> {
       ),
     );
     if (yes != true) return;
+    // 세대를 올리면 진행 중인 조회의 결과가 버려진다. 삭제를 기다리는 동안 시작된 조회도 버려야 해서 끝난 뒤
+    // 한 번 더 올린다. 버려진 조회는 _busy 를 못 내리니 여기서 내린다.
+    _loadGen++;
+    setState(() => _busy = false);
     try {
       await widget.api.clearRecentRoutes();
-      if (mounted) setState(() => _routes = []);
+      _loadGen++;
+      if (mounted) {
+        setState(() {
+          _routes = [];
+          _busy = false;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => _error = '삭제 실패: $e');
     }

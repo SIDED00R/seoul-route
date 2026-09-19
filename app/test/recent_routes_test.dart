@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,25 +13,41 @@ import 'package:seoul_route/screens/recent_routes_tab.dart';
 import 'package:seoul_route/settings/settings_store.dart';
 
 class _Api extends ApiClient {
-  _Api({this.routes = const [], this.fail, this.delay = Duration.zero, String tok = 't'})
+  _Api({this.routes = const [], this.fail, this.delay = Duration.zero, this.holdFrom, String tok = 't'})
       : super(baseUrl: 'http://x', token: tok);
 
   final List<Map<String, dynamic>> routes;
   final ApiException? fail;
   final Duration delay;
+
+  /// 이 번째 조회부터는 완료될 때까지 붙잡는다(응답 순서를 테스트가 정하려고). 1 이면 첫 조회부터.
+  final int? holdFrom;
+  final held = Completer<void>();
+
+  /// 붙잡힌 조회가 돌려줄 목록. 앞선 응답과 달라야 화면에 반영됐는지 구분된다.
+  List<Map<String, dynamic>>? heldRoutes;
+
+  /// 삭제 응답을 붙잡는다. 붙잡는 동안 새 조회를 띄워 순서를 만든다.
+  Completer<void>? holdClear;
   int cleared = 0;
   int loads = 0;
 
   @override
   Future<List<RecentRoute>> recentRoutes() async {
     loads++;
+    final holding = holdFrom != null && loads >= holdFrom!;
+    if (holding) await held.future;
     if (delay > Duration.zero) await Future<void>.delayed(delay);
     if (fail != null) throw fail!;
-    return routes.map(RecentRoute.fromJson).toList();
+    final rows = holding ? (heldRoutes ?? routes) : routes;
+    return rows.map(RecentRoute.fromJson).toList();
   }
 
   @override
-  Future<void> clearRecentRoutes() async => cleared++;
+  Future<void> clearRecentRoutes() async {
+    cleared++;
+    if (holdClear != null) await holdClear!.future;
+  }
 }
 
 Map<String, dynamic> _row(String from, String to,
@@ -114,6 +132,64 @@ void main() {
     await tester.tap(find.text('모두 지우기').last);
     await tester.pumpAndSettle();
     expect(api.cleared, 1);
+    expect(find.text('서울역 → 강남역'), findsNothing);
+  });
+
+  // 삭제를 기다리는 동안 먼저 떠 있던 조회가 돌아온다. 그 응답을 그리면 지운 기록이 화면에 되살아난다.
+  testWidgets('모두 지우기: 삭제 전에 떠 있던 조회가 지운 목록을 되살리지 않는다', (tester) async {
+    final api = _Api(routes: [_row('서울역', '강남역')], holdFrom: 2)
+      ..holdClear = Completer<void>()
+      ..heldRoutes = [_row('이태원', '홍대입구')];
+    Widget tab(int key) =>
+        MaterialApp(home: Scaffold(body: RecentRoutesTab(api: api, ready: true, refreshKey: key, onPick: (_) {})));
+    await tester.pumpWidget(tab(0));
+    await tester.pumpAndSettle();
+    expect(find.text('서울역 → 강남역'), findsOneWidget);
+
+    await tester.pumpWidget(tab(1)); // 탭 재진입 → 두 번째 조회가 뜨고 붙잡힌다
+    await tester.pump();
+    expect(api.loads, 2);
+
+    await tester.tap(find.text('최근 경로 모두 지우기'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('모두 지우기').last);
+    await tester.pump();
+    expect(api.cleared, 1);
+
+    api.held.complete(); // 삭제가 아직 진행 중인 사이에 그 조회가 돌아온다
+    await tester.pumpAndSettle();
+    expect(find.text('이태원 → 홍대입구'), findsNothing);
+
+    api.holdClear!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('서울역 → 강남역'), findsNothing);
+    expect(find.text('이태원 → 홍대입구'), findsNothing);
+  });
+
+  // 삭제를 기다리는 동안 탭을 다시 들어오면 새 조회가 뜬다. 그 조회는 삭제 전 목록을 읽었을 수 있다.
+  testWidgets('모두 지우기: 삭제 중에 뜬 조회도 지운 목록을 되살리지 않는다', (tester) async {
+    final api = _Api(routes: [_row('서울역', '강남역')], holdFrom: 2)..holdClear = Completer<void>();
+    Widget tab(int key) =>
+        MaterialApp(home: Scaffold(body: RecentRoutesTab(api: api, ready: true, refreshKey: key, onPick: (_) {})));
+    await tester.pumpWidget(tab(0));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('최근 경로 모두 지우기'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('모두 지우기').last);
+    await tester.pump(); // DELETE 가 붙잡혀 있다
+    expect(api.cleared, 1);
+
+    await tester.pumpWidget(tab(1)); // 삭제 대기 중 탭 재진입 → 새 조회
+    await tester.pump();
+    expect(api.loads, 2);
+
+    api.holdClear!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('서울역 → 강남역'), findsNothing);
+
+    api.held.complete(); // 삭제 중에 떴던 조회가 이제 돌아온다
+    await tester.pumpAndSettle();
     expect(find.text('서울역 → 강남역'), findsNothing);
   });
 
