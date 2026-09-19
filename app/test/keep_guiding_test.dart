@@ -35,6 +35,15 @@ class _Api extends ApiClient {
   int startCalls = 0;
   int endCalls = 0;
 
+  /// 업로드가 실패하게 한다 — 종료가 못 보낸 샘플을 남기고 null 을 돌려주는 상황.
+  bool uploadFails = false;
+
+  /// 종료 응답을 붙잡아 둔다. release() 로 놓아 준다.
+  bool holdEnd = false;
+  Completer<Map<String, dynamic>>? _held;
+
+  void release() => _held?.complete(const {});
+
   @override
   Future<String> startTrip() async {
     startCalls++;
@@ -42,12 +51,16 @@ class _Api extends ApiClient {
   }
 
   @override
-  Future<void> uploadTraces(String tripId, List samples) async {}
+  Future<void> uploadTraces(String tripId, List samples) async {
+    if (uploadFails) throw ApiException(503, '서버 없음');
+  }
 
   @override
   Future<Map<String, dynamic>> endTrip(String tripId) async {
     endCalls++;
-    return const {};
+    if (!holdEnd) return const {};
+    final c = _held = Completer<Map<String, dynamic>>();
+    return c.future;
   }
 }
 
@@ -242,6 +255,75 @@ void main() {
     expect(api.endCalls, 1); // 하던 안내를 닫고
     expect(api.startCalls, 2); // 새로 시작했다
     expect(ActiveGuide.instance.current, isNot(same(first)));
+    await finish(tester);
+  });
+
+  // 하던 안내를 끝내지 못했으면(샘플 전송 실패) 그대로 교체하지 않는다 — 치우면 못 보낸 샘플이 사라지고 서버 trip 도
+  // 열린 채 남는다. 대신 버리고 갈 길은 남겨 둔다(서버에 못 닿는 동안 새 안내를 아예 못 하게 되면 안 된다).
+  testWidgets('종료에 실패하면 묻고, 버리기를 고를 때만 교체한다', (tester) async {
+    api.uploadFails = true;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: GuideScreen(api: api, request: _request, itinerary: _itin(37.502), speak: (_) async {}),
+      ),
+    ));
+    await _settle(tester);
+    final first = ActiveGuide.instance.current;
+    geo.controller.add(_pos(37.5005, 127.0)); // 올리지 못할 샘플 하나
+    await _settle(tester);
+
+    await tester.pumpWidget(MaterialApp(
+      home: DetailScreen(api: api, request: _request, itinerary: _itin(37.503), index: 0),
+    ));
+    await tester.pump();
+    await tester.tap(find.text('안내 시작'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('새로 시작'));
+    await _waitFor(tester, () => find.text('하던 안내를 끝내지 못했습니다').evaluate().isNotEmpty);
+    expect(find.text('하던 안내를 끝내지 못했습니다'), findsOneWidget);
+
+    await tester.tap(find.text('취소'));
+    await tester.pumpAndSettle();
+    expect(ActiveGuide.instance.current, same(first)); // 하던 안내 그대로
+    expect(api.startCalls, 1); // 새로 시작하지 않았다
+
+    await tester.tap(find.text('안내 시작'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('새로 시작'));
+    await _waitFor(tester, () => find.text('버리고 시작').evaluate().isNotEmpty);
+    await tester.tap(find.text('버리고 시작'));
+    await _waitFor(tester, () => api.startCalls == 2);
+    expect(api.startCalls, 2);
+    expect(ActiveGuide.instance.current, isNot(same(first)));
+    await finish(tester);
+  });
+
+  // 종료 응답을 기다리는 동안 화면을 떠나도, 성공한 종료는 전역에서 치워야 한다(끝난 세션과 활동 인식 구독이 남는다).
+  testWidgets('화면을 떠난 뒤 종료가 끝나도 안내를 치운다', (tester) async {
+    tester.view.physicalSize = const Size(1400, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    api.holdEnd = true;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: GuideScreen(api: api, request: _request, itinerary: _itin(37.502), speak: (_) async {}),
+      ),
+    ));
+    await _settle(tester);
+    final session = ActiveGuide.instance.current;
+
+    await tester.tap(find.text('안내 종료'));
+    await _waitFor(tester, () => api.endCalls == 1);
+    expect(api.endCalls, 1); // 서버 응답을 기다리는 중
+
+    // 응답이 오기 전에 화면을 떠난다.
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: CurrentGuideTab())));
+    await _settle(tester);
+    expect(ActiveGuide.instance.current, same(session));
+
+    api.release(); // 서버 응답 도착
+    await _waitFor(tester, () => ActiveGuide.instance.current == null);
+    expect(ActiveGuide.instance.current, isNull);
     await finish(tester);
   });
 }

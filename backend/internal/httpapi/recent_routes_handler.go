@@ -3,10 +3,13 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/SIDED00R/seoul-route/backend/internal/route"
 )
@@ -70,7 +73,25 @@ func (s *Server) saveRecentRoute(ctx context.Context, userID string, req route.P
 		s.Log.Warn("recent route marshal", "err", err)
 		return
 	}
-	if _, err := s.DB.Exec(ctx, `
+	// 탈퇴는 소프트 삭제라 users 행이 남아 FK 만으로는 막히지 않는다. 탐색 도중 탈퇴가 끝나면 그 뒤 이 INSERT 가
+	// 이동 기록을 되살리고, 그 계정 토큰은 이미 401 이라 지울 수도 없다. 사용자 행을 잠가 탈퇴(handleDeleteMe 도
+	// 같은 행을 먼저 잠근다)와 순서를 정하고, 살아 있을 때만 넣는다.
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		s.Log.Warn("recent route begin", "err", err)
+		return
+	}
+	defer tx.Rollback(ctx)
+	var alive string
+	switch err := tx.QueryRow(ctx,
+		`SELECT id FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, userID).Scan(&alive); {
+	case errors.Is(err, pgx.ErrNoRows):
+		return // 탈퇴한 사용자 — 기록을 남기지 않는다
+	case err != nil:
+		s.Log.Warn("recent route lock", "err", err)
+		return
+	}
+	if _, err := tx.Exec(ctx, `
 		INSERT INTO recent_routes(user_id, dedup_key, request, searched_at)
 		VALUES ($1, $2, $3, now())
 		ON CONFLICT (user_id, dedup_key) DO UPDATE SET request = EXCLUDED.request, searched_at = now()`,
@@ -79,12 +100,15 @@ func (s *Server) saveRecentRoute(ctx context.Context, userID string, req route.P
 		return
 	}
 	// 오래된 줄 정리. 지우는 데 실패해도 목록은 LIMIT 로 잘려 나가므로 로그만 남긴다.
-	if _, err := s.DB.Exec(ctx, `
+	if _, err := tx.Exec(ctx, `
 		DELETE FROM recent_routes
 		WHERE user_id = $1 AND dedup_key NOT IN (
 			SELECT dedup_key FROM recent_routes WHERE user_id = $1 ORDER BY searched_at DESC LIMIT $2)`,
 		userID, RecentRoutesKept); err != nil {
 		s.Log.Warn("recent route trim", "err", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		s.Log.Warn("recent route commit", "err", err)
 	}
 }
 

@@ -92,7 +92,11 @@ class _GuideScreenState extends State<GuideScreen> {
 
   Future<void> _end() async {
     final res = await _session.end();
-    if (!mounted || res == null) return;
+    if (res == null) return; // 못 보낸 샘플이 남았거나 trip 을 닫지 못했다. 사유는 세션 상태줄에 있고 다시 누르면 재시도한다
+    // 응답을 기다리는 동안 화면을 떠났어도 성공한 종료는 치운다 — 끝난 세션이 전역에 남고 활동 인식 구독도 살아
+    // 있게 된다. 그 사이 다른 안내를 시작했으면 그 세션을 지우면 안 되므로 같은 것일 때만 치운다.
+    if (identical(ActiveGuide.instance.current, _session)) ActiveGuide.instance.clear();
+    if (!mounted) return;
     if (res.isNotEmpty) {
       await showDialog<void>(
         context: context,
@@ -103,7 +107,6 @@ class _GuideScreenState extends State<GuideScreen> {
         ),
       );
     }
-    ActiveGuide.instance.clear();
     if (mounted) Navigator.pop(context);
   }
 

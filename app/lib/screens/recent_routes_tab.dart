@@ -6,12 +6,16 @@ import 'plan_screen.dart';
 
 /// 홈의 "최근 경로" 탭. 계정에 쌓인 지난 검색을 새 것부터 보여 주고, 고르면 길찾기 탭에 그 출발·도착을 채운다.
 class RecentRoutesTab extends StatefulWidget {
-  const RecentRoutesTab({super.key, required this.api, required this.ready, required this.onPick});
+  const RecentRoutesTab(
+      {super.key, required this.api, required this.ready, required this.onPick, this.refreshKey = 0});
 
   final ApiClient api;
 
   /// 서버 주소·토큰이 설정돼 있는지. 아니면 불러오지 않고 안내만 보여 준다.
   final bool ready;
+
+  /// 홈이 이 탭에 들어올 때마다 올린다. 값이 바뀌면 목록을 새로 받는다 — 길찾기 탭에서 방금 찾은 경로가 바로 보이게.
+  final int refreshKey;
 
   final void Function(PlanScreenPreset) onPick;
 
@@ -33,24 +37,39 @@ class _RecentRoutesTabState extends State<RecentRoutesTab> {
   @override
   void didUpdateWidget(RecentRoutesTab old) {
     super.didUpdateWidget(old);
-    // 설정을 채운 직후, 그리고 다른 경로를 검색하고 돌아왔을 때 목록을 새로 받는다.
-    if (widget.ready && (!old.ready || widget.api.baseUrl != old.api.baseUrl)) _load();
+    if (!widget.ready) return;
+    // 계정이나 서버가 바뀌면 남아 있는 목록은 남의 기록이다. 먼저 비우고 새로 받는다.
+    if (widget.api.token != old.api.token || widget.api.baseUrl != old.api.baseUrl) {
+      setState(() => _routes = null);
+      _load();
+      return;
+    }
+    // 설정을 채운 직후, 그리고 이 탭에 들어올 때마다(길찾기 탭에서 방금 찾은 경로가 보이게) 새로 받는다.
+    if (!old.ready || widget.refreshKey != old.refreshKey) _load();
   }
 
+  /// 조회 세대. 요청이 겹치면 마지막 것만 화면에 반영한다 — 계정이 바뀌는 순간 앞선 요청이 늦게 돌아와 이전 계정의
+  /// 기록을 다시 그리면 안 된다. 겹친다고 새 요청을 버리면 바뀐 계정을 아예 못 받는다.
+  int _loadGen = 0;
+
   Future<void> _load() async {
+    final gen = ++_loadGen;
+    final api = widget.api;
     setState(() {
       _busy = true;
       _error = '';
     });
     try {
-      final rs = await widget.api.recentRoutes();
-      if (mounted) setState(() => _routes = rs);
+      final rs = await api.recentRoutes();
+      if (mounted && gen == _loadGen) setState(() => _routes = rs);
     } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.status == 401 ? '토큰이 없거나 만료됨 — 설정에서 입력' : '실패: ${e.message}');
+      if (mounted && gen == _loadGen) {
+        setState(() => _error = e.status == 401 ? '토큰이 없거나 만료됨 — 설정에서 입력' : '실패: ${e.message}');
+      }
     } catch (e) {
-      if (mounted) setState(() => _error = '연결 실패: $e');
+      if (mounted && gen == _loadGen) setState(() => _error = '연결 실패: $e');
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && gen == _loadGen) setState(() => _busy = false);
     }
   }
 

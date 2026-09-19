@@ -51,10 +51,18 @@ class _HomeScreenState extends State<HomeScreen> {
     if (s != null) setState(() => _settings = s);
   }
 
+  /// 최근 경로 탭에 들어온 횟수. 들어올 때마다 목록을 새로 받게 하는 신호다.
+  int _recentVisits = 0;
+
   /// 최근 경로를 골랐을 때: 길찾기 탭에 그 출발·도착을 채우고 바로 탐색한다.
   void _useRecent(PlanScreenPreset p) => setState(() {
         _preset = p;
         _tab = 2;
+      });
+
+  void _selectTab(int i) => setState(() {
+        _tab = i;
+        if (i == 0) _recentVisits++;
       });
 
   @override
@@ -69,7 +77,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: IndexedStack(
         index: _tab,
         children: [
-          RecentRoutesTab(api: api, ready: _settings.ready, onPick: _useRecent),
+          RecentRoutesTab(api: api, ready: _settings.ready, onPick: _useRecent, refreshKey: _recentVisits),
           CurrentGuideTab(onEnded: () => setState(() {})),
           PlanScreen(
             settings: _settings,
@@ -84,7 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
         valueListenable: ActiveGuide.instance.session,
         builder: (context, session, _) => NavigationBar(
           selectedIndex: _tab,
-          onDestinationSelected: (i) => setState(() => _tab = i),
+          onDestinationSelected: _selectTab,
           destinations: [
             const NavigationDestination(icon: Icon(Icons.history), label: '최근 경로'),
             NavigationDestination(

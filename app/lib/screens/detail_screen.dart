@@ -28,12 +28,16 @@ class DetailScreen extends StatelessWidget {
   final int index;
 
   /// 안내를 시작한다. 다른 여정으로 이미 안내 중이면 물어보고, 그 안내를 끝낸 뒤에 시작한다 —
-  /// 안내는 한 번에 하나뿐이다(위치 스트림·알림창이 하나).
+  /// 안내는 한 번에 하나뿐이다(위치 스트림·알림창이 하나). 끝내지 못했으면 한 번 더 묻는다.
   Future<void> _startGuide(BuildContext context) async {
     final running = ActiveGuide.instance.current;
     if (running != null && !running.ended && !identical(running.itinerary, itinerary)) {
       if (!await confirmReplaceGuide(context)) return;
-      await running.end();
+      // end() 가 null 이면 못 보낸 샘플이 남았거나 trip 을 닫지 못한 것이다. 그대로 치우면 샘플이 사라지고
+      // 서버 trip 이 열린 채 남으므로 사용자에게 사유를 보이고 버릴지 묻는다.
+      if (await running.end() == null) {
+        if (!context.mounted || !await confirmDiscardGuide(context, running.status)) return;
+      }
       ActiveGuide.instance.clear();
     }
     if (!context.mounted) return;

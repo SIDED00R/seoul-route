@@ -26,11 +26,13 @@ func (s *Server) handleDeleteMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(r.Context())
+	// 사용자 행을 먼저 잠근다. 같은 행을 잠그는 saveRecentRoute 와 순서가 정해져, 탈퇴 도중에 들어온 검색이
+	// 지운 뒤에 기록을 되살리지 못한다(먼저 잠근 쪽이 끝난 뒤 상대가 판정을 다시 한다).
 	for _, q := range []string{
+		`UPDATE users SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL`,
 		`DELETE FROM recent_routes WHERE user_id = $1`,
 		`DELETE FROM speed_profiles WHERE user_id = $1`,
 		`DELETE FROM trips WHERE user_id = $1`,
-		`UPDATE users SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL`,
 	} {
 		if _, err := tx.Exec(r.Context(), q, userID); err != nil {
 			s.Log.Error("delete user", "err", err)
