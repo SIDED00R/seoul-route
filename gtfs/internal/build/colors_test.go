@@ -21,7 +21,7 @@ func TestPilotSubwayColors(t *testing.T) {
 		},
 	}
 	out := filepath.Join(t.TempDir(), "g.zip")
-	if _, err := Build(out, []BusRoute{sampleRoute()}, sub, nil, nil, nil); err != nil {
+	if _, err := Build(out, []BusRoute{sampleRoute()}, sub, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	zr, err := zip.OpenReader(out)

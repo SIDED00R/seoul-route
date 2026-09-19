@@ -3,6 +3,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../api/client.dart';
+import '../guide/active_guide.dart';
+import '../guide/replace_guide_confirm.dart';
 import '../models/itinerary.dart';
 import '../models/plan_request.dart';
 import '../util/leg_names.dart';
@@ -24,6 +26,26 @@ class DetailScreen extends StatelessWidget {
   final PlanRequest request;
   final Itinerary itinerary;
   final int index;
+
+  /// 안내를 시작한다. 다른 여정으로 이미 안내 중이면 물어보고, 그 안내를 끝낸 뒤에 시작한다 —
+  /// 안내는 한 번에 하나뿐이다(위치 스트림·알림창이 하나). 끝내지 못했으면 한 번 더 묻는다.
+  Future<void> _startGuide(BuildContext context) async {
+    final running = ActiveGuide.instance.current;
+    if (running != null && !running.ended && !identical(running.itinerary, itinerary)) {
+      if (!await confirmReplaceGuide(context)) return;
+      // end() 가 null 이면 못 보낸 샘플이 남았거나 trip 을 닫지 못한 것이다. 그대로 치우면 샘플이 사라지고
+      // 서버 trip 이 열린 채 남으므로 사용자에게 사유를 보이고 버릴지 묻는다.
+      if (await running.end() == null) {
+        if (!context.mounted || !await confirmDiscardGuide(context, running.status)) return;
+      }
+      ActiveGuide.instance.clear();
+    }
+    if (!context.mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => GuideScreen(api: api, request: request, itinerary: itinerary)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,10 +85,7 @@ class DetailScreen extends StatelessWidget {
             '${itinerary.realtimeLabel == null ? '' : ' · ${itinerary.realtimeLabel}'}'),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => GuideScreen(api: api, request: request, itinerary: itinerary)),
-        ),
+        onPressed: () => _startGuide(context),
         icon: const Icon(Icons.navigation),
         label: const Text('안내 시작'),
       ),
@@ -101,28 +120,38 @@ class DetailScreen extends StatelessWidget {
           Expanded(
             flex: 2,
             child: ListView.builder(
+              padding: const EdgeInsets.only(bottom: 88), // 마지막 구간 줄이 "안내 시작" 버튼에 가리지 않게
               itemCount: itinerary.legs.length,
               itemBuilder: (context, i) {
                 final leg = itinerary.legs[i];
                 return ListTile(
                   dense: true,
                   leading: Icon(modeIcon(leg), color: modeColor(leg)),
-                  title: Text('${leg.label} · ${(leg.durationSec / 60).round()}분 · '
-                      '${(leg.distanceM / 1000).toStringAsFixed(1)}km'),
+                  title: Text('${leg.label} · ${(leg.durationSec / 60).round()}분'
+                      '${leg.selfPowered ? ' · ${(leg.distanceM / 1000).toStringAsFixed(1)}km' : ''}'),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('${_name(leg.fromName, leg.fromLat, leg.fromLon)} → '
                           '${_name(leg.toName, leg.toLat, leg.toLon)}'),
+                      // 따릉이: 빌릴 대여소에 지금 남아 있는 자전거
+                      if (leg.bikesLabel != null)
+                        Text(leg.bikesLabel!, style: TextStyle(color: Colors.green.shade800)),
                       // 앞뒤 차·배차: 실시간 다음 차 / 시간표 앞·뒤 열차 / 배차간격
                       if (leg.scheduleLabel != null)
                         Text(leg.scheduleLabel!, style: TextStyle(color: Colors.teal.shade700)),
+                      // 지하철: 하차역에서 계단·에스컬레이터·엘리베이터가 있는 칸-문
+                      if (leg.fastExitLabel != null)
+                        Text(leg.fastExitLabel!, style: TextStyle(color: Colors.indigo.shade700)),
                       // 도보·따릉이: 지나는 신호 횡단보도와 그 대기(소요에 포함)
                       if (leg.crossingLabel != null)
                         Text(leg.crossingLabel!, style: TextStyle(color: Colors.orange.shade800)),
                     ],
                   ),
-                  isThreeLine: leg.scheduleLabel != null || leg.crossingLabel != null,
+                  isThreeLine: leg.scheduleLabel != null ||
+                      leg.crossingLabel != null ||
+                      leg.bikesLabel != null ||
+                      leg.fastExitLabel != null,
                 );
               },
             ),

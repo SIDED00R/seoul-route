@@ -8,6 +8,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:seoul_route/api/client.dart';
+import 'package:seoul_route/guide/active_guide.dart';
+import 'package:seoul_route/models/fast_exit.dart';
 import 'package:seoul_route/models/itinerary.dart';
 import 'package:seoul_route/models/leg_detail.dart';
 import 'package:seoul_route/models/place.dart';
@@ -112,6 +114,9 @@ final _legs = [
     start: _t(6),
     end: _t(16),
     headsign: '성수',
+    fastExit: const [
+      FastExitFacility(name: '계단', doors: ['4-2', '7-1']),
+    ],
     stops: const [
       TransitStop(name: '교대', lat: 37.503, lon: 127.0, offsetSec: 120),
       TransitStop(name: '서초', lat: 37.5045, lon: 127.0, offsetSec: 300),
@@ -172,6 +177,8 @@ void main() {
   late List<String> spoken;
 
   setUp(() {
+    // 안내는 앱에 하나뿐이라 테스트마다 치운다 — 안 그러면 앞 테스트의 안내를 이어받는다.
+    ActiveGuide.instance.clear();
     SharedPreferences.setMockInitialValues(<String, Object>{});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async => true);
@@ -182,6 +189,7 @@ void main() {
   });
 
   tearDown(() {
+    ActiveGuide.instance.clear(); // 세션의 10초 타이머가 테스트 뒤에 남지 않게
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
   });
 
@@ -197,7 +205,9 @@ void main() {
     await _settle(tester);
   }
 
+  /// 화면을 닫고 안내도 치운다. 안내는 화면과 별개로 살아 있어(ActiveGuide) 치우지 않으면 10초 타이머가 남는다.
   Future<void> close(WidgetTester tester) async {
+    ActiveGuide.instance.clear();
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 10));
   }
@@ -363,6 +373,15 @@ void main() {
     await _settle(tester);
     final eta = GuideCard.hhmm(_base.add(const Duration(minutes: 24))); // 계획 도착 +21분에 밀린 3분
     expect(find.textContaining('도착 예정 $eta'), findsOneWidget);
+    await close(tester);
+  });
+
+  testWidgets('지하철 구간에서는 하차역 설비 앞 칸을 보여 준다', (tester) async {
+    await pumpGuide(tester);
+    expect(find.textContaining('내릴 때'), findsNothing); // 첫 구간은 도보
+    await tester.tap(find.text('다음 구간'));
+    await _settle(tester);
+    expect(find.textContaining('내릴 때 · 계단 4-2, 7-1'), findsOneWidget);
     await close(tester);
   });
 

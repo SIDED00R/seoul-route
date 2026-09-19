@@ -6,6 +6,7 @@ import '../auth/google_login.dart';
 import '../models/itinerary.dart';
 import '../models/place.dart';
 import '../models/plan_request.dart';
+import '../models/recent_route.dart';
 import '../models/trace_sample.dart';
 
 class ApiException implements Exception {
@@ -118,6 +119,23 @@ class ApiClient {
       for (final mode in ['walk', 'bicycle'])
         if (j[mode] != null) mode: SpeedProfile.fromJson(j[mode] as Map<String, dynamic>),
     };
+  }
+
+  /// 지난 검색 목록(새 것부터). 서버가 /routes/plan 성공 때마다 쌓는다.
+  Future<List<RecentRoute>> recentRoutes() async {
+    final r = await http
+        .get(Uri.parse('$baseUrl/routes/recent'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    return ((_decode(r)['routes'] as List<dynamic>?) ?? const [])
+        .map((e) => RecentRoute.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> clearRecentRoutes() async {
+    final r = await http
+        .delete(Uri.parse('$baseUrl/routes/recent'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    _decode(r);
   }
 
   Future<PlanResult> plan(PlanRequest req) async {
