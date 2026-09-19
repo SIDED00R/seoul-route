@@ -11,15 +11,15 @@ import (
 	"github.com/SIDED00R/seoul-route/backend/internal/realtime"
 )
 
-// 지하철 환승 후보의 첫 열차가 환승 여유를 넘게 늦으면 둘째 열차는 다음 차 기준이라 도착이 지연(100초)보다 더 늦고(+300),
-// 환승 없는 철도 직행(실시간 없음) 뒤로 밀린다(이슈 #55).
+// 지하철 환승 후보의 첫 열차가 환승 여유를 넘게 늦으면 둘째 열차는 다음 차 기준이라 도착이 지연(190초)보다 더 늦고(+300),
+// 환승 없는 철도 직행(실시간 없음) 뒤로 밀린다.
 func TestRealtimeMissedSubwayTransferReranks(t *testing.T) {
 	kst := time.FixedZone("KST", 9*3600)
 	now := time.Date(2026, 9, 15, 14, 0, 0, 0, kst)
 	ts := func(s int) string { return now.Add(time.Duration(s) * time.Second).Format(time.RFC3339) }
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"errorMessage":{"status":200,"code":"INFO-000","message":"ok"},"realtimeArrivalList":[
-		 {"subwayId":"1004","trainLineNm":"불암산행 - 회현방면","barvlDt":"700","arvlCd":"99"}]}`))
+		 {"subwayId":"1004","trainLineNm":"불암산행 - 회현방면","barvlDt":"790","arvlCd":"99"}]}`))
 	}))
 	defer srv.Close()
 	transfer := itin(ts(540), ts(2160),

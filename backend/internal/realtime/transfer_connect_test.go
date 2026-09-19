@@ -22,7 +22,7 @@ func line4Arrival(t *testing.T, eta int) *Corrector {
 		Now: func() time.Time { return now }}
 }
 
-// 도보(540~600) → 4호선(600~1200) → 통로(1200~1320) → 3호선(1500~2100, 여유 180−120=60초) → 도보(2100~2160).
+// 도보(540~600) → 4호선(600~1200) → 환승 도보(1200~1320) → 3호선(1500~2100, 여유 180초) → 도보(2100~2160).
 func subwayTransferItinerary() otp.Itinerary {
 	legs := []otp.Leg{
 		{Mode: "WALK", Duration: 60, Start: at(540), End: at(600)},
@@ -36,23 +36,61 @@ func subwayTransferItinerary() otp.Itinerary {
 	return otp.Itinerary{Start: at(540), End: at(2160), Duration: 1620, Transfers: 1, Legs: legs}
 }
 
-// 첫 열차 +60초 = 환승 여유(60초) 경계 → 둘째 열차·도착은 시간표 그대로, 출발만 +60.
+// 첫 열차 +180초 = 환승 여유(180초) 경계 → 둘째 열차·도착은 시간표 그대로, 출발만 +180.
 func TestSubwayDelayWithinSlackKeepsConnection(t *testing.T) {
 	in := subwayTransferItinerary()
-	got := line4Arrival(t, 660).Adjust(context.Background(), []otp.Itinerary{in})[0]
+	got := line4Arrival(t, 780).Adjust(context.Background(), []otp.Itinerary{in})[0]
 	if !got.Realtime || got.RealtimeDelta != 0 || got.End != in.End || got.Legs[3].Start != in.Legs[3].Start ||
-		got.Legs[1].Start != at(660) || got.Legs[2].End != at(1380) || got.Start != at(600) || got.Duration != 1560 {
+		got.Legs[1].Start != at(780) || got.Legs[2].End != at(1500) || got.Start != at(720) || got.Duration != 1440 {
 		t.Fatalf("여유 안 지연은 도착 불변: delta=%v end=%s 둘째=%s start=%s dur=%v", got.RealtimeDelta, got.End,
 			got.Legs[3].Start, got.Start, got.Duration)
 	}
 }
 
-// 첫 열차 +100초 > 여유 60초 → 통로 끝 1420+120=1540 이후 첫 3호선 1800 → 도착 +300(지연 100초보다 더 늦다).
+// 첫 열차 +190초 > 여유 180초 → 도보 끝 1510 이후 첫 3호선 1800 → 도착 +300(지연 190초보다 더 늦다).
 func TestSubwayDelayBeyondSlackTakesNextTrain(t *testing.T) {
-	got := line4Arrival(t, 700).Adjust(context.Background(), []otp.Itinerary{subwayTransferItinerary()})[0]
-	if got.RealtimeDelta != 300 || got.Legs[3].Start != at(1800) || got.End != at(2460) || got.Legs[2].End != at(1420) ||
-		got.Start != at(640) || got.Duration != 1820 {
+	got := line4Arrival(t, 790).Adjust(context.Background(), []otp.Itinerary{subwayTransferItinerary()})[0]
+	if got.RealtimeDelta != 300 || got.Legs[3].Start != at(1800) || got.End != at(2460) || got.Legs[2].End != at(1510) ||
+		got.Start != at(730) || got.Duration != 1730 {
 		t.Fatalf("다음 열차 기준: delta=%v 둘째=%s end=%s dur=%v", got.RealtimeDelta, got.Legs[3].Start, got.End, got.Duration)
+	}
+}
+
+// 환승 도보의 신호 횡단보도 대기도 여유를 먹는다. 대기 없으면 +110 은 여유 안, 대기 76 이면 1506 > 1500.
+func TestSubwayTransferWalkCrossingWaitTakesNextTrain(t *testing.T) {
+	in := subwayTransferItinerary()
+	kept := line4Arrival(t, 710).Adjust(context.Background(), []otp.Itinerary{in})[0]
+	if kept.RealtimeDelta != 0 || kept.Legs[3].Start != at(1500) {
+		t.Fatalf("대기 없으면 그대로: delta=%v 둘째=%s", kept.RealtimeDelta, kept.Legs[3].Start)
+	}
+	in = subwayTransferItinerary()
+	in.Legs[2].CrossingWait = 76
+	got := line4Arrival(t, 710).Adjust(context.Background(), []otp.Itinerary{in})[0]
+	if got.RealtimeDelta != 300 || got.Legs[3].Start != at(1800) {
+		t.Fatalf("대기가 여유를 먹는다: delta=%v 둘째=%s", got.RealtimeDelta, got.Legs[3].Start)
+	}
+}
+
+// 도보 leg 없는 환승은 TransferSlackSec 을 더한다. 여유 200초: +60 → 1380 ≤ 1400 그대로, +100 → 1420 > 1400.
+func TestSubwayNoWalkTransferUsesTransferSlack(t *testing.T) {
+	plain := func() otp.Itinerary {
+		legs := []otp.Leg{
+			{Mode: "WALK", Duration: 60, Start: at(540), End: at(600)},
+			{Mode: "SUBWAY", Route: "서울4호선", RouteID: "seoul:RR_4", FromName: "서울(4호선)", NextStop: "회현(4호선)",
+				TransitLeg: true, Start: at(600), End: at(1200), NextDepartures: []string{at(900)}},
+			{Mode: "SUBWAY", Route: "서울3호선", RouteID: "seoul:RR_3", FromName: "충무로(3호선)", TransitLeg: true,
+				Start: at(1400), End: at(2000), NextDepartures: []string{at(1700)}},
+			{Mode: "WALK", Duration: 60, Start: at(2000), End: at(2060)},
+		}
+		return otp.Itinerary{Start: at(540), End: at(2060), Duration: 1520, Transfers: 1, Legs: legs}
+	}
+	kept := line4Arrival(t, 660).Adjust(context.Background(), []otp.Itinerary{plain()})[0]
+	if kept.RealtimeDelta != 0 || kept.Legs[2].Start != at(1400) {
+		t.Fatalf("여유 안: delta=%v 둘째=%s", kept.RealtimeDelta, kept.Legs[2].Start)
+	}
+	got := line4Arrival(t, 700).Adjust(context.Background(), []otp.Itinerary{plain()})[0]
+	if got.RealtimeDelta != 300 || got.Legs[2].Start != at(1700) {
+		t.Fatalf("승강장 이동 120초를 넘김: delta=%v 둘째=%s", got.RealtimeDelta, got.Legs[2].Start)
 	}
 }
 
@@ -60,8 +98,8 @@ func TestSubwayDelayBeyondSlackTakesNextTrain(t *testing.T) {
 func TestSubwayNoNextDepartureFallsBackToDelta(t *testing.T) {
 	in := subwayTransferItinerary()
 	in.Legs[3].NextDepartures = nil
-	got := line4Arrival(t, 700).Adjust(context.Background(), []otp.Itinerary{in})[0]
-	if got.RealtimeDelta != 100 || got.Legs[3].Start != at(1600) || got.End != at(2260) {
+	got := line4Arrival(t, 790).Adjust(context.Background(), []otp.Itinerary{in})[0]
+	if got.RealtimeDelta != 190 || got.Legs[3].Start != at(1690) || got.End != at(2350) {
 		t.Fatalf("정보 없음 → delta 그대로: delta=%v 둘째=%s end=%s", got.RealtimeDelta, got.Legs[3].Start, got.End)
 	}
 }
@@ -88,7 +126,7 @@ func TestBusTransferDelayStaysLinear(t *testing.T) {
 	}
 }
 
-// 연쇄: 첫 환승을 놓쳐 둘째 열차가 +300 이 돼도, 둘째 환승 여유(480−120=360초) 안이면 셋째 열차·도착은 그대로.
+// 연쇄: 첫 환승을 놓쳐 둘째 열차가 +300 이 돼도, 둘째 환승 여유(480초) 안이면 셋째 열차·도착은 그대로.
 func TestSubwayChainSecondTransferKept(t *testing.T) {
 	in := subwayTransferItinerary()
 	in.Legs[4] = otp.Leg{Mode: "WALK", Duration: 60, Start: at(2100), End: at(2160)}
@@ -97,7 +135,7 @@ func TestSubwayChainSecondTransferKept(t *testing.T) {
 			NextDepartures: []string{at(2940)}},
 		otp.Leg{Mode: "WALK", Duration: 60, Start: at(3240), End: at(3300)})
 	in.End, in.Duration, in.Transfers = at(3300), 2760, 2
-	got := line4Arrival(t, 700).Adjust(context.Background(), []otp.Itinerary{in})[0]
+	got := line4Arrival(t, 790).Adjust(context.Background(), []otp.Itinerary{in})[0]
 	if got.RealtimeDelta != 0 || got.End != at(3300) || got.Legs[3].Start != at(1800) || got.Legs[4].End != at(2460) ||
 		got.Legs[5].Start != at(2640) {
 		t.Fatalf("둘째 환승은 여유 안: delta=%v end=%s 둘째=%s 셋째=%s", got.RealtimeDelta, got.End, got.Legs[3].Start,
