@@ -69,6 +69,18 @@ void main() {
     expect(Leg.fromJson(_coloredLeg()).inStation, isFalse);
   });
 
+  test('하차역 설비 앞 칸(fast_exit)을 읽어 한 줄로 만든다', () {
+    final leg = Leg.fromJson({
+      ..._coloredLeg(),
+      'fast_exit': [
+        {'facility': '에스컬레이터', 'doors': ['3-3', '8-1']},
+        {'facility': '계단', 'doors': ['2-1']},
+      ],
+    });
+    expect(leg.fastExitLabel, '내릴 때 · 에스컬레이터 3-3, 8-1 · 계단 2-1');
+    expect(Leg.fromJson(_coloredLeg()).fastExitLabel, isNull);
+  });
+
   test('leg 색이 있으면 그 색, 없으면 수단 기본색', () {
     final colored = Leg.fromJson(_coloredLeg(color: '00A84D', textColor: 'FFFFFF'));
     expect(modeColor(colored), const Color(0xFF00A84D));

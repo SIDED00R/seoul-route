@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/SIDED00R/seoul-route/backend/internal/otp"
+	"github.com/SIDED00R/seoul-route/backend/internal/fastexit"
 	"github.com/SIDED00R/seoul-route/backend/internal/routestyle"
 )
 
@@ -70,6 +71,8 @@ type Planner struct {
 	RouteStyles map[string]routestyle.Style
 	// Bikes: 따릉이 실시간 대여소 스냅샷. nil 이면 남은 대수를 붙이지 않는다.
 	Bikes    BikeStations
+	// FastExits: 지하철 하차역의 설비(계단·에스컬레이터·엘리베이터) 앞 칸-문. nil 이면 붙이지 않는다.
+	FastExits *fastexit.Index
 	mu       sync.RWMutex
 	stations []otp.Station // 앵커링용 부모역 목록(SetStations). 비면 항상 좌표로 요청한다
 }
@@ -142,6 +145,7 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) ([]otp.Itinerary, e
 	p.annotateHeadways(its)
 	p.annotateRouteStyles(its)
 	p.annotateBikeStations(its)
+	p.annotateFastExits(its)
 	return its, nil
 }
 

@@ -487,7 +487,8 @@ class _GuideScreenState extends State<GuideScreen> {
                     subtitle: Text('${legEndpointName(widget.request, leg.fromName, leg.fromLat, leg.fromLon)} → '
                         '${legEndpointName(widget.request, leg.toName, leg.toLat, leg.toLon)}'
                         '${remainM == null ? '' : ' · 끝까지 ${remainM.round()}m'}'
-                        '${leg.bikesLabel == null ? '' : '\n${leg.bikesLabel}'}'),
+                        '${leg.bikesLabel == null ? '' : '\n${leg.bikesLabel}'}'
+                        '${leg.fastExitLabel == null ? '' : '\n${leg.fastExitLabel}'}'),
                   ),
                   Row(
                     children: [

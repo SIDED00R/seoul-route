@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/SIDED00R/seoul-route/gtfs/internal/geo"
 	"github.com/SIDED00R/seoul-route/gtfs/internal/kric"
 	"github.com/SIDED00R/seoul-route/gtfs/internal/ktdb"
 	"github.com/SIDED00R/seoul-route/gtfs/internal/osm"
@@ -41,6 +42,7 @@ const (
 type BusRoute struct {
 	Route seoulbus.Route
 	Stops []seoulbus.Stop
+	Path  []seoulbus.PathPoint // 노선 경로(getRoutePath). 없으면 그 노선은 shape 없이 정류장 사이를 직선으로 잇는다
 }
 
 type RouteReport struct {
@@ -49,6 +51,8 @@ type RouteReport struct {
 	TravelSec         int // 구간거리÷속도(+정차) 합, 왕복 전체
 	Skipped           string
 	DroppedDirections int // bbox 안 정류장이 2개 미만이라 뺀 방향 수
+	Shapes            int // 경로선(shape)을 만든 방향 수
+	NoShapeDirections int // 노선 경로가 없거나 정류장과 맞지 않아 shape 없이 둔 방향 수
 }
 
 type Report struct {
@@ -81,13 +85,18 @@ type Report struct {
 	NKricNearestMatched       int // 이름이 달라 좌표(KricNearestM 안)로 붙인 역
 	NKricNonMonotonic         int // 시각이 역행해 뺀 열차
 	NKricDupRows              int // 같은 열차·같은 역 중복 행(뒤 것을 버림)
+	NBusShapes                int // 버스 shape 수(방향당 하나)
+	NBusNoShapeDirections     int // shape 없이 둔 버스 방향 수
+	NRailShapes               int // 도시철도 shape 수(노선·정차 순서당 하나)
+	NRailStraightHops         int // 선로를 못 찾아 직선으로 이은 역 간 구간(노선·역 쌍 단위)
+	NRailNoShapeTrips         int // shape 없이 둔 도시철도 trip
 }
 
 // Build 는 out 에 GTFS zip 을 쓴다. subway 는 nil 이면 버스만 쓴다. entrances 는 OSM 지하철 출입구(없으면 nil).
 // metro 는 서울교통공사 열차운행시각표(없으면 nil → 파일럿 1~9호선 trip 그대로), kricTT 는 레일포털 시각표(없으면 nil →
-// 코레일·민자 노선 파일럿 trip 그대로).
+// 코레일·민자 노선 파일럿 trip 그대로). rail 은 OSM 노선 선로(없으면 nil → 도시철도 shape 없음).
 func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.Entrance,
-	metro *seoulmetro.Timetable, kricTT *kric.Timetable) (*Report, error) {
+	metro *seoulmetro.Timetable, kricTT *kric.Timetable, rail []osm.RailWay) (*Report, error) {
 	rep := &Report{}
 	f, err := os.Create(out)
 	if err != nil {
@@ -132,10 +141,13 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 	trips := [][]string{}
 	stopTimes := [][]string{}
 	freqs := [][]string{}
+	shapes := [][]string{}
 	stops := map[string][]string{}
 	for _, b := range buses {
-		rr := busRoute(b, routes, &trips, &stopTimes, &freqs, stops)
+		rr := busRoute(b, routes, &trips, &stopTimes, &freqs, &shapes, stops)
 		rep.Routes = append(rep.Routes, rr.report)
+		rep.NBusShapes += rr.report.Shapes
+		rep.NBusNoShapeDirections += rr.report.NoShapeDirections
 		if rr.report.Skipped == "" {
 			routes = rr.routes
 			rep.NBusRoutes++
@@ -274,11 +286,33 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 		rep.NSubwayStops = len(subway.Stops)
 	}
 
+	padRows(trips, tripShapeCol+1)
+	padRows(stopTimes, stDistCol+1)
+	if subway != nil && rail != nil {
+		routeNames := map[string]string{}
+		for _, r := range routes {
+			routeNames[r[0]] = r[2]
+		}
+		stopAt := map[string]geo.Point{}
+		for _, s := range subway.Stops {
+			stopAt[s["stop_id"]] = geo.Point{Lat: parseF(s["stop_lat"]), Lon: parseF(s["stop_lon"])}
+		}
+		railRows, rs := railShapes(rail, trips, stopTimes, routeNames, stopAt)
+		shapes = append(shapes, railRows...)
+		rep.NRailShapes, rep.NRailStraightHops, rep.NRailNoShapeTrips = rs.Shapes, rs.StraightHops, rs.NoShapeTrips
+	}
+
 	w.table("routes.txt",
 		[]string{"route_id", "agency_id", "route_short_name", "route_long_name", "route_type", "route_color",
 			"route_text_color"}, routes)
-	w.table("trips.txt", []string{"route_id", "service_id", "trip_id", "trip_headsign", "direction_id"}, trips)
-	w.table("stop_times.txt", []string{"trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence"}, stopTimes)
+	w.table("trips.txt", []string{"route_id", "service_id", "trip_id", "trip_headsign", "direction_id", "shape_id"},
+		trips)
+	w.table("stop_times.txt",
+		[]string{"trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence", "shape_dist_traveled"}, stopTimes)
+	if len(shapes) > 0 {
+		w.table("shapes.txt",
+			[]string{"shape_id", "shape_pt_lat", "shape_pt_lon", "shape_pt_sequence", "shape_dist_traveled"}, shapes)
+	}
 	w.table("frequencies.txt", []string{"trip_id", "start_time", "end_time", "headway_secs", "exact_times"}, freqs)
 	w.table("stops.txt", []string{"stop_id", "stop_name", "stop_lat", "stop_lon", "location_type", "parent_station"},
 		stopRows)
@@ -308,7 +342,8 @@ type busResult struct {
 // exact_times=1 은 첫차부터 배차간격 격자로 출발하는 고정 시간표로 다뤄 대기가 위상에 따라 0~배차간격이 된다.
 // GTFS 의 frequencies end_time 은 배타적이고 OTP 2.10 도 `< end` 로 비교하므로 막차 시각 자체의 출발은 생성되지 않는다.
 // (2) `_LAST` — 막차 1회를 절대시각 stop_times 로 따로 둔다.
-func busRoute(b BusRoute, routes [][]string, trips, stopTimes, freqs *[][]string, stops map[string][]string) busResult {
+func busRoute(b BusRoute, routes [][]string, trips, stopTimes, freqs, shapes *[][]string,
+	stops map[string][]string) busResult {
 	r := b.Route
 	rep := RouteReport{RouteID: r.ID, Name: r.Name, NStops: len(b.Stops)}
 	term, _ := strconv.Atoi(strings.TrimSpace(r.TermMin))
@@ -365,6 +400,13 @@ func busRoute(b BusRoute, routes [][]string, trips, stopTimes, freqs *[][]string
 		suffix, id string
 		headsign   string
 	}
+	pathPts := busPathPoints(b.Path)
+	var pathCum []float64
+	var matches []busStopMatch
+	if len(pathPts) >= 2 {
+		pathCum = geo.Cumulative(pathPts)
+		matches = matchBusStops(pathPts, pathCum, b.Stops)
+	}
 	dirs := []direction{{0, len(b.Stops) - 1, "", "0", r.EndName}}
 	if k > 0 && k < len(b.Stops)-1 {
 		dirs = []direction{{0, k, "0", "0", b.Stops[k].Name}, {k, len(b.Stops) - 1, "1", "1", r.EndName}}
@@ -382,24 +424,38 @@ func busRoute(b BusRoute, routes [][]string, trips, stopTimes, freqs *[][]string
 		}
 		tripID := routeID + "_T" + d.suffix
 		lastTripID := routeID + "_LAST" + d.suffix
-		*trips = append(*trips, []string{routeID, "ALL", tripID, d.headsign, d.id})
-		*trips = append(*trips, []string{routeID, "ALL", lastTripID, d.headsign, d.id})
+		// 배차 trip 과 막차 trip 은 같은 길을 가므로 shape 하나를 같이 쓴다.
+		shapeID := ""
+		shapePts, shapeDists, hasShape := busShape(pathPts, pathCum, matches, b.Stops, inside)
+		if hasShape {
+			shapeID = "BSH_" + r.ID + "_" + d.id
+			*shapes = append(*shapes, shapeRows(shapeID, shapePts)...)
+			rep.Shapes++
+		} else {
+			rep.NoShapeDirections++
+		}
+		*trips = append(*trips, []string{routeID, "ALL", tripID, d.headsign, d.id, shapeID})
+		*trips = append(*trips, []string{routeID, "ALL", lastTripID, d.headsign, d.id, shapeID})
 		// 기점 출발 후 이 방향의 첫 기록 정류장까지 걸리는 시간. bbox 클리핑으로 앞이 잘리면 회차지가 아니라
 		// 첫 안쪽 정류장이 기준이다 — OTP 는 배차 trip 의 첫 stop_time 을 0 으로 정규화하므로(실측 441번: 누적
 		// 53분 18초가 사라져 04:20 출발) frequencies 시작도 그만큼 늦춰야 절대시각 `_LAST` 와 맞는다.
 		off := times[inside[0]]
 		*freqs = append(*freqs, []string{tripID, fmtTime(first + off), fmtTime(last + off), strconv.Itoa(term * 60), "1"})
-		for _, i := range inside {
+		for n, i := range inside {
 			s := b.Stops[i]
+			dist := ""
+			if hasShape {
+				dist = fmtDist(shapeDists[n])
+			}
 			stopID := "BS_" + strings.TrimSpace(s.StationID)
 			if _, ok := stops[stopID]; !ok {
 				stops[stopID] = []string{stopID, s.Name, strings.TrimSpace(s.Lat), strings.TrimSpace(s.Lon)}
 			}
 			seq := strconv.Itoa(i + 1)
 			rel := times[i] - off
-			*stopTimes = append(*stopTimes, []string{tripID, fmtTime(rel), fmtTime(rel), stopID, seq})
+			*stopTimes = append(*stopTimes, []string{tripID, fmtTime(rel), fmtTime(rel), stopID, seq, dist})
 			abs := last + times[i]
-			*stopTimes = append(*stopTimes, []string{lastTripID, fmtTime(abs), fmtTime(abs), stopID, seq})
+			*stopTimes = append(*stopTimes, []string{lastTripID, fmtTime(abs), fmtTime(abs), stopID, seq, dist})
 		}
 	}
 	if rep.DroppedDirections == len(dirs) { // 전 방향이 빠지면 노선 자체를 제외(routes.txt 고아 행·노선 수 과계 방지)

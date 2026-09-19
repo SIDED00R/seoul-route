@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/SIDED00R/seoul-route/backend/internal/fastexit"
 )
 
 type Coord struct {
@@ -91,6 +93,8 @@ type Leg struct {
 	TextColor string `json:"text_color,omitempty"`
 	Steps     []Step `json:"steps,omitempty"` // 도보·자전거 leg 의 안내 단계
 	Stops     []Stop `json:"stops,omitempty"` // 대중교통 leg 의 중간 정차(탑승·하차 제외)
+	// 지하철 하차역에서 설비(계단·에스컬레이터·엘리베이터)가 있는 칸-문. 자료가 있는 역(1~8호선)만 채운다.
+	FastExit []fastexit.Facility `json:"fast_exit,omitempty"`
 }
 
 // Step 은 도보·자전거 leg 의 안내 단계. Dir 은 이 단계 시작점에서의 회전(OTP relativeDirection),
