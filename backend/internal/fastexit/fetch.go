@@ -50,8 +50,17 @@ func FetchEscalators(hc *http.Client, base, key string) ([]json.RawMessage, erro
 		if err != nil {
 			return nil, fmt.Errorf("에스컬레이터 API %d행부터: %w", start, err)
 		}
+		// 오류는 HTTP 200 으로 오고 봉투가 세 가지다: 서비스 래퍼 안(RESULT), 래퍼 없는 최상위 RESULT, 평면 CODE.
+		// 래퍼만 보면 최상위 오류가 빈 코드로 통과해 0행이 정상 결과가 된다(gbfs/poller.go 가 같은 호스트에서 셋을
+		// 모두 본다). 잘못된 키는 /json/ 요청에도 XML 로 오므로 위 Unmarshal 이 막는다.
 		var p struct {
-			Body struct {
+			Result struct {
+				Code    string `json:"CODE"`
+				Message string `json:"MESSAGE"`
+			} `json:"RESULT"`
+			Code    string `json:"CODE"`
+			Message string `json:"MESSAGE"`
+			Body    struct {
 				Result struct {
 					Code    string `json:"CODE"`
 					Message string `json:"MESSAGE"`
@@ -62,8 +71,16 @@ func FetchEscalators(hc *http.Client, base, key string) ([]json.RawMessage, erro
 		if err := json.Unmarshal(body, &p); err != nil {
 			return nil, fmt.Errorf("에스컬레이터 API %d행부터: HTTP %d, JSON 아님: %.120s", start, resp.StatusCode, body)
 		}
-		if c := p.Body.Result.Code; c != "" && c != "INFO-000" {
-			return nil, fmt.Errorf("에스컬레이터 API %d행부터: %s %s", start, c, p.Body.Result.Message)
+		for _, r := range [...]struct{ code, message string }{
+			{p.Result.Code, p.Result.Message}, {p.Code, p.Message}, {p.Body.Result.Code, p.Body.Result.Message},
+		} {
+			switch r.code {
+			case "", "INFO-000":
+			case "INFO-200": // 범위 밖 = 빈 페이지. 모아 둔 행을 그대로 돌려준다(전체가 1,000의 배수일 때 온다)
+				return out, nil
+			default:
+				return nil, fmt.Errorf("에스컬레이터 API %d행부터: %s %s", start, r.code, r.message)
+			}
 		}
 		out = append(out, p.Body.Row...)
 		if len(p.Body.Row) < pageSize {

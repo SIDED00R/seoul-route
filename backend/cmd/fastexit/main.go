@@ -54,6 +54,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// 0행을 쓰면 파일이 "null" 이 되고 서버는 오류 없이 빈 방향표로 기동한다 — 에스컬레이터가 무음으로 사라진다.
+	// 정적 설비 대장이라 0행은 정상 결과가 아니다.
+	if len(esc) == 0 {
+		return fmt.Errorf("에스컬레이터 0행 — 기존 %s 를 그대로 둔다", cfg.EscalatorJSON)
+	}
 	if err := writeJSON(cfg.EscalatorJSON, esc); err != nil {
 		return err
 	}
