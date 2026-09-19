@@ -5,8 +5,8 @@ import 'package:latlong2/latlong.dart';
 import '../api/client.dart';
 import '../guide/active_guide.dart';
 import '../guide/activity_classifier.dart';
+import '../guide/geo.dart';
 import '../guide/guide_session.dart';
-import '../guide/leg_tracker.dart';
 import '../guide/voice_guide.dart';
 import '../models/itinerary.dart';
 import '../models/plan_request.dart';
@@ -162,7 +162,7 @@ class _GuideScreenState extends State<GuideScreen> {
     // 끝까지 남은 거리는 걷거나 타고 가는 구간에서만 쓸모가 있다.
     final remainM = here == null || !leg.selfPowered
         ? null
-        : LegTracker.distanceM(here.latitude, here.longitude, leg.toLat, leg.toLon);
+        : distanceM(here.latitude, here.longitude, leg.toLat, leg.toLon);
     final up = s.uploader;
     return Scaffold(
       appBar: AppBar(title: Text('안내 · 구간 ${tracker.index + 1}/${legs.length}')),

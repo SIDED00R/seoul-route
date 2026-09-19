@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/SIDED00R/seoul-route/backend/internal/gbfs"
+	"github.com/SIDED00R/seoul-route/backend/internal/geo"
 	"github.com/SIDED00R/seoul-route/backend/internal/otp"
 )
 
@@ -50,7 +51,7 @@ func findStation(stations []gbfs.Station, name string, lat, lon float64) *gbfs.S
 		if strings.TrimSpace(s.Name) == want {
 			return s
 		}
-		if d := distM(lat, lon, s.Lat, s.Lon); d <= bestD {
+		if d := geo.DistM(lat, lon, s.Lat, s.Lon); d <= bestD {
 			best, bestD = i, d
 		}
 	}

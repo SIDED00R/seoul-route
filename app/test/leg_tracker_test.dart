@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 
+import 'package:seoul_route/guide/geo.dart';
 import 'package:seoul_route/guide/leg_tracker.dart';
 import 'package:seoul_route/models/itinerary.dart';
 import 'package:seoul_route/util/polyline.dart';
@@ -67,7 +68,7 @@ void main() {
   });
 
   test('거리 계산: 위도 0.001도 ≈ 111m', () {
-    expect(LegTracker.distanceM(37.5, 127.0, 37.501, 127.0), closeTo(111.2, 0.5));
+    expect(distanceM(37.5, 127.0, 37.501, 127.0), closeTo(111.2, 0.5));
   });
 
   test('경로선을 한 번 풀어 두고 화면이 같이 쓴다', () {

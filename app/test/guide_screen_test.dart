@@ -15,7 +15,7 @@ import 'package:seoul_route/models/leg_detail.dart';
 import 'package:seoul_route/models/place.dart';
 import 'package:seoul_route/models/plan_request.dart';
 import 'package:seoul_route/screens/guide_screen.dart';
-import 'package:seoul_route/widgets/guide_card.dart';
+import 'package:seoul_route/util/hhmm.dart';
 
 import 'support/polyline_encode.dart';
 
@@ -226,7 +226,7 @@ void main() {
   testWidgets('첫 위치에 카드 문구와 발화가 나오고, 같은 자리면 다시 읽지 않는다', (tester) async {
     await pumpGuide(tester);
     await _push(tester, geo, pos(37.5, 127.0));
-    expect(find.textContaining('도착 예정 ${GuideCard.hhmm(DateTime.parse(_t(21)))}'), findsOneWidget);
+    expect(find.textContaining('도착 예정 ${hhmm(DateTime.parse(_t(21)))}'), findsOneWidget);
     expect(find.text('테헤란로 따라 120m 직진 후 우회전'), findsOneWidget);
     expect(find.text('다음: 탑승 · 2호선 성수 방면 · 강남(2호선)'), findsOneWidget);
     expect(spoken, ['테헤란로 따라 120m 직진 후 우회전']);
@@ -374,7 +374,7 @@ void main() {
       ),
     ));
     await _settle(tester);
-    final eta = GuideCard.hhmm(_base.add(const Duration(minutes: 24))); // 계획 도착 +21분에 밀린 3분
+    final eta = hhmm(_base.add(const Duration(minutes: 24))); // 계획 도착 +21분에 밀린 3분
     expect(find.textContaining('도착 예정 $eta'), findsOneWidget);
     await close(tester);
   });

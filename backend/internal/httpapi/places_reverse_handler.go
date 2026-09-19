@@ -1,9 +1,6 @@
 package httpapi
 
 import (
-	"encoding/json"
-	"errors"
-	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -11,9 +8,6 @@ import (
 
 	"github.com/SIDED00R/seoul-route/backend/internal/route"
 )
-
-// KakaoBaseURL 은 카카오 로컬 API 주소. 테스트에서 Server.KakaoBase 로 바꿔 끼운다.
-const KakaoBaseURL = "https://dapi.kakao.com"
 
 // handlePlacesReverse 는 좌표를 주소·건물 이름으로 바꿔 준다(카카오 로컬 좌표→주소).
 // 앱의 "현재 위치" 출발지 표시에 쓴다. 좌표는 요청 경로가 아니라 쿼리로 받으므로 접근 로그에 남지 않는다.
@@ -31,30 +25,6 @@ func (s *Server) handlePlacesReverse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	params := url.Values{"x": {strconv.FormatFloat(lon, 'f', 7, 64)}, "y": {strconv.FormatFloat(lat, 'f', 7, 64)}}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet,
-		s.kakaoBase()+"/v2/local/geo/coord2address.json?"+params.Encode(), nil)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "요청 생성 실패")
-		return
-	}
-	req.Header.Set("Authorization", "KakaoAK "+s.KakaoKey)
-	resp, err := s.HTTP.Do(req)
-	if err != nil {
-		// url.Error 에는 좌표가 든 요청 URL 이 실리므로 그 껍질을 벗기고 원인만 남긴다(dial·timeout·취소).
-		var ue *url.Error
-		if errors.As(err, &ue) {
-			err = ue.Err
-		}
-		s.Log.Warn("kakao coord2address", "err", err)
-		writeError(w, http.StatusBadGateway, "주소 조회 실패")
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		s.Log.Warn("kakao coord2address", "status", resp.StatusCode)
-		writeError(w, http.StatusBadGateway, "주소 조회 실패")
-		return
-	}
 	var out struct {
 		Documents []struct {
 			RoadAddress *struct {
@@ -66,7 +36,14 @@ func (s *Server) handlePlacesReverse(w http.ResponseWriter, r *http.Request) {
 			} `json:"address"`
 		} `json:"documents"`
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out); err != nil {
+	switch s.kakaoGet(r.Context(), "kakao coord2address", "/v2/local/geo/coord2address.json", params, &out) {
+	case kakaoBadRequest:
+		writeError(w, http.StatusInternalServerError, "요청 생성 실패")
+		return
+	case kakaoCallFailed:
+		writeError(w, http.StatusBadGateway, "주소 조회 실패")
+		return
+	case kakaoBadBody:
 		writeError(w, http.StatusBadGateway, "주소 응답 파싱 실패")
 		return
 	}
@@ -85,11 +62,4 @@ func (s *Server) handlePlacesReverse(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"name": name, "address": address})
-}
-
-func (s *Server) kakaoBase() string {
-	if s.KakaoBase != "" {
-		return s.KakaoBase
-	}
-	return KakaoBaseURL
 }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../util/hhmm.dart';
+
 /// 안내 화면 맨 위 카드: 도착 예정과 남은 시간, 지금 할 일, 다음 할 일.
 class GuideCard extends StatelessWidget {
   const GuideCard({
@@ -18,9 +20,6 @@ class GuideCard extends StatelessWidget {
   final int remainMin;
   final String now;
   final String next;
-
-  static String hhmm(DateTime t) =>
-      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {

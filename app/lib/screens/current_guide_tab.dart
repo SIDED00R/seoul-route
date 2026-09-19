@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../guide/active_guide.dart';
 import '../guide/guide_session.dart';
+import '../util/hhmm.dart';
 import '../util/leg_names.dart';
 import '../widgets/mode_icon.dart';
 import 'guide_screen.dart';
@@ -82,7 +83,7 @@ class _SummaryState extends State<_Summary> {
           child: ListTile(
             leading: Icon(modeIcon(leg), color: modeColor(leg)),
             title: Text(s.instr.now, style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text('${at == null ? '' : '도착 예정 ${guideHhmm(at.toLocal())} · '}남은 ${s.remainMin}분\n'
+            subtitle: Text('${at == null ? '' : '도착 예정 ${hhmm(at.toLocal())} · '}남은 ${s.remainMin}분\n'
                 '다음: ${s.instr.next}'),
             isThreeLine: true,
           ),
@@ -94,7 +95,7 @@ class _SummaryState extends State<_Summary> {
               '${legEndpointName(s.request, s.itinerary.legs.last.toName,
               s.itinerary.legs.last.toLat, s.itinerary.legs.last.toLon)}'),
           subtitle: Text('구간 ${s.tracker.index + 1}/${s.itinerary.legs.length} · '
-              '${guideHhmm(s.startedAt.toLocal())} 시작 · ${s.status}'),
+              '${hhmm(s.startedAt.toLocal())} 시작 · ${s.status}'),
         ),
         const SizedBox(height: 8),
         FilledButton.icon(

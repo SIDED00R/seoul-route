@@ -3,9 +3,10 @@
 package speed
 
 import (
-	"math"
 	"sort"
 	"time"
+
+	"github.com/SIDED00R/seoul-route/backend/internal/geo"
 )
 
 // 상수 출처(2026-09-13, 계획 v2 Phase 3 초기값. 실기기 궤적이 쌓이면 재보정)
@@ -71,7 +72,7 @@ func TripSpeeds(samples []Sample) map[string]Estimate {
 			mismatch[b.Mode]++
 			continue
 		}
-		v := haversineM(a.Lat, a.Lon, b.Lat, b.Lon) / dt
+		v := geo.DistM(a.Lat, a.Lon, b.Lat, b.Lon) / dt
 		if v < MinMoving[b.Mode] || v > maxV {
 			continue
 		}
@@ -96,12 +97,4 @@ func median(sorted []float64) float64 {
 		return sorted[n/2]
 	}
 	return (sorted[n/2-1] + sorted[n/2]) / 2
-}
-
-func haversineM(lat1, lon1, lat2, lon2 float64) float64 {
-	const r = 6371000.0
-	p1, p2 := lat1*math.Pi/180, lat2*math.Pi/180
-	dp, dl := (lat2-lat1)*math.Pi/180, (lon2-lon1)*math.Pi/180
-	a := math.Sin(dp/2)*math.Sin(dp/2) + math.Cos(p1)*math.Cos(p2)*math.Sin(dl/2)*math.Sin(dl/2)
-	return 2 * r * math.Asin(math.Sqrt(a))
 }
