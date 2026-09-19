@@ -55,6 +55,42 @@ void main() {
     expect(s.c.current, 'vehicle');
   });
 
+  // 열차가 매끄럽게 달리면 폰은 대부분 STILL 을 준다. 그동안 승강장까지 걸어온 '걷기' 가 남아 있으면 안 된다.
+  test('정지가 2분 넘게 이어지면 미상으로 되돌린다', () {
+    final s = _Stream(ActivityClassifier());
+    s.hold('WALKING', 'HIGH', 30);
+    expect(s.c.current, 'walk');
+    expect(s.hold('STILL', 'HIGH', 115), isFalse); // 신호 대기 정도로는 그대로
+    expect(s.c.current, 'walk');
+    expect(s.hold('STILL', 'HIGH', 10), isTrue);
+    expect(s.c.current, 'unknown');
+    // 다시 움직이면 평소대로 확정된다.
+    expect(s.hold('IN_VEHICLE', 'HIGH', 30), isTrue);
+    expect(s.c.current, 'vehicle');
+  });
+
+  // 열차에서 실제로 오는 순서: 걷기 확정 → IN_VEHICLE 이 잠깐 → 다시 정지가 계속. 차량 후보가 확정될 때 정지 시계를
+  // 지우면, 같은 판정은 이벤트가 오지 않으므로 시계가 다시 시작될 길이 없어 감쇠가 영영 안 돈다.
+  test('움직임 판정이 잠깐 왔다가 정지가 이어져도 감쇠가 돈다', () {
+    final s = _Stream(ActivityClassifier());
+    s.hold('WALKING', 'HIGH', 30);
+    expect(s.c.current, 'walk');
+    s.hold('IN_VEHICLE', 'HIGH', 10); // 차량 후보만 생기고 아직 확정 전
+    s.hold('STILL', 'HIGH', 10); // 정지로 바뀌어도 차량 후보는 살아남아 20초에 확정된다
+    expect(s.c.current, 'vehicle');
+    expect(s.hold('STILL', 'HIGH', 120), isTrue); // 정지 시계는 이어진다
+    expect(s.c.current, 'unknown');
+  });
+
+  test('정지가 끊기면 다시 처음부터 잰다', () {
+    final s = _Stream(ActivityClassifier());
+    s.hold('WALKING', 'HIGH', 30);
+    expect(s.hold('STILL', 'HIGH', 110), isFalse);
+    expect(s.hold('WALKING', 'HIGH', 10), isFalse); // 같은 활동이라 확정은 그대로
+    expect(s.hold('STILL', 'HIGH', 110), isFalse); // 정지 시계가 다시 시작됐다
+    expect(s.c.current, 'walk');
+  });
+
   test('불일치 판정: 대중교통 구간의 걷기는 정상, 도보 구간의 차량·자전거는 불일치', () {
     expect(ActivityClassifier.mismatch('transit', 'walk'), isFalse);
     expect(ActivityClassifier.mismatch('walk', 'walk'), isFalse);
