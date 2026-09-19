@@ -106,8 +106,10 @@ class Leg {
   /// 내 발로 움직이는 구간(도보·자전거). 거리는 이때만 보여 준다 — 타고 가는 구간의 거리는 쓸 일이 없다.
   bool get selfPowered => mode == 'WALK' || mode == 'BICYCLE';
 
-  /// "남은 자전거 3대". 실시간 대수를 모르면 null.
-  String? get bikesLabel => bikesAvailable == null ? null : '남은 자전거 $bikesAvailable대';
+  /// "검색 당시 자전거 3대". 실시간 대수를 모르면 null.
+  /// 경로를 찾은 순간의 값이고 그 뒤로 갱신되지 않는다 — 서버는 10분 넘게 낡은 스냅샷이면 아예 안 내려주지만,
+  /// 응답이 앱에 온 뒤 흐르는 시간에는 상한이 없다. 그래서 현재 대수인 것처럼 읽히지 않게 시점을 함께 적는다.
+  String? get bikesLabel => bikesAvailable == null ? null : '검색 당시 자전거 $bikesAvailable대';
 
   /// 앞뒤 차 안내 한 줄. 실시간 > 시간표 앞뒤 차 > 배차간격 순으로 있는 것만 보여준다. 없으면 null.
   String? get scheduleLabel {

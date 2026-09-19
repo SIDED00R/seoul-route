@@ -43,8 +43,8 @@ void main() {
   test('따릉이 남은 대수: 0대와 "모름" 을 구분한다', () {
     Leg bike(Map<String, dynamic> extra) => Leg.fromJson({..._coloredLeg(), 'mode': 'BICYCLE', 'rented_bike': true,
           'transit_leg': false, ...extra});
-    expect(bike({'has_bike_count': true, 'bikes_available': 3}).bikesLabel, '남은 자전거 3대');
-    expect(bike({'has_bike_count': true}).bikesLabel, '남은 자전거 0대'); // 빈 대여소
+    expect(bike({'has_bike_count': true, 'bikes_available': 3}).bikesLabel, '검색 당시 자전거 3대');
+    expect(bike({'has_bike_count': true}).bikesLabel, '검색 당시 자전거 0대'); // 빈 대여소
     expect(bike({}).bikesLabel, isNull); // 실시간 값을 모른다
     expect(bike({'bikes_available': 5}).bikesLabel, isNull); // has_bike_count 없이 온 값은 안 믿는다
   });

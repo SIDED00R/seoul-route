@@ -51,6 +51,6 @@ void main() {
     expect(find.text('2호선 · 10분'), findsOneWidget); // km 없음
     expect(find.text('도보 · 10분 · 4.9km'), findsOneWidget);
     expect(find.text('따릉이 · 10분 · 4.9km'), findsOneWidget);
-    expect(find.text('남은 자전거 3대'), findsOneWidget);
+    expect(find.text('검색 당시 자전거 3대'), findsOneWidget);
   });
 }
