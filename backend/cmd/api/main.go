@@ -49,13 +49,18 @@ func main() {
 		os.Exit(1)
 	}
 	log.Info("migrate", "applied", applied)
-	// 원본 궤적 30일 보관(speed.TraceRetention). 기동 직후 한 번, 이후 1시간마다.
+	// 원본 궤적 30일 보관(speed.TraceRetention)과 오래 조용한 trip 마감(speed.StaleAfter). 기동 직후 한 번, 이후 1시간마다.
 	go func() {
 		for {
 			if n, err := speed.PurgeOldTraces(ctx, pool, time.Now()); err != nil {
 				log.Warn("trace purge", "err", err)
 			} else if n > 0 {
 				log.Info("trace purge", "deleted", n)
+			}
+			if n, err := speed.CloseStaleTrips(ctx, pool, httpapi.Priors, time.Now()); err != nil {
+				log.Warn("stale trip close", "err", err)
+			} else if n > 0 {
+				log.Info("stale trip close", "closed", n)
 			}
 			select {
 			case <-ctx.Done():
