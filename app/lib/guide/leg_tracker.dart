@@ -72,7 +72,7 @@ class LegTracker {
     if (isLast) return false;
     final good = accuracyM <= maxAccuracyM;
     if (good) _lastGoodFix = t;
-    if (good && distanceM(lat, lon, current.toLat, current.toLon) <= arriveRadiusM) {
+    if (good && geo.distanceM(lat, lon, current.toLat, current.toLon) <= arriveRadiusM) {
       _goto(index + 1, t);
       return true;
     }
@@ -159,6 +159,4 @@ class LegTracker {
     if (index > 0) _goto(index - 1, now ?? DateTime.now(), manual: true);
   }
 
-  static double distanceM(double lat1, double lon1, double lat2, double lon2) =>
-      geo.distanceM(lat1, lon1, lat2, lon2);
 }

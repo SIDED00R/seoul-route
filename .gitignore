@@ -51,3 +51,6 @@ Thumbs.db
 # API 표본 응답 (키 없음, 크기 때문에 제외)
 otp/spike/samples/
 gtfs/cache/
+
+# Git Bash 가 테스트 실행 중에 남기는 크래시 덤프
+*.stackdump

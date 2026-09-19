@@ -4,32 +4,37 @@
 package headway
 
 import (
-	"archive/zip"
-	"encoding/csv"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
+
+	"github.com/SIDED00R/seoul-route/backend/internal/gtfszip"
 )
 
 // Load 는 route_id → 배차간격(초)을 돌려준다. 한 노선에 여러 행이면 가장 짧은 값(가장 잦은 배차)을 쓴다.
 func Load(zipPath string) (map[string]int, error) {
-	zr, err := zip.OpenReader(zipPath)
+	zr, err := gtfszip.Open(zipPath)
 	if err != nil {
 		return nil, err
 	}
 	defer zr.Close()
-	trips, err := readCSV(zr, "trips.txt")
+	trips, found, err := zr.Rows("trips.txt")
 	if err != nil {
 		return nil, err
+	}
+	if !found {
+		return nil, fmt.Errorf("trips.txt 없음")
 	}
 	tripRoute := map[string]string{}
 	for _, r := range trips {
 		tripRoute[r["trip_id"]] = r["route_id"]
 	}
-	freqs, err := readCSV(zr, "frequencies.txt")
+	freqs, found, err := zr.Rows("frequencies.txt")
 	if err != nil {
 		return nil, err
+	}
+	if !found {
+		return nil, fmt.Errorf("frequencies.txt 없음")
 	}
 	out := map[string]int{}
 	for _, r := range freqs {
@@ -46,42 +51,4 @@ func Load(zipPath string) (map[string]int, error) {
 		}
 	}
 	return out, nil
-}
-
-func readCSV(zr *zip.ReadCloser, name string) ([]map[string]string, error) {
-	for _, f := range zr.File {
-		if f.Name != name {
-			continue
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return nil, err
-		}
-		defer rc.Close()
-		cr := csv.NewReader(rc)
-		header, err := cr.Read()
-		if err != nil {
-			return nil, err
-		}
-		header[0] = strings.TrimPrefix(header[0], "\xef\xbb\xbf")
-		var rows []map[string]string
-		for {
-			rec, err := cr.Read()
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				return nil, err
-			}
-			row := make(map[string]string, len(header))
-			for i, h := range header {
-				if i < len(rec) {
-					row[h] = rec[i]
-				}
-			}
-			rows = append(rows, row)
-		}
-		return rows, nil
-	}
-	return nil, fmt.Errorf("%s 없음", name)
 }

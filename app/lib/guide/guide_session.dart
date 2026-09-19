@@ -10,6 +10,7 @@ import '../models/itinerary.dart';
 import '../models/plan_request.dart';
 import '../models/trace_sample.dart';
 import '../settings/settings_store.dart';
+import '../util/hhmm.dart';
 import 'activity_classifier.dart';
 import 'background_location.dart';
 import 'instruction.dart';
@@ -274,7 +275,7 @@ class GuideSession extends ChangeNotifier {
     _voice.say(_instr.utterance, cueKey: _instr.cueKey);
     // 알림창은 접힌 상태에서 제목 한 줄만 보이므로 남은 시간을 제목 앞에 둔다.
     final at = eta;
-    final when = at == null ? '' : '도착 예정 ${guideHhmm(at.toLocal())} · ';
+    final when = at == null ? '' : '도착 예정 ${hhmm(at.toLocal())} · ';
     _statusNotification.show('남은 $remainMin분 · ${_instr.now}', '$when다음: ${_instr.next}');
   }
 
@@ -372,5 +373,3 @@ class GuideSession extends ChangeNotifier {
   }
 }
 
-/// "HH:MM". 안내 카드·알림창·현재 경로 탭이 같은 형식을 쓴다.
-String guideHhmm(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';

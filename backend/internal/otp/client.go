@@ -204,23 +204,9 @@ func (c *Client) Plan(ctx context.Context, r Request) ([]Itinerary, error) {
 	if r.Depart != nil {
 		vars["dateTime"] = map[string]any{"earliestDeparture": r.Depart.Format(time.RFC3339)}
 	}
-	body, _ := json.Marshal(map[string]any{"query": query, "variables": vars})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.URL+"/otp/gtfs/v1", bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("otp: %w", err)
-	}
-	defer resp.Body.Close()
 	var out response
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 16<<20)).Decode(&out); err != nil {
-		return nil, fmt.Errorf("otp: 응답 파싱 실패 (HTTP %d)", resp.StatusCode)
-	}
-	if len(out.Errors) > 0 {
-		return nil, fmt.Errorf("otp: %s", out.Errors[0].Message)
+	if err := c.query(ctx, map[string]any{"query": query, "variables": vars}, 16<<20, &out); err != nil {
+		return nil, err
 	}
 	pc := out.Data.PlanConnection
 	if len(pc.Edges) == 0 {
@@ -255,20 +241,9 @@ const stationsQuery = `{ stations { gtfsId name lat lon } }`
 
 // Stations 는 그래프의 부모역 전부를 돌려준다. 기동 시 한 번 불러 앵커링에 쓴다.
 func (c *Client) Stations(ctx context.Context) ([]Station, error) {
-	body, _ := json.Marshal(map[string]any{"query": stationsQuery})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.URL+"/otp/gtfs/v1", bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("otp: %w", err)
-	}
-	defer resp.Body.Close()
 	var out struct {
-		Errors []struct{ Message string } `json:"errors"`
-		Data   struct {
+		gqlErrors
+		Data struct {
 			Stations []struct {
 				GtfsID   string `json:"gtfsId"`
 				Name     string
@@ -276,11 +251,8 @@ func (c *Client) Stations(ctx context.Context) ([]Station, error) {
 			}
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&out); err != nil {
-		return nil, fmt.Errorf("otp: stations 응답 파싱 실패 (HTTP %d)", resp.StatusCode)
-	}
-	if len(out.Errors) > 0 {
-		return nil, fmt.Errorf("otp: %s", out.Errors[0].Message)
+	if err := c.query(ctx, map[string]any{"query": stationsQuery}, 4<<20, &out); err != nil {
+		return nil, err
 	}
 	sts := make([]Station, 0, len(out.Data.Stations))
 	for _, s := range out.Data.Stations {
@@ -289,9 +261,40 @@ func (c *Client) Stations(ctx context.Context) ([]Station, error) {
 	return sts, nil
 }
 
-type response struct {
+// gqlErrors 는 GraphQL 응답의 errors 부분. 응답 구조체마다 묻어 둔다.
+type gqlErrors struct {
 	Errors []struct{ Message string } `json:"errors"`
-	Data   struct {
+}
+
+func (g gqlErrors) err() error {
+	if len(g.Errors) > 0 {
+		return fmt.Errorf("otp: %s", g.Errors[0].Message)
+	}
+	return nil
+}
+
+// query 는 GraphQL 한 번을 보내고 응답을 out 에 담는다. limit 은 읽을 본문 상한(바이트).
+func (c *Client) query(ctx context.Context, body map[string]any, limit int64, out interface{ err() error }) error {
+	raw, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.URL+"/otp/gtfs/v1", bytes.NewReader(raw))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return fmt.Errorf("otp: %w", err)
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(out); err != nil {
+		return fmt.Errorf("otp: 응답 파싱 실패 (HTTP %d)", resp.StatusCode)
+	}
+	return out.err()
+}
+
+type response struct {
+	gqlErrors
+	Data struct {
 		PlanConnection struct {
 			RoutingErrors []struct{ Code, Description string } `json:"routingErrors"`
 			Edges         []struct{ Node node }                `json:"edges"`

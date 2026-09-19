@@ -1,10 +1,7 @@
 package httpapi
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -37,30 +34,6 @@ func (s *Server) handlePlacesSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	params := url.Values{"query": {q}, "size": {"10"},
 		"rect": {fmt.Sprintf("%.2f,%.2f,%.2f,%.2f", route.MinLon, route.MinLat, route.MaxLon, route.MaxLat)}}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet,
-		"https://dapi.kakao.com/v2/local/search/keyword.json?"+params.Encode(), nil)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "요청 생성 실패")
-		return
-	}
-	req.Header.Set("Authorization", "KakaoAK "+s.KakaoKey)
-	resp, err := s.HTTP.Do(req)
-	if err != nil {
-		// url.Error 에는 검색어가 든 요청 URL 이 실리므로 그 껍질을 벗기고 원인만 남긴다.
-		var ue *url.Error
-		if errors.As(err, &ue) {
-			err = ue.Err
-		}
-		s.Log.Warn("kakao search", "err", err)
-		writeError(w, http.StatusBadGateway, "장소 검색 실패")
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		s.Log.Warn("kakao search", "status", resp.StatusCode)
-		writeError(w, http.StatusBadGateway, "장소 검색 실패")
-		return
-	}
 	var out struct {
 		Documents []struct {
 			PlaceName   string `json:"place_name"`
@@ -71,7 +44,14 @@ func (s *Server) handlePlacesSearch(w http.ResponseWriter, r *http.Request) {
 			Y           string `json:"y"`
 		} `json:"documents"`
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out); err != nil {
+	switch s.kakaoGet(r.Context(), "kakao search", "/v2/local/search/keyword.json", params, &out) {
+	case kakaoBadRequest:
+		writeError(w, http.StatusInternalServerError, "요청 생성 실패")
+		return
+	case kakaoCallFailed:
+		writeError(w, http.StatusBadGateway, "장소 검색 실패")
+		return
+	case kakaoBadBody:
 		writeError(w, http.StatusBadGateway, "장소 검색 응답 파싱 실패")
 		return
 	}
