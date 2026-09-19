@@ -45,11 +45,15 @@ services:
       SEOUL_SUBWAY_REALTIME_KEY: ${SEOUL_SUBWAY_REALTIME_KEY:-} # 비면 지하철 첫 탑승 실시간 보정 없음
       GTFS_ZIP: /data/seoul-gtfs.zip                          # 버스 배차간격 표시용(아래 마운트)
       CROSSINGS_CSV: /data/crossings.csv                      # 신호 횡단보도 대기 반영용(아래 마운트, 없으면 미반영)
+      FAST_EXIT_JSON: /data/fast-exit.json                    # 지하철 하차 칸 표시용(아래 마운트, cmd/fastexit 산출)
+      ESCALATOR_JSON: /data/escalator.json                    # 에스컬레이터 운행방향(아래 마운트, 없으면 계단만)
       PUBLIC_URL: http://api:8081               # OTP 컨테이너가 GBFS 하위 feed URL 을 이 주소로 받는다
       PORT: "8081"
     volumes:
-      - ../otp/data/seoul-gtfs.zip:/data/seoul-gtfs.zip:ro
-      - ../otp/data/crossings.csv:/data/crossings.csv:ro
+      # 파일 하나씩이 아니라 디렉터리를 마운트한다. 없는 경로를 파일로 마운트하면 Docker 가 그 자리에 빈 디렉터리를
+      # 만들고, 그러면 읽기가 "파일 없음" 이 아니라 "디렉터리다" 오류가 돼 기능이 통째로 꺼진다(선택 파일인
+      # escalator.json 에서 실측).
+      - ../otp/data:/data:ro
     depends_on:
       postgres:
         condition: service_healthy

@@ -120,28 +120,38 @@ class DetailScreen extends StatelessWidget {
           Expanded(
             flex: 2,
             child: ListView.builder(
+              padding: const EdgeInsets.only(bottom: 88), // 마지막 구간 줄이 "안내 시작" 버튼에 가리지 않게
               itemCount: itinerary.legs.length,
               itemBuilder: (context, i) {
                 final leg = itinerary.legs[i];
                 return ListTile(
                   dense: true,
                   leading: Icon(modeIcon(leg), color: modeColor(leg)),
-                  title: Text('${leg.label} · ${(leg.durationSec / 60).round()}분 · '
-                      '${(leg.distanceM / 1000).toStringAsFixed(1)}km'),
+                  title: Text('${leg.label} · ${(leg.durationSec / 60).round()}분'
+                      '${leg.selfPowered ? ' · ${(leg.distanceM / 1000).toStringAsFixed(1)}km' : ''}'),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('${_name(leg.fromName, leg.fromLat, leg.fromLon)} → '
                           '${_name(leg.toName, leg.toLat, leg.toLon)}'),
+                      // 따릉이: 빌릴 대여소에 지금 남아 있는 자전거
+                      if (leg.bikesLabel != null)
+                        Text(leg.bikesLabel!, style: TextStyle(color: Colors.green.shade800)),
                       // 앞뒤 차·배차: 실시간 다음 차 / 시간표 앞·뒤 열차 / 배차간격
                       if (leg.scheduleLabel != null)
                         Text(leg.scheduleLabel!, style: TextStyle(color: Colors.teal.shade700)),
+                      // 지하철: 하차역에서 계단·에스컬레이터·엘리베이터가 있는 칸-문
+                      if (leg.fastExitLabel != null)
+                        Text(leg.fastExitLabel!, style: TextStyle(color: Colors.indigo.shade700)),
                       // 도보·따릉이: 지나는 신호 횡단보도와 그 대기(소요에 포함)
                       if (leg.crossingLabel != null)
                         Text(leg.crossingLabel!, style: TextStyle(color: Colors.orange.shade800)),
                     ],
                   ),
-                  isThreeLine: leg.scheduleLabel != null || leg.crossingLabel != null,
+                  isThreeLine: leg.scheduleLabel != null ||
+                      leg.crossingLabel != null ||
+                      leg.bikesLabel != null ||
+                      leg.fastExitLabel != null,
                 );
               },
             ),

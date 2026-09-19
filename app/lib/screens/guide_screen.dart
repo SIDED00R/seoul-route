@@ -159,7 +159,10 @@ class _GuideScreenState extends State<GuideScreen> {
     }
     final here = s.here;
     final leg = tracker.current;
-    final remainM = here == null ? null : LegTracker.distanceM(here.latitude, here.longitude, leg.toLat, leg.toLon);
+    // 끝까지 남은 거리는 걷거나 타고 가는 구간에서만 쓸모가 있다.
+    final remainM = here == null || !leg.selfPowered
+        ? null
+        : LegTracker.distanceM(here.latitude, here.longitude, leg.toLat, leg.toLon);
     final up = s.uploader;
     return Scaffold(
       appBar: AppBar(title: Text('안내 · 구간 ${tracker.index + 1}/${legs.length}')),
@@ -244,7 +247,9 @@ class _GuideScreenState extends State<GuideScreen> {
                     title: Text('${leg.label} · ${(leg.durationSec / 60).round()}분'),
                     subtitle: Text('${legEndpointName(widget.request, leg.fromName, leg.fromLat, leg.fromLon)} → '
                         '${legEndpointName(widget.request, leg.toName, leg.toLat, leg.toLon)}'
-                        '${remainM == null ? '' : ' · 끝까지 ${remainM.round()}m'}'),
+                        '${remainM == null ? '' : ' · 끝까지 ${remainM.round()}m'}'
+                        '${leg.bikesLabel == null ? '' : '\n${leg.bikesLabel}'}'
+                        '${leg.fastExitLabel == null ? '' : '\n${leg.fastExitLabel}'}'),
                   ),
                   Row(
                     children: [

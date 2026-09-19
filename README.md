@@ -21,6 +21,7 @@
 
 - 대중교통·따릉이·도보 후보를 함께 탐색하고 출발 대기까지 포함해 정렬
 - 안내를 시작한 뒤에도 다른 경로를 찾아볼 수 있고(안내는 "안내 종료" 로만 끝납니다), 홈은 최근 경로·현재 경로·길찾기 탭입니다
+- 따릉이 구간에는 빌릴 대여소에 지금 남아 있는 자전거 대수를 함께 표시(실시간 API가 대여소별 총 대수만 주므로 새싹따릉이와 일반은 구분하지 않습니다). 화면 `docs/app/28-bike-availability.png`
 - 경유지 최대 5개와 구간별 수단 고정
 - 서울 버스·지하철 첫 탑승 실시간 도착 보정
 - 지하철 앞뒤 열차와 버스 배차간격 표시
@@ -91,6 +92,7 @@ API 키에 `$`가 들어가면 Docker Compose가 변수로 해석하지 않도�
 python otp/extract_seoul.py
 python otp/extract_entrances.py
 python otp/extract_crossings.py
+python otp/extract_rail.py
 python otp/fetch_metro_timetable.py
 python otp/fetch_kric_timetable.py
 
@@ -98,6 +100,8 @@ Set-Location gtfs
 go run ./cmd/gtfsgen fetch
 go run ./cmd/gtfsgen build
 Copy-Item out/seoul-gtfs.zip ../otp/data/seoul-gtfs.zip
+Set-Location ../backend
+go run ./cmd/fastexit   # 지하철 하차역 설비 앞 칸(선택, 공공데이터포털 「서울교통공사_빠른하차정보」 활용신청 필요)
 Set-Location ..
 ```
 
@@ -211,7 +215,7 @@ flutter test
 - 앱은 현재 로컬 개발을 위해 평문 HTTP를 허용합니다. 공개 배포 전에는 TLS와 Android network security 설정을 적용해야 합니다.
 - 버스 GTFS는 평균 배차와 구간 속도를 기반으로 한 근사이며 실제 운행 시각표가 아닙니다.
 - 서해선 일부 연장 구간과 GTX-A는 요일별 원천 시간표가 없어 파일럿 데이터가 남아 있습니다.
-- 생성 GTFS에 `shapes.txt`가 없어 버스·지하철 폴리라인은 정류장 사이 직선입니다.
+- 경로선(`shapes.txt`)은 버스는 노선 경로 API, 도시철도는 OSM 선로로 만듭니다. 경로가 정류장과 맞지 않는 버스 방향과 서울 bbox 밖 도시철도 구간은 정류장 사이 직선입니다.
 
 ## 문서
 
@@ -221,6 +225,7 @@ flutter test
 - [횡단보도 대기 모델](docs/crossing-wait.md)
 - [안내 궤적과 속도 학습](docs/speed-learning.md)
 - [안내 유지와 홈 탭](docs/home-tabs-guide-session.md)
+- [지하철 하차역 설비 앞 칸](docs/fast-exit.md)
 - [Flutter 앱 실행 검증](docs/app-phase2.md)
 
 ## 개발 규칙

@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:seoul_route/api/client.dart';
 import 'package:seoul_route/guide/active_guide.dart';
+import 'package:seoul_route/models/fast_exit.dart';
 import 'package:seoul_route/models/itinerary.dart';
 import 'package:seoul_route/models/leg_detail.dart';
 import 'package:seoul_route/models/place.dart';
@@ -113,6 +114,9 @@ final _legs = [
     start: _t(6),
     end: _t(16),
     headsign: '성수',
+    fastExit: const [
+      FastExitFacility(name: '계단', doors: ['4-2', '7-1']),
+    ],
     stops: const [
       TransitStop(name: '교대', lat: 37.503, lon: 127.0, offsetSec: 120),
       TransitStop(name: '서초', lat: 37.5045, lon: 127.0, offsetSec: 300),
@@ -369,6 +373,15 @@ void main() {
     await _settle(tester);
     final eta = GuideCard.hhmm(_base.add(const Duration(minutes: 24))); // 계획 도착 +21분에 밀린 3분
     expect(find.textContaining('도착 예정 $eta'), findsOneWidget);
+    await close(tester);
+  });
+
+  testWidgets('지하철 구간에서는 하차역 설비 앞 칸을 보여 준다', (tester) async {
+    await pumpGuide(tester);
+    expect(find.textContaining('내릴 때'), findsNothing); // 첫 구간은 도보
+    await tester.tap(find.text('다음 구간'));
+    await _settle(tester);
+    expect(find.textContaining('내릴 때 · 계단 4-2, 7-1'), findsOneWidget);
     await close(tester);
   });
 
