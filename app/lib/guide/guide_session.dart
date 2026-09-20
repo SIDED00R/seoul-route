@@ -254,9 +254,8 @@ class GuideSession extends ChangeNotifier {
     _notify();
   }
 
-  /// 도보 구간에서 경로를 벗어났으면 그 구간을 현재 위치에서 다시 찾는다. 대중교통은 정해진 노선을 따라가므로
-  /// 보지 않는다. 자전거도 지금은 보지 않는다 — 서버에 "타고 있던 자전거로 계속" 을 요청할 수단이 없고
-  /// `SegmentMode.bike` 는 대여 경로(도보+자전거+도보)로 나간다.
+  /// 도보 구간에서 경로를 벗어났으면 그 구간을 현재 위치에서 다시 찾는다. 대중교통은 정해진 노선을 따라가고
+  /// 자전거는 양끝이 대여소로 묶여 있어(어디로 달리든 대여소에 반납한다) 둘 다 경로 이탈이 성립하지 않는다.
   void _checkOffRoute(Position p, DateTime at) {
     if (_rerouting || _ending || tracker.current.mode != 'WALK') return;
     final away = geo.projectOnPolyline(p.latitude, p.longitude, tracker.currentPoints).distM;
