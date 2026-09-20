@@ -13,7 +13,7 @@ import (
 // APIURL 은 공공데이터포털 「서울교통공사_빠른하차정보」 조회 주소.
 const APIURL = "https://apis.data.go.kr/B553766/inout/getFstExit"
 
-// pageSize: 한 번에 받는 행 수. 2026-09-19 전체 2,358행이 3회 호출로 끝났다(개발계정 하루 10,000건).
+// pageSize 는 API 한 번에 받을 행 수다.
 const pageSize = 1000
 
 type page struct {

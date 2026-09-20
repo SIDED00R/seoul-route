@@ -1,15 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- 로컬 PC 의 API(평문 HTTP, 사설 IP)에 붙어야 하므로 cleartext 를 허용한다. 배포하지 않는 개인용 앱이다. -->
+    <!-- 로컬 API 연결에 평문 HTTP를 사용한다. -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- 안내 중 위치는 위치 포그라운드 서비스(상단 "안내 중" 알림)로 받아 화면이 꺼지거나 다른 앱으로 넘어가도 이어진다.
-         서비스는 안내 화면에서 시작하므로 백그라운드 위치 권한("항상 허용")은 쓰지 않는다. 알림 권한은 그 알림을 알림창에 띄운다. -->
+    <!-- 화면 밖에서도 경로 안내를 이어 가기 위한 권한이다. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <!-- 안내 중 실제 활동(걷기·자전거·차량)을 받아 안내 구간 수단과 다른 샘플을 속도 학습에서 뺀다. -->
+    <!-- 이동 수단과 다른 위치 표본을 속도 학습에서 제외한다. -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
     <uses-permission android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION"/>
     <application
@@ -27,10 +26,7 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
-            <!-- Specifies an Android theme to apply to this Activity as soon as
-                 the Android process has started. This theme is visible to the user
-                 while the Flutter UI initializes. After that, this theme continues
-                 to determine the Window background behind the Flutter UI. -->
+            <!-- Flutter UI가 준비되는 동안 사용할 테마. -->
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
@@ -40,23 +36,18 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- Don't delete the meta-data below.
-             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <!-- Flutter 플러그인 등록에 필요한 임베딩 버전. -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
-    <!-- Required to query activities that can process text, see:
-         https://developer.android.com/training/package-visibility and
-         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
-
-         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <!-- Flutter 텍스트 처리 플러그인이 조회할 앱 범위. -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
-        <!-- 음성 안내가 쓰는 음성 합성 엔진 목록. Android 11+ 는 이 선언이 없으면 설치된 엔진이 안 보인다. -->
+        <!-- 음성 안내에 사용할 TTS 엔진 조회 범위. -->
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE"/>
         </intent>

@@ -52,7 +52,7 @@ type Timetable struct {
 	NDup   int // 같은 열차가 같은 역에 두 번 있는 행(뒤 것을 버림)
 }
 
-// LateNightHour: 이 시각 미만의 출발·도착은 전날 운행의 심야로 본다(막차 최대 02시대, 첫차 최소 04시대 실측).
+// LateNightHour 미만의 시각은 전날 운행의 심야로 본다.
 const LateNightHour = 3
 
 // Load 는 두 CSV 를 읽는다. 역 파일이 있어야 노선이 생기고, 그 노선의 시각표 행만 받는다.

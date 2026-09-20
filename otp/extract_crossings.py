@@ -1,15 +1,6 @@
-"""서울 OSM 추출본(seoul.osm.pbf)에서 신호가 있는(있을) 횡단보도 노드를 CSV 로 뽑는다.
+"""서울 OSM에서 신호 횡단보도 노드를 crossings.csv로 추출한다.
 
-사용: python otp/extract_crossings.py → otp/data/crossings.csv (lat, lon, osm_id, source)
-백엔드(backend/internal/crossing)가 이 파일을 읽어 도보·따릉이 구간이 지나는 신호 횡단보도마다 기대 대기를 더한다.
-
-판정 규칙(2026-09-15 실측 근거):
-- 태그로 확정: highway=crossing 노드에 crossing=traffic_signals 또는 crossing:signals=yes → 신호 있음(source=tag).
-  crossing=uncontrolled/unmarked 또는 crossing:signals=no → 신호 없음(제외).
-- 태그 없음(또는 crossing=marked 뿐)이면 놓인 도로 등급으로 추정(source=road): trunk/primary/secondary/tertiary 본선 위면
-  신호 있음으로 본다. 근거: 태그가 있는 횡단보도만 세면 P(신호|태그) 가 primary 0.88·secondary 0.81·tertiary 0.70·
-  trunk 1.00 인 반면 residential 0.19·service 0.08 이고, *_link·unclassified 는 0.35~0.6 이라 제외. 강남 일대는
-  태그가 거의 없어(역삼→선릉 도보가 지나는 7개 노드 전부 무태그, primary/secondary 위) 태그만으로는 0곳이 된다.
+명시적 신호 태그를 우선하고, 태그가 없으면 간선도로 등급으로 추정한다.
 """
 
 import csv

@@ -59,11 +59,8 @@ func connect(legs []otp.Leg, i int, cur time.Duration) (time.Duration, bool) {
 	return best.Sub(b), true
 }
 
-// boardWait 는 직전 leg 끝에서 탑승까지 더 걸리는 시간. 앞이 도보·자전거면 그 구간들의 신호 횡단보도 기대 대기
-// 합, 앞이 바로 대중교통이면 승강장 이동 TransferSlackSec. 두 항은 서로 대신하므로 함께 더하지 않는다.
-// 앞 leg 끝과 시각이 끊기는 자리에서 합산을 멈춘다 — 재탐색이 이어 붙인 자리이고, 그 앞 대기는 뒤 구간의 시각에
-// 이미 들어 있다. 2026-09-20 실측(대표 OD 20쌍 × 3시각): 시각이 끊긴 도보→도보 10쌍이 전부 재탐색 여정이었고,
-// 자전거 대여·반납으로 이어지는 78쌍은 간격이 모두 0 이라 이 판정에 걸리지 않는다.
+// boardWait 는 직전 대중교통이면 환승 여유를, 도보·자전거면 이어진 구간의 횡단보도 대기를 돌려준다.
+// 재탐색으로 시각이 끊긴 지점 앞의 대기는 이미 반영됐으므로 합산하지 않는다.
 func boardWait(legs []otp.Leg, i int) time.Duration {
 	if legs[i-1].TransitLeg {
 		return TransferSlackSec * time.Second

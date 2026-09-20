@@ -19,12 +19,7 @@ import (
 	"github.com/SIDED00R/seoul-route/gtfs/internal/seoulmetro"
 )
 
-// 상수 출처·재보정 규칙
-//   - FallbackSpeedKmh 18: sectSpd 결측(0) 구간에 쓰는 시내버스 평균속도 placeholder(2026-09-12 표본).
-//     Phase 3 이후 버스 실시간 위치로 구간별 실측치로 교체한다.
-//   - 정차시간(dwellSec): sectSpd 는 주행속도라 정차가 빠져 있다. 2026-09-12(토) 저녁 한 시간대 버스 위치 추적으로
-//     유형별로 잰 값이고 수치는 docs/gtfs-generator.md 에 있다. 주간 첨두는 미측정 — 시간대별 추적 후 갱신한다.
-//   - ServiceStart/End: 생성 시점 기준 유효 기간. 재생성 때마다 갱신.
+// 버스 속도 폴백과 정차시간은 2026-09-12 위치 표본으로 정한 초기값이며 시간대별 표본으로 재보정한다.
 const (
 	FallbackSpeedKmh = 18.0
 	DwellTrunkSec    = 38 // routeType 3 간선
@@ -159,7 +154,7 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 	sort.Slice(stopRows, func(i, j int) bool { return stopRows[i][0] < stopRows[j][0] })
 
 	if subway != nil {
-		replaced := map[string]bool{} // 시각표로 대체되는 파일럿 trip
+		replaced := map[string]bool{}             // 시각표로 대체되는 파일럿 trip
 		kricLine := func(routeID string) string { // 레일포털 시각표로 대체되는 노선이면 그 코드
 			if !useKric {
 				return ""

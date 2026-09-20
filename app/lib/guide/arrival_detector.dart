@@ -1,9 +1,4 @@
-/// 마지막 구간에서 목적지에 닿았는지 본다. 참이 되면 GuideSession 이 사용자가 누르지 않아도 안내를 끝낸다.
-///
-/// 2026-09-20 초기값(실기기 궤적으로 재보정):
-///   nearM 40 = 목적지에서 이만큼 안이면 닿은 것으로 센다. LegTracker.arriveRadiusM 과 같은 값이다.
-///   hits 3 = 연속 이만큼이어야 도착으로 본다. 위치 요청 간격이 2초라 약 6초.
-///   maxAccuracyM 50 = 이보다 오차가 큰 표본은 세지도, 셈을 지우지도 않는다(건물 안에서 튀는 값).
+/// 정확한 위치가 목적지 반경 안에 연속해서 들어오면 도착으로 판정한다.
 class ArrivalDetector {
   ArrivalDetector({this.nearM = 40, this.hits = 3, this.maxAccuracyM = 50});
 

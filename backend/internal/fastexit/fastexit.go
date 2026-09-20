@@ -39,7 +39,7 @@ type Index struct {
 // GTFS 역 이름 출처를 바꾸면 다시 대조한다.
 var renamed = map[string]string{"불암산": "당고개", "자양": "뚝섬유원지", "이수": "총신대입구"}
 
-// facilityOrder 는 응답에 싣는 설비와 그 순서. 엘리베이터는 넣지 않는다(사용자 결정 2026-09-19).
+// facilityOrder 는 응답에 싣는 설비와 표시 순서다.
 // "환승통로 …" 는 그 설비가 환승 통로로 이어질 때 쓰는 이름이다.
 var facilityOrder = []string{"에스컬레이터", "계단", "환승통로 에스컬레이터", "환승통로 계단"}
 

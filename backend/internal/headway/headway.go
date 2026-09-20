@@ -1,6 +1,5 @@
 // Package headway 는 생성 GTFS zip 의 frequencies.txt 에서 노선별 배차간격을 읽는다.
-// 버스는 배차간격 기반 시간표라 OTP 의 previousLegs/nextLegs 가 쓸 값을 주지 않는다(실측: 막차 trip 만 반환).
-// 그래서 앱의 "배차 약 N분" 표시는 이 표에서 나온다. 지하철은 OTP 의 앞뒤 열차 시각을 쓴다.
+// 버스 배차 표시는 이 표를 사용하고, 지하철은 OTP의 앞뒤 열차 시각을 사용한다.
 package headway
 
 import (

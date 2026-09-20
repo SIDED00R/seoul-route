@@ -9,13 +9,7 @@ import (
 	"strconv"
 )
 
-// 상수 출처(2026-09-15 초기값, 실기기 궤적·실측으로 재보정)
-//   - MatchRadiusM 8: OTP 도보 폴리라인은 OSM way 의 정점을 그대로 지나므로 경로가 쓰는 횡단보도 노드는 선 위(0m)에
-//     있고, 옆 인도의 안 쓰는 횡단보도는 도로 폭(왕복 4차로 15m 이상)만큼 떨어져 있다. 계획 v2 초기값 8m.
-//   - MergeM 15: 중앙분리대가 있는 큰길은 횡단보도가 양쪽 노드 두 개로 그려져 있다(테헤란로 실측). 보행 신호는
-//     한 번에 건너게 주므로 15m 안에 붙어 있는 노드는 한 번의 대기로 센다.
-//   - CycleSec 130 / GreenSec 30: 서울 간선도로 보행 신호 주기·녹색 placeholder(계획 v2). 무조건부 기대 대기는
-//     R²/(2C), R = C − G → 100²/260 ≈ 38초. 교차로별 실제 주기(T-data)나 학습값이 생기면 교체한다.
+// 경로와 8m 안의 신호를 찾고, 15m 안의 연속 신호는 하나로 합친다.
 const (
 	MatchRadiusM = 8.0
 	MergeM       = 15.0
@@ -23,7 +17,7 @@ const (
 	GreenSec     = 30.0
 )
 
-// ExpectedWaitSec 는 신호 횡단보도 하나에서 기다리는 기대값(초): 임의 시각 도착, 적색이면 잔여 적색 균등분포.
+// ExpectedWaitSec 는 임의 시각에 도착했을 때의 신호 대기 기대값(초)이다.
 var ExpectedWaitSec = math.Round((CycleSec - GreenSec) * (CycleSec - GreenSec) / (2 * CycleSec)) // 38
 
 // Index 는 신호 횡단보도 좌표를 격자로 담는다. 격자 한 칸은 위경도 0.001도(약 111m×89m).

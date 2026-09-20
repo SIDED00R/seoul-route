@@ -91,7 +91,12 @@ func readDotEnv(path string, into map[string]string) {
 		}
 		k, v, ok := strings.Cut(line, "=")
 		if ok {
-			into[strings.TrimSpace(k)] = strings.TrimSpace(v)
+			value := strings.TrimSpace(v)
+			if len(value) >= 2 && ((value[0] == '\'' && value[len(value)-1] == '\'') ||
+				(value[0] == '"' && value[len(value)-1] == '"')) {
+				value = value[1 : len(value)-1]
+			}
+			into[strings.TrimSpace(k)] = value
 		}
 	}
 }

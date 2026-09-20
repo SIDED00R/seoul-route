@@ -9,13 +9,7 @@ import (
 	"github.com/SIDED00R/seoul-route/backend/internal/geo"
 )
 
-// 상수 출처(2026-09-13, 계획 v2 Phase 3 초기값. 실기기 궤적이 쌓이면 재보정)
-//   - MaxAccuracyM 30: 도심 GPS 는 건물 반사로 50m 이상 튀는 표본이 흔하다. 그 이상은 버린다.
-//   - MinPairSec 2 / MaxPairSec 30: 앱은 5초 간격으로 올린다. 30초 넘게 비면(앱 백그라운드·신호 끊김) 구간 속도가 아니다.
-//   - MaxSpeed walk 3.0 / bicycle 12.0 m/s: 뛰는 사람 상한·전기자전거 상한. 그 이상은 GPS 점프.
-//   - MinMoving walk 0.3 / bicycle 0.5 m/s: 그 미만은 정지(횡단보도 대기·신호). 정지는 Phase 4 횡단보도 대기가 맡으므로
-//     여기서 뺀다. 그래서 여기서 나오는 값은 이동 중 평균이고, OTP 의 speed(평지 최대속도)로는 route 가 바꿔 넣는다.
-//   - MinPairs 12: 5초 간격 1분치. 그보다 적으면 그 수단은 표본 부족으로 판정하지 않는다.
+// 정확한 연속 위치 표본만 사용하고, 수단별 이동 속도 범위를 벗어난 쌍은 제외한다.
 const (
 	MaxAccuracyM = 30.0
 	MinPairSec   = 2.0
@@ -26,7 +20,7 @@ const (
 var (
 	MaxSpeed  = map[string]float64{"walk": 3.0, "bicycle": 12.0}
 	MinMoving = map[string]float64{"walk": 0.3, "bicycle": 0.5}
-	// 활동 인식이 줄 수 있는 판정. 빈 값은 활동 인식이 없었다는 뜻이다(옛 기록·권한 거부·Play 서비스 없음).
+	// 활동 인식이 줄 수 있는 판정. 빈 값은 판정 정보가 없음을 뜻한다.
 	Activities = map[string]bool{"walk": true, "bicycle": true, "vehicle": true, "still": true, "unknown": true}
 )
 

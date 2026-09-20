@@ -18,20 +18,20 @@ import (
 )
 
 type Server struct {
-	DB      *pgxpool.Pool
-	JWT     *auth.JWT
-	Google  auth.GoogleVerifier // nil 이면 /auth/google 은 503
+	DB     *pgxpool.Pool
+	JWT    *auth.JWT
+	Google auth.GoogleVerifier // nil 이면 /auth/google 은 503
 	// GoogleClientID 는 /auth/config 로 앱에 내려주는 웹 클라이언트 ID(Google 이 비밀로 보지 않는 값). Google 이 nil 이면 빈 문자열.
 	GoogleClientID string
-	OTPURL  string
-	HTTP    *http.Client
-	Log     *slog.Logger
-	Planner *route.Planner
-	GBFS    http.Handler // nil 이면 /gbfs/* 은 503
-	KakaoKey  string // 비면 /places/search·/places/reverse 503
-	KakaoBase string // 카카오 로컬 API 주소. 비면 KakaoBaseURL(테스트에서만 바꾼다)
-	VWorldKey string // 비면 /tiles/* 503
-	VWorldBase string // VWorld API 주소. 비면 VWorldBaseURL(테스트에서만 바꾼다)
+	OTPURL         string
+	HTTP           *http.Client
+	Log            *slog.Logger
+	Planner        *route.Planner
+	GBFS           http.Handler // nil 이면 /gbfs/* 은 503
+	KakaoKey       string       // 비면 /places/search·/places/reverse 503
+	KakaoBase      string       // 카카오 로컬 API 주소. 비면 KakaoBaseURL(테스트에서만 바꾼다)
+	VWorldKey      string       // 비면 /tiles/* 503
+	VWorldBase     string       // VWorld API 주소. 비면 VWorldBaseURL(테스트에서만 바꾼다)
 }
 
 func (s *Server) Router() http.Handler {
@@ -62,7 +62,7 @@ func (s *Server) Router() http.Handler {
 		r.With(short).Get("/places/search", s.handlePlacesSearch)
 		r.With(short).Get("/places/reverse", s.handlePlacesReverse)
 		r.With(short).Get("/tiles/{z}/{x}/{y}.png", s.handleTile)
-		// via 대중교통 탐색이 OTP 에서 15~37초 걸린다(실측) → 이 경로만 상한이 길다.
+		// 경로 탐색은 외부 OTP 호출을 포함하므로 별도 제한 시간을 사용한다.
 		r.With(middleware.Timeout(PlanTimeout)).Post("/routes/plan", s.handlePlan)
 		// 최근 경로: 성공한 검색을 기록하고(handlePlan) 홈의 "최근 경로" 탭이 읽는다. recent_routes_handler.go
 		r.With(short).Get("/routes/recent", s.handleGetRecentRoutes)

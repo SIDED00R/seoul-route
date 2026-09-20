@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TraceRetention 30일: 원본 궤적은 학습 결과(trip 속도·프로파일)만 남기고 지운다(계획 v2 개인정보 항목).
+// TraceRetention 은 원본 위치 궤적의 보관 기간이다.
 const TraceRetention = 30 * 24 * time.Hour
 
 // PurgeOldTraces 는 보관 기간이 지난 궤적 행을 지우고 지운 수를 돌려준다. main 이 1시간마다 부른다.

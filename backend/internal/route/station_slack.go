@@ -6,12 +6,8 @@ import (
 	"github.com/SIDED00R/seoul-route/backend/internal/otp"
 )
 
-// 역 진입·이탈 시간(초). 역 앵커링(anchor.go)은 출발·도착지를 역 ID 로 넘겨 OTP 가 승강장에서 바로 타고 내리게 하므로
-// 출입구↔승강장 이동이 여정에서 빠진다. ODsay 대조(docs/eval/2026-09-13-0541.md, 2026-09-13)에서 지하철 직행 8구간의
-// 우리 소요가 중앙값 2분 짧았던 만큼을 진입 2분 + 이탈 1분으로 나눠 넣은 초기값이다. Phase 3 궤적(출입구→첫 탑승)으로
-// 재보정한다. OTP 의 boardSlack/alightSlack 은 역 ID 출발·도착에서는 소요시간에 드러나지 않고 환승에만 붙어(같은 문서 실측)
-// 쓰지 않는다. 이 값을 바꾸면 gtfs/internal/build/pathways.go 의 EntrySec/ExitSec(좌표 요청에 OTP 통로가 더하는 값,
-// 자식 2개 이상 역의 출입구 통로)도 같이 바꾸고 GTFS·그래프를 재생성한다.
+// 역 ID 앵커링에서 빠지는 출입구↔승강장 시간을 보정한다.
+// 변경 시 gtfs/internal/build/pathways.go와 값을 맞추고 그래프를 재생성한다.
 const (
 	StationEntrySec = 120.0
 	StationExitSec  = 60.0

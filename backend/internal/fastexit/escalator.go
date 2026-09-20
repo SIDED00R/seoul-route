@@ -13,8 +13,7 @@ const EscalatorAPIURL = "http://openapi.seoul.go.kr:8088"
 // EscalatorService 는 그 데이터셋의 서비스명.
 const EscalatorService = "tbTrfcEscalInstlPrst"
 
-// Escalator 는 에스컬레이터 한 대. No 는 승강기번호로 빠른하차 자료의 elvtrNo 와 같다(2026-09-19 실측: 빠른하차의
-// 에스컬레이터 536행 중 532행이 이 번호로 이어졌고, 못 이은 4행은 번호가 비어 있었다).
+// Escalator 는 승강기번호로 빠른하차 자료와 연결되는 에스컬레이터다.
 type Escalator struct {
 	No        string `json:"ESCAL_NO"`
 	Direction string `json:"DIRECTION"`  // 상행·하행·상/하겸용

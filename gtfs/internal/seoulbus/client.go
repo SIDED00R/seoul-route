@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// 서울시 버스 API 는 443 을 열지 않는다(실측 2026-09-12) → http.
+// 서울시 버스 API는 HTTP 엔드포인트를 사용한다.
 const baseURL = "http://ws.bus.go.kr/api/rest/busRouteInfo"
 
 // ErrQuota 는 공공데이터포털 일일 한도 초과(reason 22) 또는 키 거부다. 호출자는 중단하고 다음 날 재개한다.
@@ -34,7 +34,7 @@ func New(key, cacheDir string) *Client {
 		MinGap: 200 * time.Millisecond}
 }
 
-// AllRoutes 는 노선명에 0~9 를 하나씩 검색해 합집합을 만든다. 모든 서울 노선명은 숫자를 포함한다(실측 1,357개, 누락 0).
+// AllRoutes 는 숫자별 노선 검색 결과를 합쳐 전체 노선을 만든다.
 func (c *Client) AllRoutes() ([]Route, error) {
 	seen := map[string]Route{}
 	for _, d := range "0123456789" {

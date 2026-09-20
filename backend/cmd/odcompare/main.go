@@ -1,14 +1,5 @@
-// odcompare: 서울 대표 OD 를 우리 Planner(실시간 보정 포함)와 ODsay Lab API 로 한 실행에서 나란히 풀어 기록한다.
-// 카카오·네이버는 대중교통 경로 API 가 없어 ODsay(개인 무료 30콜/일)를 참조계로 쓴다. 정답이 아니라 편향 방향을
-// 보는 용도다. ODsay searchPubTransPathT 는 출발 시각 파라미터가 없어 시각 무관 대표값을 돌려주므로, 우리 쪽 출발
-// 시각(지금 또는 -at)과 기준이 같지 않다. 결과는 docs/eval/<시각>.md 와 .json 으로 남긴다. -ref 없이 ODSAY_API_KEY 도
-// 없으면 안내하고 종료한다.
-//
-//	cd backend && go run ./cmd/odcompare            # OD 20쌍 = ODsay 20콜, 지금 출발(실시간 보정 포함)
-//	cd backend && go run ./cmd/odcompare -n 5       # 앞 5쌍만
-//	cd backend && go run ./cmd/odcompare -at 08:30  # 오늘 08:30 출발(시간표만, 실시간 없음). 새벽·심야 실행 시 사용
-//	cd backend && go run ./cmd/odcompare -at 08:30 -ref ../docs/eval/2026-09-13-0541.json  # ODsay 값 재사용(0콜), 설정 전후 비교용
-//	cd backend && go run ./cmd/odcompare -at 08:30 -on 2026-09-14 -ref ...              # 특정 날짜(요일) 시간표로
+// odcompare는 대표 구간의 Planner와 ODsay 결과를 docs/eval에 기록한다.
+// -ref를 주면 ODsay를 호출하지 않고 기존 기준값을 재사용한다.
 package main
 
 import (

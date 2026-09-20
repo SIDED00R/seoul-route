@@ -1,11 +1,8 @@
-# 로컬·VM 공용 스택. 레포 루트에서 `docker compose --env-file .env -f deploy/compose.yml up -d`.
-# compose 는 기본으로 compose 파일이 있는 deploy/ 의 .env 를 찾으므로 루트 .env 를 --env-file 로 넘겨야
-# ${JWT_SECRET}·${SEOUL_OPENAPI_KEY} 가 채워진다.
-# 그래프(otp/graph.obj)는 로컬 PC 에서 빌드해 넣는다(VM 에서 빌드하지 않는다 — peak RSS 4.1GB).
+# 루트 .env와 로컬에서 생성한 OTP 그래프를 사용하는 공용 스택.
 services:
   postgres:
     image: postgis/postgis:17-3.5
-    restart: unless-stopped # Docker 가 뜨면(재부팅 뒤) 같이 뜬다. `compose stop`·`down` 으로 내린 것은 그대로 둔다
+    restart: unless-stopped
     environment:
       POSTGRES_USER: seoul
       POSTGRES_PASSWORD: seoul
@@ -21,7 +18,7 @@ services:
   otp:
     image: opentripplanner/opentripplanner:2.10.0
     restart: unless-stopped
-    command: ["--load"] # 디렉터리는 이미지 entrypoint 가 /var/opentripplanner/ 로 붙인다. 다시 주면 "single directory" 오류
+    command: ["--load"]
     environment:
       JAVA_TOOL_OPTIONS: "-Xmx4G"
     volumes:
@@ -53,9 +50,7 @@ services:
       PUBLIC_URL: http://api:8081               # OTP 컨테이너가 GBFS 하위 feed URL 을 이 주소로 받는다
       PORT: "8081"
     volumes:
-      # 파일 하나씩이 아니라 디렉터리를 마운트한다. 없는 경로를 파일로 마운트하면 Docker 가 그 자리에 빈 디렉터리를
-      # 만들고, 그러면 읽기가 "파일 없음" 이 아니라 "디렉터리다" 오류가 돼 기능이 통째로 꺼진다(선택 파일인
-      # escalator.json 에서 실측).
+      # 선택 데이터 파일이 없어도 빈 디렉터리가 생기지 않도록 상위 디렉터리를 마운트한다.
       - ../otp/data:/data:ro
     depends_on:
       postgres:

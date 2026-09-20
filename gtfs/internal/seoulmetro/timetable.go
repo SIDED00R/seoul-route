@@ -50,7 +50,7 @@ func blankZero(s string) string {
 var cols = []string{"호선", "역사코드", "역사명", "주중주말", "방향", "급행여부", "열차코드", "열차도착시간", "열차출발시간",
 	"출발역", "도착역"}
 
-// Load 는 CSV 를 읽어 열차별로 묶는다. 파일 안 행 순서는 열차 순이 아니라(실측) 정차를 시각(출발, 없으면 도착)순으로 정렬한다.
+// Load 는 CSV를 열차별로 묶고 정차 시각순으로 정렬한다.
 func Load(path string) (*Timetable, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -96,9 +96,7 @@ func Load(path string) (*Timetable, error) {
 				Origin: rec[idx["출발역"]], Dest: rec[idx["도착역"]]}
 			trains[k] = t
 		}
-		// 한쪽 시각만 "00:00:00" 인 행(실측 7,074행)은 급행 열차에서는 통과역이다(1호선 급행 7,073행: 정차 dwell 이 없는 단일
-		// 시각이고, 통과역 37종 중 31종은 파일럿 급행 trip 에도 없는 역. 군포·금천구청·의왕·용산·노량진·영등포는 급행·특급이
-		// 섞여 열차별로 갈린다). 일반 열차의 1행(3호선 3305 교대 도착)은 진짜 결측이라 남긴다. 진짜 자정은 "24:00:00" 이다.
+		// 급행에서 한쪽 시각만 00:00:00인 행은 통과역이다. 실제 자정은 24:00:00으로 기록된다.
 		arrRaw, depRaw := rec[idx["열차도착시간"]], rec[idx["열차출발시간"]]
 		if t.Express && (arrRaw == "00:00:00") != (depRaw == "00:00:00") {
 			out.NPassing++

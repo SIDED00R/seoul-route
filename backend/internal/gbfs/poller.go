@@ -16,16 +16,13 @@ import (
 	"time"
 )
 
-// 상수 출처
-//   - PageSize 1000: 열린데이터광장 1콜 최대 행수(문서·실측 2026-09-12).
-//   - PollInterval 60s: GBFS station_status 권고 ttl 과 같다. 하루 4,320콜 = 1,440회 × 3페이지.
-//   - MaxAge 10m: 이보다 오래된 스냅샷은 stale 로 표시하고 is_renting=false 로 내보내 유령 대여를 막는다.
+// 열린데이터광장을 페이지 단위로 갱신하고 오래된 스냅샷의 대여를 막는다.
 const (
 	PageSize     = 1000
 	PollInterval = 60 * time.Second
 	MaxAge       = 10 * time.Minute
 	SystemID     = "ttareungi"
-	// 열린데이터광장은 443 미개방(실측 2026-09-12) → http. 키는 URL 경로에 들어가므로 URL 을 절대 기록하지 않는다.
+	// 키가 URL 경로에 들어가므로 요청 URL은 기록하지 않는다.
 	DefaultBaseURL = "http://openapi.seoul.go.kr:8088"
 )
 
@@ -100,7 +97,7 @@ func (p *Poller) Current() (*Snapshot, bool) {
 	return p.snap, p.now().Sub(p.snap.FetchedAt) > MaxAge
 }
 
-// fetchAll 은 1000행씩 짧은 페이지가 나올 때까지 넘긴다. list_total_count 는 요청 범위 건수라 쓰지 않는다(실측).
+// fetchAll 은 짧은 페이지가 나올 때까지 모든 페이지를 읽는다.
 func (p *Poller) fetchAll(ctx context.Context) ([]Station, error) {
 	var all []Station
 	seen := map[string]bool{}
@@ -178,7 +175,7 @@ func (p *Poller) fetchPage(ctx context.Context, start, end int) ([]row, error) {
 			Code    string `json:"CODE"`
 			Message string `json:"MESSAGE"`
 		} `json:"RESULT"`
-		// 범위 밖 요청(무자료)은 래퍼 없이 평면 {"CODE":"INFO-200","MESSAGE":"해당하는 데이터가 없습니다."} 로 온다(실측 2026-09-12).
+		// 범위 밖 요청의 INFO-200 응답은 빈 페이지로 처리한다.
 		Code    string `json:"CODE"`
 		Message string `json:"MESSAGE"`
 	}

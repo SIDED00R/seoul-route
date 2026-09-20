@@ -1,4 +1,4 @@
-// OTP 는 설정 JSON 에 // 주석을 허용한다(OTP 2.10.0 ConfigFileLoader 실측 2026-09-12).
+// OTP 라우터 설정.
 // 백엔드가 이 파일을 엄격 JSON 파서로 읽게 되면 주석을 걷어내야 한다.
 // transferSlack 은 설정하지 않아 OTP 기본 2분이다. 백엔드 realtime.TransferSlackSec(120) 가 이 값을 가정하므로
 // 여기서 바꾸면 그 상수도 같이 바꾼다(deploy/otp/router-config.json 도 같다).
@@ -13,7 +13,7 @@
       "speed": 5.0,
       "rental": {
         // pickupTime PT1M: OTP 2.10 기본값과 동일. dropOffTime PT1M: OTP 기본 30초에서 올렸으나 근거 미정,
-        // Phase 1 따릉이 대여·반납 실측 후 확정한다.
+        // 대여소 반환 비용.
         "pickupTime": "PT1M", "dropOffTime": "PT1M", "useAvailabilityInformation": true
       }
     },

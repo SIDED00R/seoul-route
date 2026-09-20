@@ -13,12 +13,7 @@ class StepTracker {
   final double endLon;
   int index = 0;
 
-  // 2026-09-18 초기값(실기기 궤적으로 재보정):
-  //   cornerM 15 = 다음 단계 시작점(모퉁이)에 닿았다고 보는 반경.
-  //   onSegmentM 20 / offSegmentM 40 = 모퉁이를 못 잡고 지나쳤을 때, 뒤 단계 선분 위이고 현재 단계 선분에서
-  //   벗어났으면 그 단계로 건너뛴다.
-  //   maxAccuracyM 50 = 이보다 오차가 큰 표본으로는 단계를 넘기지 않는다(LegTracker·StopTracker 와 같은 값).
-  //   단계는 앞으로만 가므로 한 번 잘못 넘기면 그 구간 내내 어긋난다.
+  // 모퉁이에 닿거나 다음 선분으로 이동하면 안내 단계를 넘긴다.
   static const cornerM = 15.0;
   static const onSegmentM = 20.0;
   static const offSegmentM = 40.0;
@@ -36,7 +31,8 @@ class StepTracker {
     while (moved) {
       moved = false;
       while (index + 1 < steps.length &&
-          distanceM(lat, lon, steps[index + 1].lat, steps[index + 1].lon) <= cornerM) {
+          distanceM(lat, lon, steps[index + 1].lat, steps[index + 1].lon) <=
+              cornerM) {
         index++;
         moved = true;
       }
@@ -63,11 +59,15 @@ class StepTracker {
     return len > 0 && d > len ? len : d;
   }
 
-  LatLng _segmentEnd(int i) =>
-      i + 1 < steps.length ? LatLng(steps[i + 1].lat, steps[i + 1].lon) : LatLng(endLat, endLon);
+  LatLng _segmentEnd(int i) => i + 1 < steps.length
+      ? LatLng(steps[i + 1].lat, steps[i + 1].lon)
+      : LatLng(endLat, endLon);
 
   double _segmentDist(double lat, double lon, int i) {
     final end = _segmentEnd(i);
-    return projectOnPolyline(lat, lon, [LatLng(steps[i].lat, steps[i].lon), end]).distM;
+    return projectOnPolyline(lat, lon, [
+      LatLng(steps[i].lat, steps[i].lon),
+      end,
+    ]).distM;
   }
 }

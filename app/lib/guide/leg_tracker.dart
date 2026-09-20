@@ -10,24 +10,24 @@ import 'geo.dart' as geo;
 class LegTracker {
   /// legs 는 복사해 갖는다 — 경로 이탈 재탐색이 호출자의 Itinerary 를 바꾸지 않게.
   LegTracker(List<Leg> legs, {DateTime? now})
-      : legs = List.of(legs),
-        points = _decode(legs) {
+    : legs = List.of(legs),
+      points = _decode(legs) {
     _enter(now ?? DateTime.now());
   }
 
   /// 디스크에 남겨 둔 안내를 이어받는다(앱이 죽었다 다시 켜진 경우). 구간과 밀린 시간은 저장된 값을 그대로 쓴다 —
   /// _enter 로 다시 재면 이미 지나온 구간의 계획 출발과 지금 시각 차이만큼 잘못 밀린다.
   LegTracker.resume(List<Leg> legs, {required int index, required this.shift})
-      : legs = List.of(legs),
-        points = _decode(legs),
-        index = index < 0 ? 0 : (index >= legs.length ? legs.length - 1 : index);
+    : legs = List.of(legs),
+      points = _decode(legs),
+      index = index < 0 ? 0 : (index >= legs.length ? legs.length - 1 : index);
 
   static List<List<LatLng>> _decode(List<Leg> legs) => [
-        for (final l in legs)
-          l.polyline.isEmpty
-              ? [LatLng(l.fromLat, l.fromLon), LatLng(l.toLat, l.toLon)]
-              : decodePolyline(l.polyline)
-      ];
+    for (final l in legs)
+      l.polyline.isEmpty
+          ? [LatLng(l.fromLat, l.fromLon), LatLng(l.toLat, l.toLon)]
+          : decodePolyline(l.polyline),
+  ];
 
   final List<Leg> legs;
 
@@ -35,21 +35,15 @@ class LegTracker {
   final List<List<LatLng>> points;
   int index = 0;
 
-  // 구간 끝점 도달 반경 40m: 도심 GPS 오차(10~30m)보다 크고, 정류장 간격(최소 200m 안팎)보다 작다. 실기기 궤적으로 재보정.
+  // 구간 끝점 도달 반경.
   static const arriveRadiusM = 40.0;
-  // 경로선 인계 판정(2026-09-18 초기값, 실기기 궤적으로 재보정):
-  //   onRouteM 25 = 뒤 구간 경로선 위로 본다. 도심 GPS 오차 상한 근처.
-  //   handoffAlongM 40 = 그 경로선을 이만큼 따라갔을 때만. 두 구간이 맞닿은 지점(현재 끝=다음 시작)은 제외된다.
-  //   offRouteM 60 = 현재 구간 경로선에서 이만큼 벗어났을 때만(지상 구간끼리 나란한 길 오판 방지).
-  //   maxAccuracyM 50 = 실내에서 튀는 표본 차단.
-  //   handoffHits 2 = 연속 두 번 맞아야 넘긴다.
+  // 뒤 구간 경로를 연속해서 따라갈 때 현재 구간을 넘긴다.
   static const onRouteM = 25.0;
   static const handoffAlongM = 40.0;
   static const offRouteM = 60.0;
   static const maxAccuracyM = 50.0;
   static const handoffHits = 2;
-  // 시간표 인계: 믿을 만한 위치가 이만큼 끊기면 지하로 보고 시간표로 구간을 넘긴다. 2026-09-18 실기기 궤적에서
-  // 지하철 구간 표본 231개 중 92개가 정확도 50m 밖이었고, 그동안 구간이 31분 넘게 첫 열차에 머물렀다.
+  // 위치가 끊긴 지하 구간은 시간표로 넘긴다.
   static const blindAfter = Duration(seconds: 20);
 
   int _hits = 0;
@@ -83,7 +77,9 @@ class LegTracker {
     if (isLast) return false;
     final good = accuracyM <= maxAccuracyM;
     if (good) _lastGoodFix = t;
-    if (good && geo.distanceM(lat, lon, current.toLat, current.toLon) <= arriveRadiusM) {
+    if (good &&
+        geo.distanceM(lat, lon, current.toLat, current.toLon) <=
+            arriveRadiusM) {
       _goto(index + 1, t);
       return true;
     }
@@ -116,7 +112,8 @@ class LegTracker {
   /// 지하에서 구간이 밀려 있다가 지상으로 나왔을 때 한 번에 따라잡는다.
   int _legOnRoute(double lat, double lon) {
     final offCurrent =
-        current.transitLeg || geo.projectOnPolyline(lat, lon, currentPoints).distM >= offRouteM;
+        current.transitLeg ||
+        geo.projectOnPolyline(lat, lon, currentPoints).distM >= offRouteM;
     if (!offCurrent) return -1;
     final mayLag = current.transitLeg || current.inStation;
     for (var k = index + 1; k < legs.length; k++) {
@@ -150,7 +147,9 @@ class LegTracker {
       final t = DateTime.tryParse(d);
       if (t == null) continue;
       if (riding) {
-        if (!t.isAfter(now) && t.isAfter(board!)) board = t; // 이미 떠난 차 중 가장 늦은 것
+        if (!t.isAfter(now) && t.isAfter(board!)) {
+          board = t; // 이미 떠난 차 중 가장 늦은 것
+        }
       } else if (!t.isBefore(now) && (board == null || t.isBefore(board))) {
         board = t; // 아직 안 떠난 차 중 가장 이른 것
       }
@@ -158,7 +157,11 @@ class LegTracker {
     if (board == null) return;
     final end = DateTime.tryParse(current.end);
     // 손으로 되돌린 구간의 예상 종료가 이미 지났으면 시간표 인계가 곧바로 다시 넘겨 버린다. 그때는 늦은 만큼 민다.
-    if (riding && end != null && !end.add(board.difference(start)).isAfter(now)) return;
+    if (riding &&
+        end != null &&
+        !end.add(board.difference(start)).isAfter(now)) {
+      return;
+    }
     shift = board.difference(start);
   }
 

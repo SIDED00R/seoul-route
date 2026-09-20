@@ -1,13 +1,4 @@
-"""레일포털(KRIC) Open API 로 코레일·민자 노선의 요일별 열차 시각표를 내려받아 CSV 두 개로 저장한다.
-
-사용: python otp/fetch_kric_timetable.py → otp/data/kric-stations.csv, otp/data/kric-timetable.csv
-GTFS 생성기(gtfs/internal/kric)가 이 두 파일로 아래 노선의 trip 을 만든다(파일 없으면 국가교통DB 파일럿 trip 그대로).
-키는 .env 의 KRIC_API_KEY(레일포털 회원가입 후 발급, 승인 API: 도시철도 전체노선정보·역사별 정보·역사별 운행시각표).
-
-노선별 호출: subwayRouteInfo(역 순서) 1회 + stationInfo(좌표) 1회 + stationTimetable(역별·요일별 8 평일/7 토/9 휴일) 역 수×3.
-2026-09-14 실측: 코레일·공항철도·신분당 등은 토요일(7) 응답이 0건이고 휴일(9) 시각표를 토요일에도 쓴다(우이신설만 토요일 별도).
-GTX-A 는 레일포털에 없고, 서해선은 소사~원시 12역만 있어(대곡 연장 구간 없음) 둘 다 파일럿을 유지한다.
-"""
+"""KRIC API에서 코레일·민자 노선의 역과 요일별 시각표를 CSV로 저장한다."""
 
 import csv
 import json
@@ -61,9 +52,7 @@ def call(key: str, path: str, **params) -> list:
         try:
             with urllib.request.urlopen(url, timeout=60) as r:
                 j = json.loads(r.read().decode("utf-8"))
-            # 오류도 HTTP 200 으로 온다(실측: 잘못된 키 = resultCode "30", body 없음). "00" 성공, "03" 데이터 없음(토요일
-            # 시각표 없는 노선·도라산 등 정상적인 빈 결과)만 받고 그 외는 실패로 본다 — 빈 결과로 저장하면 그 노선의
-            # 파일럿 trip 이 전부 사라진 채 시각표 trip 0 인 GTFS 가 나온다.
+            # resultCode 00은 성공, 03은 정상적인 빈 결과이며 나머지는 오류다.
             header = j.get("header") or {}
             code = str(header.get("resultCode", ""))
             if code == "03":

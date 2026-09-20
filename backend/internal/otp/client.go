@@ -20,13 +20,12 @@ type Coord struct {
 	Lon float64 `json:"longitude"`
 }
 
-// Modes 는 planConnection 의 modes 인자. Direct 만 있으면 도보·자전거 전용 탐색(directOnly).
-// BICYCLE_RENTAL 은 항상 WALK 와 함께 넣어야 한다(OTP 2.10 BadRequest 실측).
+// Modes 는 planConnection의 이동 수단 조건이다. BICYCLE_RENTAL은 WALK와 함께 사용한다.
 type Modes struct {
 	Direct      []string `json:"direct,omitempty"`
 	Transit     *Transit `json:"transit,omitempty"`
 	Only        bool     `json:"directOnly,omitempty"`
-	TransitOnly bool     `json:"transitOnly,omitempty"` // 대중교통 없는 direct 후보를 억제한다(실측)
+	TransitOnly bool     `json:"transitOnly,omitempty"` // 대중교통 없는 direct 후보를 억제한다
 }
 
 type Transit struct {
@@ -77,9 +76,7 @@ type Leg struct {
 	HasBikeCount   bool   `json:"has_bike_count,omitempty"` // 0대와 "모름" 을 구분한다
 	TransitLeg     bool   `json:"transit_leg"`
 	Polyline       string `json:"polyline,omitempty"` // Google encoded polyline
-	// 앞뒤 차: 같은 탑승·하차 정류장의 이전/다음 출발(RFC3339). 시간표 기반(지하철)에서만 채운다 — 배차간격 기반
-	// 버스는 OTP 가 막차 trip 만 돌려줘(실측) 비워 두고 HeadwaySec 을 쓴다. leg 출발 ±3시간 밖과, 소요시간이
-	// 현재 leg 의 0.5~2배 밖인 것(순환선 반대 방향 열차)은 버린다.
+	// 시간표 기반 대중교통의 앞뒤 출발 시각. 버스는 HeadwaySec을 사용한다.
 	PrevDepartures   []string `json:"prev_departures,omitempty"`
 	NextDepartures   []string `json:"next_departures,omitempty"`
 	HeadwaySec       int      `json:"headway_sec,omitempty"`           // 생성 GTFS frequencies 의 배차간격(버스)
@@ -397,10 +394,7 @@ type legTime struct {
 	Duration float64
 }
 
-// nearbyDepartures 는 앞뒤 차 중 기준 시각 ±3시간 안이고 소요시간이 현재 leg 의 0.5~2배인 것만 돌려준다.
-// ±3시간은 배차 기반 trip 의 막차 sentinel 제거. 소요시간 조건은 순환선(2호선)에서 같은 두 역을 반대 방향으로
-// 한 바퀴 돌아 잇는 열차(9분 구간에 81분짜리, 실측)를 빼기 위한 것이다. 노선 ID 로 거르면 1호선처럼
-// 계열 노선(1U·7U·2U)이 같은 구간을 같은 시간에 달리는 정상 항목까지 빠진다(실측).
+// nearbyDepartures 는 기준 시각 ±3시간 안에서 소요시간이 비슷한 앞뒤 차만 돌려준다.
 func nearbyDepartures(legs []legTime, ref string, refDuration float64) []string {
 	base, err := time.Parse(time.RFC3339, ref)
 	if err != nil {
