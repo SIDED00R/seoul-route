@@ -35,7 +35,7 @@ func TestPlanRouteTimeoutBudgetAndValidation(t *testing.T) {
 
 	rr, out := do(t, h, http.MethodPost, "/routes/plan",
 		`{"origin":{"lat":37.5547,"lon":126.9707},"destination":{"lat":37.4979,"lon":127.0276}}`, token)
-	if rr.Code != 200 || out["walk_speed"] != 1.2 {
+	if rr.Code != 200 || out["walk_speed"] != route.DefaultWalk {
 		t.Fatalf("code=%d body=%v", rr.Code, out)
 	}
 	if d.remaining <= DefaultTimeout+10*time.Second {
@@ -51,8 +51,8 @@ func TestPlanRouteTimeoutBudgetAndValidation(t *testing.T) {
 	}
 }
 
-// 학습된 속도를 OTP 요청에 넣을 때 자전거는 평균 → 평지 최대속도로 바꿔야 한다(걷기는 그대로 간다).
-func TestPlanConvertsLearnedBikeSpeed(t *testing.T) {
+// 학습된 속도를 OTP 요청에 넣을 때 걷기·자전거 둘 다 이동 중 평균 → 평지 최대속도로 바꿔야 한다.
+func TestPlanConvertsLearnedSpeeds(t *testing.T) {
 	s, pool := testServer(t)
 	s.Planner = &route.Planner{OTP: &deadlineOTP{}}
 	h := s.Router()
@@ -81,7 +81,7 @@ func TestPlanConvertsLearnedBikeSpeed(t *testing.T) {
 	if got := out["bike_speed"].(float64); math.Abs(got-route.BikeOTPSpeed(3.6)) > 1e-9 {
 		t.Fatalf("자전거 %v: 학습 평균 3.6 을 변환하지 않고 보냈다", got)
 	}
-	if got := out["walk_speed"].(float64); math.Abs(got-1.4) > 1e-9 {
-		t.Fatalf("걷기 %v: 학습값 그대로여야 한다", got)
+	if got := out["walk_speed"].(float64); math.Abs(got-route.WalkOTPSpeed(1.4)) > 1e-9 {
+		t.Fatalf("걷기 %v: 학습 평균 1.4 를 변환하지 않고 보냈다", got)
 	}
 }

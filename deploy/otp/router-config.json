@@ -6,7 +6,7 @@
 // 여기서 바꾸면 그 상수도 같이 바꾼다.
 {
   "routingDefaults": {
-    "walk": { "speed": 1.2 },
+    "walk": { "speed": 1.23 },
     "bicycle": {
       "speed": 5.0,
       "rental": { "pickupTime": "PT1M", "dropOffTime": "PT1M", "useAvailabilityInformation": true }
