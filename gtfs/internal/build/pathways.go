@@ -10,32 +10,21 @@ import (
 	"github.com/SIDED00R/seoul-route/gtfs/internal/osm"
 )
 
-// 역 구내 통로(pathways.txt) 상수.
-//   - 부모역 안 자식 stop(노선별 승강장) 사이를 OTP 가 지상 도로망으로 걷는다(승강장 좌표가 도로에서 멀어 강남
-//     2호선↔신분당선 182m 가 도보 7.2분, 2026-09-13 실측). transfers.txt 의 min_transfer_time 은 하한일 뿐이라
-//     도로 경로를 줄이지 못한다. 승강장끼리 walkway pathway 를 두면 그 통로가 도로보다 짧아 환승에 쓰인다.
-//   - 환승 통과시간은 transfers.txt(파일럿, 역별 실측값)가 있으면 그 값, 없으면 직선거리÷PathwayWalkMps + PathwayStairSec.
+// 역 구내 통로(pathways.txt) 상수. 수치 근거는 docs/gtfs-generator.md.
+//   - 부모역 안 자식 stop(노선별 승강장) 사이에 walkway pathway 를 둔다. 없으면 OTP 가 지상 도로망으로 걷는다.
+//   - 환승 통과시간은 transfers.txt 값이 있으면 그 값, 없으면 직선거리÷PathwayWalkMps + PathwayStairSec.
 //     1.0 m/s·60초는 계단·개찰 포함 역 구내 보행 placeholder(2026-09-13). 서울교통공사 환승 소요 자료로 재보정한다.
-//     거리 폴백은 PathwayFallbackMaxM 까지만: 기준명+800m 로 묶인 부모역이 실제 환승역임을 보장하지 않아, 별개 역사인
-//     신촌 2호선↔경의중앙선(684m)에도 통로가 생겼다(2026-09-13 실측). transfers 기반 151쌍 최대 390m, 폴백 중 실재하는
-//     서울역 5쌍 최대 434m, 신촌 684m 라 그 사이 500m 를 상한으로 둔다. 상한에 걸린 쌍 수는 보고서에 남긴다.
-//   - 통로가 있는 역의 승강장은 OTP 가 도로에 직접 잇지 않고 출입구(location_type 2)만 잇는다(실측: 출입구 없이
-//     승강장 통로만 넣자 IsolatedStop 273→480). GTFS 검증기도 통로가 있는 역은 모든 위치가 출입구에서 닿아야 한다고
-//     본다(pathway_unreachable_location).
-//   - 출입구는 OSM railway=subway_entrance(otp/data/subway-entrances.csv, 2026-09-13 2,457개, 공사 중 3개는 추출에서
-//     제외)를 가장 가까운 승강장이
-//     EntranceMatchM 안에 있는 역에 붙인다. 부모역 평균 좌표 기준으로 하면 승강장이 684m 떨어진 신촌은 부모에서 출입구까지
-//     302m 라 실제 출구 10개가 전부 탈락했다(2026-09-13 실측, 승강장 기준 350m 로 454역·출입구 2,449개 매칭).
-//     출입구↔승강장 통로는 EntranceEntrySec/EntranceExitSec + 직선거리÷PathwayWalkMps, 승강장이 출입구에서
-//     PathwayFallbackMaxM 안일 때만(신촌 2호선 출구가 684m 떨어진 경의중앙선 승강장과 이어지지 않게. 현 데이터 최대 497m).
-//     출입구가 도로 위 실제 위치라 좌표 출발 여정의 접근 도보가 실제 출구까지로 잡힌다(이슈 #27). OSM 출입구가 없는
-//     역(bbox 밖 등)은 자식 2개 이상일 때만 승강장 좌표에 출입구를 두고 진입 EntrySec·이탈 ExitSec 통로로 잇는다
-//     (이전 방식, 환승 통로 유지용). 통로가 있는 역에서 출입구 통로를 하나도 못 받은 승강장은 OTP 가 도로에 잇지 않아
-//     고립되므로 그 수를 보고한다(NoEntrancePlatforms, 현 데이터 0).
-//     EntrySec/ExitSec 는 backend/internal/route/station_slack.go 의 StationEntrySec/StationExitSec(역 ID 앵커링
-//     요청에 백엔드가 더하는 값)와 같은 값이다.
-//   - transfers.txt 쌍인데 부모역이 갈린 경우(도봉산 1↔7호선, 파일럿 1호선 좌표가 1.1km 남쪽)는 통로를 만들지 않고
-//     개수만 보고한다(unpairedTransfers).
+//     거리 폴백은 PathwayFallbackMaxM 까지만 — 기준명+800m 로 묶인 부모역이 실제 환승역이라는 보장이 없다.
+//     상한에 걸린 쌍 수는 보고서에 남긴다.
+//   - 통로가 있는 역의 승강장은 OTP 가 도로에 직접 잇지 않고 출입구(location_type 2)만 잇는다. GTFS 검증기도 같은
+//     규칙이다(pathway_unreachable_location).
+//   - 출입구는 OSM railway=subway_entrance(otp/data/subway-entrances.csv)를 가장 가까운 승강장이 EntranceMatchM 안에
+//     있는 역에 붙인다. 출입구↔승강장 통로는 EntranceEntrySec/EntranceExitSec + 직선거리÷PathwayWalkMps 이고,
+//     승강장이 출입구에서 PathwayFallbackMaxM 안일 때만 만든다. OSM 출입구가 없는 역(bbox 밖 등)은 자식 2개 이상일
+//     때만 승강장 좌표에 출입구를 두고 진입 EntrySec·이탈 ExitSec 통로로 잇는다. 통로가 있는 역에서 출입구 통로를
+//     하나도 못 받은 승강장은 도로에 닿지 않으므로 그 수를 보고한다(NoEntrancePlatforms).
+//     EntrySec/ExitSec 는 backend/internal/route/station_slack.go 의 StationEntrySec/StationExitSec 와 같은 값이다.
+//   - transfers.txt 쌍인데 부모역이 갈린 경우는 통로를 만들지 않고 개수만 보고한다(unpairedTransfers).
 const (
 	PathwayWalkMps      = 1.0
 	PathwayStairSec     = 60

@@ -78,7 +78,7 @@ void main() {
   test('현재 위치에 건물 이름과 도로명 주소를 붙인다', () async {
     GeolocatorPlatform.instance = FakeGeolocator();
     final p = await currentPlace(NamingApi(name: '서울역', address: '서울 중구 세종대로 2'));
-    // 이름은 반드시 "현재 위치" 로 시작한다 — 서버는 첫 낱말이 "…역" 인 이름만 근처 역으로 앵커링한다(#12).
+    // 이름은 반드시 "현재 위치" 로 시작한다 — 서버는 첫 낱말이 "…역" 인 이름만 근처 역으로 앵커링한다.
     expect(p.name, '현재 위치 · 서울역');
     expect(p.address, '서울 중구 세종대로 2 · 정확도 약 12m');
     expect(p.lat, 37.5547);

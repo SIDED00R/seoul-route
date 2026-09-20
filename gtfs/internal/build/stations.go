@@ -22,7 +22,7 @@ const StationRadiusM = 800
 
 // stationGroups 는 지하철 stop 을 부모역(location_type=1)으로 묶는다. 규칙: 괄호 앞 기준명이 같고 서로
 // StationRadiusM 이내. 부모 좌표는 자식 평균. 반환: 부모 행(stop_id, stop_name, lat, lon), stop_id → 부모 id.
-// 역 단위로 묶어 두면 OTP 가 stopLocation 요청에서 여정에 맞는 stop 을 고른다(역사 좌표 스냅 우회 방지, 이슈 #12).
+// 역 단위로 묶어 두면 OTP 가 stopLocation 요청에서 여정에 맞는 stop 을 고른다(역사 좌표 스냅 우회 방지).
 func stationGroups(stops []ktdb.Row) (parents [][]string, parentOf map[string]string) {
 	type cluster struct {
 		ids      []string

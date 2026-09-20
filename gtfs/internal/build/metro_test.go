@@ -55,7 +55,7 @@ func TestMetroRows(t *testing.T) {
 		}
 		return strings.Join(s, "\n")
 	}
-	// 호선 색이 붙고 급행도 같은 색이다. 9호선은 배경이 밝아 글자색이 검정이다(이슈 #71).
+	// 호선 색이 붙고 급행도 같은 색이다. 9호선은 배경이 밝아 글자색이 검정이다.
 	if join(routes) != "M_7,A_SEOULMETRO,7호선,7호선,1,747F00,FFFFFF\n"+
 		"M_9_X,A_SEOULMETRO,9호선,9호선(급행),1,BDB092,000000\n"+
 		"M_2,A_SEOULMETRO,2호선,2호선,1,00A84D,FFFFFF" {

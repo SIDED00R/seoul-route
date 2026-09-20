@@ -93,7 +93,7 @@ func TestBuildBusOnly(t *testing.T) {
 	if rt[1][0] != "B_100100047" || rt[1][4] != "3" {
 		t.Errorf("routes=%v", rt[1])
 	}
-	// 간선(routeType 3)은 파랑·흰 글자. 헤더 이름은 서버 routestyle 이 키로 읽는다(이슈 #71).
+	// 간선(routeType 3)은 파랑·흰 글자. 헤더 이름은 서버 routestyle 이 키로 읽는다.
 	if rt[0][5] != "route_color" || rt[0][6] != "route_text_color" || rt[1][5] != "0068B7" || rt[1][6] != "FFFFFF" {
 		t.Errorf("노선색=%v (헤더 %v)", rt[1], rt[0])
 	}

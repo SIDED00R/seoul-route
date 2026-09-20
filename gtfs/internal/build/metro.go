@@ -6,19 +6,16 @@ import (
 	"github.com/SIDED00R/seoul-route/gtfs/internal/seoulmetro"
 )
 
-// 서울교통공사 열차운행시각표(seoulmetro)로 1~9호선 trip 을 만드는 규칙.
-//   - 국가교통DB 파일럿은 2025-03 평일 1일 표본이라 방향·시간대 구멍이 있다(2026-09-13 실측: 지하철 1,907 구간 중 310 구간이
-//     06~22시에 빈 시간대, 7호선 청담→강남구청 방향은 17:04 이전 열차 0). 시각표 파일(공공데이터포털 15098251, 요일별
-//     DAY/SAT/END, 열차코드 12,565편, 역 코드 458 중 457 이 파일럿 stop_id 뒷자리와 일치)로 1~9호선 trip 을 전부 대체한다.
-//   - 파일럿 trip 중 route_id 가 RR_ACC1_S-1-01-… ~ 09-… 인 것은 버린다(신분당선·경의중앙선 등 나머지 노선은 파일럿 그대로,
-//     service ALL). 역·부모역·transfers 는 파일럿 것을 계속 쓴다.
+// 서울교통공사 열차운행시각표(seoulmetro)로 1~9호선 trip 을 만드는 규칙. 수치 근거는 docs/gtfs-generator.md.
+//   - 시각표 파일(공공데이터포털 15098251, 요일별 DAY/SAT/END)로 1~9호선 trip 을 전부 대체한다.
+//   - 파일럿 trip 중 route_id 가 RR_ACC1_S-1-01-… ~ 09-… 인 것은 버린다(나머지 노선은 파일럿 그대로, service ALL).
+//     역·부모역·transfers 는 파일럿 것을 계속 쓴다.
 //   - route: 호선당 하나(M_<호선>), 급행은 M_<호선>_X. service: DAY→WEEKDAY(월~금), SAT→SAT, END→SUN(일). 공휴일은
 //     calendar_dates 없이 요일 그대로 본다(알려진 한계). direction_id: UP·IN 0, DOWN·OUT 1. headsign 은 도착역.
-//   - 시각표 역 코드가 파일럿 stops 에 없으면 "<역사명>(<호선>호선)" 이름으로 찾고(까치산 2호선: 시각표 0200 vs 파일럿 0260,
-//     실측 644 정차), 그래도 없으면 그 정차만 뺀다(SkippedStops). 남는 정차가 2개 미만이면 trip 을 뺀다.
+//   - 시각표 역 코드가 파일럿 stops 에 없으면 "<역사명>(<호선>호선)" 이름으로 찾고, 그래도 없으면 그 정차만 뺀다
+//     (SkippedStops). 남는 정차가 2개 미만이면 trip 을 뺀다.
 //   - 시각이 역행하는 열차(도착이 앞 정차 출발보다 이르거나 출발이 도착보다 이른 정차가 있는 열차)는 통째로 뺀다
-//     (NonMonotonic). 실측 4편(9호선 토·일 C9199·C9201): 앞 값으로 덮으면 17개 역이 같은 시각이 돼 순간이동 경로가
-//     생기고, 자정 이월로 복구할 수도 없는(두 시각 계열이 겹침) 원본 오류다.
+//     (NonMonotonic).
 const (
 	MetroAgencyID = "A_SEOULMETRO"
 	metroPilotPfx = "RR_ACC1_S-1-0" // 파일럿 1~9호선 route_id 접두("RR_ACC1_S-1-01-1D" …)

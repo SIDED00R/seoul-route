@@ -25,7 +25,7 @@ func transferItinerary(b int) otp.Itinerary {
 	return otp.Itinerary{Start: at(b - 300), End: at(b + 4320), Duration: 4620, Transfers: 2, Legs: legs}
 }
 
-// 첫 차가 시간표보다 이르면(접근 300초 → 120초 차는 놓치고 660초 차, 시간표 1710초 → delta −1050, 이슈 #52 재현값)
+// 첫 차가 시간표보다 이르면(접근 300초 → 120초 차는 놓치고 660초 차, 시간표 1710초 → delta −1050)
 // 첫 탑승과 그 뒤 환승 도보까지만 당기고, 둘째 탑승부터 도착은 시간표 그대로 둔다. RealtimeDelta 는 도착 이동량 0.
 func TestEarlierFirstBusKeepsLaterTransfers(t *testing.T) {
 	var calls int32

@@ -7,7 +7,7 @@ import (
 	"github.com/SIDED00R/seoul-route/backend/internal/otp"
 )
 
-// 역 안 환승 통로 도보(InStation)는 폴리라인이 지상 횡단보도에 걸려도 대기를 더하지 않고, 역 밖 도보는 그대로 더한다(이슈 #57).
+// 역 안 환승 통로 도보(InStation)는 폴리라인이 지상 횡단보도에 걸려도 대기를 더하지 않고, 역 밖 도보는 그대로 더한다.
 func TestInStationWalkGetsNoCrossingWait(t *testing.T) {
 	f := &fakeOTP{answer: func(r otp.Request) ([]otp.Itinerary, error) {
 		passage := walkLeg("passage", "2026-09-14T14:10:00+09:00", "2026-09-14T14:12:00+09:00", 37.48, 126.98)

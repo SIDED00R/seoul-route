@@ -255,7 +255,7 @@ func TestCrossingWaitSurvivesRealtime(t *testing.T) {
 	}
 }
 
-// 서로 다른 두 후보(버스 472·6516)가 둘 다 탑승을 놓쳐 재탐색됐는데 결과가 같은 2호선이면 점수가 좋은 하나만 남긴다(#47).
+// 서로 다른 두 후보(버스 472·6516)가 둘 다 탑승을 놓쳐 재탐색됐는데 결과가 같은 2호선이면 점수가 좋은 하나만 남긴다.
 func TestCrossingReplanDropsDuplicateAmongReplanned(t *testing.T) {
 	f := &fakeOTP{answer: func(r otp.Request) ([]otp.Itinerary, error) {
 		switch {

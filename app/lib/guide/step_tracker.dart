@@ -18,8 +18,7 @@ class StepTracker {
   //   onSegmentM 20 / offSegmentM 40 = 모퉁이를 못 잡고 지나쳤을 때, 뒤 단계 선분 위이고 현재 단계 선분에서
   //   벗어났으면 그 단계로 건너뛴다.
   //   maxAccuracyM 50 = 이보다 오차가 큰 표본으로는 단계를 넘기지 않는다(LegTracker·StopTracker 와 같은 값).
-  //   단계는 앞으로만 가므로 한 번 잘못 넘기면 그 구간 내내 어긋난다. 2026-09-17 실기기 외출 궤적의 도보 표본 1,000개 중
-  //   26개(2.6%)가 50m 초과였다.
+  //   단계는 앞으로만 가므로 한 번 잘못 넘기면 그 구간 내내 어긋난다.
   static const cornerM = 15.0;
   static const onSegmentM = 20.0;
   static const offSegmentM = 40.0;

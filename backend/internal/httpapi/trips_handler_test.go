@@ -149,7 +149,7 @@ func TestTripTracesAndSpeedLearning(t *testing.T) {
 	if stored != "vehicle" {
 		t.Fatalf("activity 저장 안 됨: %q", stored)
 	}
-	if rawStored != "IN_VEHICLE" || confStored != "HIGH" { // 원시 판정은 그대로 저장한다(이슈 #67)
+	if rawStored != "IN_VEHICLE" || confStored != "HIGH" { // 원시 판정은 그대로 저장한다
 		t.Fatalf("activity_raw/conf 저장 안 됨: %q %q", rawStored, confStored)
 	}
 	// 원시 판정은 목록 검사를 하지 않지만 길이 상한은 있다

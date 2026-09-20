@@ -7,7 +7,7 @@ import (
 )
 
 // 안내(내비게이션)용 leg 상세: 도보 steps(방향·거리·도로명·역 출입구), 대중교통 중간 정차(이름·좌표·leg 출발 기준 초),
-// 행선지(headsign). 쿼리가 이 필드들을 실제로 요청해야 값이 채워진다(이슈 #67).
+// 행선지(headsign). 쿼리가 이 필드들을 실제로 요청해야 값이 채워진다.
 func TestLegStepsStopsHeadsign(t *testing.T) {
 	for _, want := range []string{
 		"headsign",
@@ -80,7 +80,7 @@ func TestLegStepsStopsHeadsign(t *testing.T) {
 	if sub.Stops[1].OffsetSec != 240 || sub.Stops[1].Lat != 37.504 {
 		t.Errorf("stops[1]=%+v", sub.Stops[1])
 	}
-	if sub.NextStop != "역삼" { // 방면 판별은 첫 중간 정차 이름 그대로(이슈 #47)
+	if sub.NextStop != "역삼" { // 방면 판별은 첫 중간 정차 이름 그대로
 		t.Errorf("next_stop=%q, want 역삼", sub.NextStop)
 	}
 
