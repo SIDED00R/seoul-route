@@ -73,7 +73,7 @@ func TestTripTracesAndSpeedLearning(t *testing.T) {
 	// 프로파일 없음 → 사전값
 	rr, prof := do(t, h, http.MethodGet, "/users/me/speed", "", token)
 	walk := prof["walk"].(map[string]any)
-	if rr.Code != 200 || walk["speed_mps"] != route.DefaultWalk || walk["n_trips"] != float64(0) {
+	if rr.Code != 200 || walk["speed_mps"] != Priors["walk"] || walk["n_trips"] != float64(0) {
 		t.Fatalf("초기 프로파일 code=%d body=%v", rr.Code, prof)
 	}
 
@@ -176,11 +176,11 @@ func TestTripTracesAndSpeedLearning(t *testing.T) {
 	// 프로파일: 걷기 (5×1.2 + 1.6)/6 = 1.2667, 자전거는 사전값 그대로
 	pw := out["profile"].(map[string]any)["walk"].(map[string]any)
 	v1 := tw["speed_mps"].(float64) // 하버사인 반올림으로 1.6 에서 1e-4 안쪽으로 어긋난다 → 실측값으로 수축을 검산
-	if pw["n_trips"] != float64(1) || math.Abs(pw["speed_mps"].(float64)-speed.Shrink(route.DefaultWalk, v1, 1)) > 1e-9 {
+	if pw["n_trips"] != float64(1) || math.Abs(pw["speed_mps"].(float64)-speed.Shrink(Priors["walk"], v1, 1)) > 1e-9 {
 		t.Fatalf("profile walk=%v", pw)
 	}
 	pb := out["profile"].(map[string]any)["bicycle"].(map[string]any)
-	if pb["n_trips"] != float64(0) || pb["speed_mps"] != route.DefaultBike {
+	if pb["n_trips"] != float64(0) || pb["speed_mps"] != Priors["bicycle"] {
 		t.Fatalf("profile bicycle=%v", pb)
 	}
 	// 두 번 종료·종료 후 업로드는 409
@@ -226,7 +226,7 @@ func TestTripTracesAndSpeedLearning(t *testing.T) {
 	}
 	pw = out["profile"].(map[string]any)["walk"].(map[string]any)
 	v2 := out["trip"].(map[string]any)["walk"].(map[string]any)["speed_mps"].(float64)
-	want2 := speed.Shrink(route.DefaultWalk, v1+v2, 2)
+	want2 := speed.Shrink(Priors["walk"], v1+v2, 2)
 	if rr.Code != 200 || pw["n_trips"] != float64(2) || math.Abs(pw["speed_mps"].(float64)-want2) > 1e-9 {
 		t.Fatalf("2번째 trip 후 profile walk=%v", pw)
 	}

@@ -8,7 +8,7 @@
   "routingDefaults": {
     "walk": { "speed": 1.2 },
     "bicycle": {
-      "speed": 3.5,
+      "speed": 5.0,
       "rental": { "pickupTime": "PT1M", "dropOffTime": "PT1M", "useAvailabilityInformation": true }
     },
     "numItineraries": 10
