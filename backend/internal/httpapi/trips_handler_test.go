@@ -230,11 +230,13 @@ func TestTripTracesAndSpeedLearning(t *testing.T) {
 	if rr.Code != 200 || pw["n_trips"] != float64(2) || math.Abs(pw["speed_mps"].(float64)-want2) > 1e-9 {
 		t.Fatalf("2번째 trip 후 profile walk=%v", pw)
 	}
-	// /routes/plan 이 학습된 걷기 속도를 OTP 요청에 넣는다(Planner 는 요청 속도를 그대로 응답 walk_speed 로 돌려준다)
+	// /routes/plan 이 학습된 걷기 속도를 평지 최대속도로 바꿔 OTP 요청에 넣는다(Planner 는 요청 속도를 그대로
+	// 응답 walk_speed 로 돌려준다). 자전거는 표본이 없어 기본값이다.
 	s.Planner = &route.Planner{OTP: &deadlineOTP{}}
 	rr, out = do(t, h, http.MethodPost, "/routes/plan",
 		`{"origin":{"lat":37.5547,"lon":126.9707},"destination":{"lat":37.4979,"lon":127.0276}}`, token)
-	if rr.Code != 200 || math.Abs(out["walk_speed"].(float64)-want2) > 1e-9 || out["bike_speed"] != route.DefaultBike {
+	if rr.Code != 200 || math.Abs(out["walk_speed"].(float64)-route.WalkOTPSpeed(want2)) > 1e-9 ||
+		out["bike_speed"] != route.DefaultBike {
 		t.Fatalf("plan 속도 주입 code=%d walk=%v bike=%v", rr.Code, out["walk_speed"], out["bike_speed"])
 	}
 	// 30일 지난 궤적 삭제

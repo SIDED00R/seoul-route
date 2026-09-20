@@ -22,7 +22,9 @@ const (
 )
 
 // Priors: 수단별 학습 사전값(m/s). 표본에서 재는 이동 중 평균이라 OTP 에 넣는 route.DefaultWalk/DefaultBike
-// (평지 최대속도)와 의미가 다르다. cmd/api 의 오래 조용한 trip 마감도 같은 값을 써야 해서 내보낸다.
+// (평지 최대속도)와 의미가 다르다 — 걷기 기본값은 이 값을 route.WalkOTPSpeed 로 바꾼 것이다.
+// 자전거는 표본이 0건이라 사전값 3.5 와 기본값 5.0 이 아직 서로 다른 출처다(docs/speed-learning.md).
+// cmd/api 의 오래 조용한 trip 마감도 같은 값을 써야 해서 내보낸다.
 var Priors = map[string]float64{"walk": 1.2, "bicycle": 3.5}
 
 // handleStartTrip 은 안내 1회를 trip 으로 발급한다. 앱은 이 id 로만 궤적을 올린다.

@@ -4,9 +4,9 @@
 // 여기서 바꾸면 그 상수도 같이 바꾼다(deploy/otp/router-config.json 도 같다).
 {
   "routingDefaults": {
-    // 1.2 m/s: placeholder. OTP 기본 1.35 에서 낮춘 값이며 실측값이 아니다.
-    // Phase 3 속도 학습 데이터가 쌓이면 사용자별 값이 요청마다 덮어쓰고, 이 기본값은 전체 중앙값으로 재보정한다.
-    "walk": { "speed": 1.2 },
+    // 1.23 m/s: 학습 사전값(이동 중 평균 1.2)을 route.WalkOTPSpeed 로 바꾼 값. 이 speed 는 평지 최대속도라
+    // 평균을 그대로 넣으면 예상이 길어진다. speed_profiles 값이 있으면 백엔드가 요청마다 덮어쓴다.
+    "walk": { "speed": 1.23 },
     "bicycle": {
       // 5.0 m/s: OTP 기본값. 이 값은 평지 최대속도이고 학습값은 GPS 평균이라, 백엔드가 요청마다
       // route.BikeOTPSpeed 로 바꿔 덮어쓴다. 최적화 기준·끌기 비용도 백엔드가 요청에 담는다(internal/otp/client.go).

@@ -14,7 +14,7 @@ import (
 //   - MinPairSec 2 / MaxPairSec 30: 앱은 5초 간격으로 올린다. 30초 넘게 비면(앱 백그라운드·신호 끊김) 구간 속도가 아니다.
 //   - MaxSpeed walk 3.0 / bicycle 12.0 m/s: 뛰는 사람 상한·전기자전거 상한. 그 이상은 GPS 점프.
 //   - MinMoving walk 0.3 / bicycle 0.5 m/s: 그 미만은 정지(횡단보도 대기·신호). 정지는 Phase 4 횡단보도 대기가 맡으므로
-//     여기서 뺀다. 그래서 이 값은 OTP 의 speed(평지 이동 속도)와 같은 의미다.
+//     여기서 뺀다. 그래서 여기서 나오는 값은 이동 중 평균이고, OTP 의 speed(평지 최대속도)로는 route 가 바꿔 넣는다.
 //   - MinPairs 12: 5초 간격 1분치. 그보다 적으면 그 수단은 표본 부족으로 판정하지 않는다.
 const (
 	MaxAccuracyM = 30.0

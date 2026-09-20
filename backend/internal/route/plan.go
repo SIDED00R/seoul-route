@@ -17,19 +17,26 @@ import (
 
 // 상수 출처
 //   - 서울 bbox: otp/extract_seoul.py 와 동일(서울 행정경계 + 약 4km).
-//   - DefaultWalk 1.2 / DefaultBike 5.0 m/s: otp/router-config.json 과 같은 값. speed_profiles 값이 있으면 덮는다.
-//   - bikeEffective 0.89: OTP 가 내는 자전거 실효 속도 ÷ 요청한 bicycle speed. OTP 의 speed 는 평지 최대속도이고
-//     학습값은 GPS 평균이라 자전거는 BikeOTPSpeed 로 바꿔 넣는다(걷기 변환은 미적용). docs/bicycle-routing.md
+//   - DefaultWalk 1.23 m/s: 학습 사전값 1.2(httpapi.Priors)를 WalkOTPSpeed 로 바꾼 값.
+//   - DefaultBike 5.0 m/s: OTP 기본값. 사전값 3.5 를 바꾼 3.93 과 아직 다르다 — 자전거 표본이 0건이라 어느 쪽이
+//     따릉이 실제에 가까운지 못 정했고, 첫 주행 실측으로 한쪽에 맞춘다.
+//     둘 다 otp/router-config.json 과 같은 값이고, speed_profiles 값이 있으면 덮는다.
+//   - walkEffective 0.973 / bikeEffective 0.89: OTP 가 내는 실효 속도 ÷ 요청한 speed. OTP 의 speed 는 평지
+//     최대속도이고 학습값은 이동 중 GPS 평균이라 그대로 넣으면 예상이 길어진다. docs/speed-learning.md
 //   - BeamWidth 3: 구간 분할 시 구간마다 남기는 후보 수. 호출 수 = 1 + 3×(구간 수−1).
 //   - DefaultFirst 10: frequencies 기반 중복(출발시각만 다른 같은 경로)이 많아 넉넉히 받아 중복 제거한다.
 const (
 	MinLon, MinLat, MaxLon, MaxLat = 126.70, 37.38, 127.25, 37.75
-	DefaultWalk                    = 1.2
+	DefaultWalk                    = 1.23
 	DefaultBike                    = 5.0
+	walkEffective                  = 0.973
 	bikeEffective                  = 0.89
 	BeamWidth                      = 3
 	DefaultFirst                   = 10
 )
+
+// WalkOTPSpeed 는 학습된 걷기 평균 속도(m/s)를 OTP 가 받는 walk speed(평지 최대속도)로 바꾼다.
+func WalkOTPSpeed(avg float64) float64 { return avg / walkEffective }
 
 // BikeOTPSpeed 는 학습된 자전거 평균 속도(m/s)를 OTP 가 받는 bicycle speed(평지 최대속도)로 바꾼다.
 func BikeOTPSpeed(avg float64) float64 { return avg / bikeEffective }

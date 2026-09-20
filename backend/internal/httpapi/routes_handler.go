@@ -32,7 +32,7 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 			}
 			switch mode {
 			case "walk":
-				req.WalkSpeed = v
+				req.WalkSpeed = route.WalkOTPSpeed(v)
 			case "bicycle":
 				req.BikeSpeed = route.BikeOTPSpeed(v)
 			}
