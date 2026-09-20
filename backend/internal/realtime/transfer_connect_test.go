@@ -36,6 +36,23 @@ func subwayTransferItinerary() otp.Itinerary {
 	return otp.Itinerary{Start: at(540), End: at(2160), Duration: 1620, Transfers: 1, Legs: legs}
 }
 
+// 재탐색이 이어 붙인 자리(앞 도보 끝 1320 과 뒤 도보 시작 1380 사이가 끊긴다) 앞의 대기는 이미 뒤 구간 시각에
+// 들어 있으므로 다시 더하지 않는다. 지연 60초면 1430+60 = 1490 ≤ 1500 이라 그대로인데, 대기 114 를 다시 더하면
+// 1604 > 1500 이라 탈 수 있는 열차를 놓쳤다고 본다.
+func TestBoardWaitStopsAtReplanSplice(t *testing.T) {
+	in := subwayTransferItinerary()
+	in.Legs[2].CrossingWait = 114
+	in.Legs = append(in.Legs[:3], append([]otp.Leg{
+		{Mode: "WALK", Duration: 50, Start: at(1380), End: at(1430)},
+	}, in.Legs[3:]...)...)
+	in.Legs[4].NextDepartures = []string{at(1800)}
+	in.Replanned = true
+	got := line4Arrival(t, 660).Adjust(context.Background(), []otp.Itinerary{in})[0] // 지연 60초
+	if got.RealtimeDelta != 0 || got.Legs[4].Start != at(1500) {
+		t.Fatalf("이음매 앞 대기를 다시 더했다: delta=%v 둘째=%s", got.RealtimeDelta, got.Legs[4].Start)
+	}
+}
+
 // 첫 열차 +180초 = 환승 여유(180초) 경계 → 둘째 열차·도착은 시간표 그대로, 출발만 +180.
 func TestSubwayDelayWithinSlackKeepsConnection(t *testing.T) {
 	in := subwayTransferItinerary()

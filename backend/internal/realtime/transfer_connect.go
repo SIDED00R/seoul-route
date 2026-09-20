@@ -61,6 +61,9 @@ func connect(legs []otp.Leg, i int, cur time.Duration) (time.Duration, bool) {
 
 // boardWait 는 직전 leg 끝에서 탑승까지 더 걸리는 시간. 앞이 도보·자전거면 그 구간들의 신호 횡단보도 기대 대기
 // 합, 앞이 바로 대중교통이면 승강장 이동 TransferSlackSec. 두 항은 서로 대신하므로 함께 더하지 않는다.
+// 앞 leg 끝과 시각이 끊기는 자리에서 합산을 멈춘다 — 재탐색이 이어 붙인 자리이고, 그 앞 대기는 뒤 구간의 시각에
+// 이미 들어 있다. 2026-09-20 실측(대표 OD 20쌍 × 3시각): 시각이 끊긴 도보→도보 10쌍이 전부 재탐색 여정이었고,
+// 자전거 대여·반납으로 이어지는 78쌍은 간격이 모두 0 이라 이 판정에 걸리지 않는다.
 func boardWait(legs []otp.Leg, i int) time.Duration {
 	if legs[i-1].TransitLeg {
 		return TransferSlackSec * time.Second
@@ -68,8 +71,18 @@ func boardWait(legs []otp.Leg, i int) time.Duration {
 	var acc float64
 	for j := i - 1; j >= 0 && !legs[j].TransitLeg; j-- {
 		acc += legs[j].CrossingWait
+		if j > 0 && !legs[j-1].TransitLeg && !continues(legs[j-1].End, legs[j].Start) {
+			break
+		}
 	}
 	return time.Duration(acc * float64(time.Second))
+}
+
+// continues 는 앞 leg 끝과 뒤 leg 시작이 같은 시각인지. 시각을 못 읽으면 이어진 것으로 본다.
+func continues(prevEnd, start string) bool {
+	e, err1 := time.Parse(time.RFC3339, prevEnd)
+	s, err2 := time.Parse(time.RFC3339, start)
+	return err1 != nil || err2 != nil || !s.After(e)
 }
 
 // timetabled 는 시간표로 운행하는 지하철·철도 leg 인지. 생성 GTFS 의 철도 노선은 전부 route_type 1(SUBWAY)이다.
