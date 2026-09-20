@@ -191,16 +191,11 @@ func (c *Client) Plan(ctx context.Context, r Request) ([]Itinerary, error) {
 		}
 		vars["via"] = via
 	}
-	prefs := map[string]any{}
+	prefs := map[string]any{"bicycle": bicyclePrefs(r.BikeSpeed)}
 	if r.WalkSpeed > 0 {
 		prefs["walk"] = map[string]any{"speed": r.WalkSpeed}
 	}
-	if r.BikeSpeed > 0 {
-		prefs["bicycle"] = map[string]any{"speed": r.BikeSpeed}
-	}
-	if len(prefs) > 0 {
-		vars["preferences"] = map[string]any{"street": prefs}
-	}
+	vars["preferences"] = map[string]any{"street": prefs}
 	if r.Depart != nil {
 		vars["dateTime"] = map[string]any{"earliestDeparture": r.Depart.Format(time.RFC3339)}
 	}
@@ -220,6 +215,23 @@ func (c *Client) Plan(ctx context.Context, r Request) ([]Itinerary, error) {
 		its = append(its, e.Node.itinerary())
 	}
 	return its, nil
+}
+
+// BikeWalkReluctance 2.0: 자전거를 끌고 걷는 시간에 곱하는 비용. OTP 기본 5.0 에서는 끌어야 지나가는 구간
+// (bicycle=dismount 인 한강 다리 보도 등)을 피해 크게 돌아간다. docs/bicycle-routing.md
+const BikeWalkReluctance = 2.0
+
+// bicyclePrefs 는 자전거 선호. 최적화 기준은 소요시간(SHORTEST_DURATION)이다 — OTP 기본 SAFE_STREETS 는
+// 자전거길을 우대해 더 오래 걸리는 경로를 고른다. speed 는 평지 최대속도이며 0 이면 OTP 기본값을 쓴다.
+func bicyclePrefs(speed float64) map[string]any {
+	p := map[string]any{
+		"optimization": map[string]any{"type": "SHORTEST_DURATION"},
+		"walk":         map[string]any{"cost": map[string]any{"reluctance": BikeWalkReluctance}},
+	}
+	if speed > 0 {
+		p["speed"] = speed
+	}
+	return p
 }
 
 func loc(c Coord, stop string) map[string]any {

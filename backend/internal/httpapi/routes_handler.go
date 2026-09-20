@@ -34,7 +34,7 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 			case "walk":
 				req.WalkSpeed = v
 			case "bicycle":
-				req.BikeSpeed = v
+				req.BikeSpeed = route.BikeOTPSpeed(v)
 			}
 		}
 		rows.Close()

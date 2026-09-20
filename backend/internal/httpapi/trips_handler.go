@@ -21,9 +21,9 @@ const (
 	MaxClockSkew  = 5 * time.Minute
 )
 
-// Priors: 수단별 사전값. 프로파일이 없거나 표본이 없는 사용자는 이 값으로 경로를 받는다(route 와 같은 상수).
-// cmd/api 의 오래 조용한 trip 마감도 같은 값을 써야 해서 내보낸다.
-var Priors = map[string]float64{"walk": route.DefaultWalk, "bicycle": route.DefaultBike}
+// Priors: 수단별 학습 사전값(m/s). 표본에서 재는 이동 중 평균이라 OTP 에 넣는 route.DefaultWalk/DefaultBike
+// (평지 최대속도)와 의미가 다르다. cmd/api 의 오래 조용한 trip 마감도 같은 값을 써야 해서 내보낸다.
+var Priors = map[string]float64{"walk": 1.2, "bicycle": 3.5}
 
 // handleStartTrip 은 안내 1회를 trip 으로 발급한다. 앱은 이 id 로만 궤적을 올린다.
 func (s *Server) handleStartTrip(w http.ResponseWriter, r *http.Request) {
