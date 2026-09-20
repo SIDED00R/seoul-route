@@ -142,7 +142,7 @@ class _GuideScreenState extends State<GuideScreen> {
   Widget build(BuildContext context) {
     final s = _session;
     final tracker = s.tracker;
-    final legs = widget.itinerary.legs;
+    final legs = tracker.legs; // 경로 이탈 재탐색으로 갈아 낀 구간을 그린다
     final polylines = <Polyline>[];
     final all = <LatLng>[];
     for (var i = 0; i < legs.length; i++) {

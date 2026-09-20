@@ -94,7 +94,7 @@ class _SummaryState extends State<_Summary> {
               s.itinerary.legs.first.fromLat, s.itinerary.legs.first.fromLon)} → '
               '${legEndpointName(s.request, s.itinerary.legs.last.toName,
               s.itinerary.legs.last.toLat, s.itinerary.legs.last.toLon)}'),
-          subtitle: Text('구간 ${s.tracker.index + 1}/${s.itinerary.legs.length} · '
+          subtitle: Text('구간 ${s.tracker.index + 1}/${s.tracker.legs.length} · '
               '${hhmm(s.startedAt.toLocal())} 시작 · ${s.status}'),
         ),
         const SizedBox(height: 8),

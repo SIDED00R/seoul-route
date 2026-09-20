@@ -67,14 +67,17 @@ Instruction buildInstruction({
   required PlanRequest request,
   required Itinerary itinerary,
   required int legIndex,
+
+  /// 경로 이탈 재탐색으로 갈아 낀 구간 목록. 없으면 itinerary.legs.
+  List<Leg>? legs,
   int stepIndex = 0,
   double? stepRemainM,
   int remainingStops = 0,
   String? nextStopName,
 }) {
-  final legs = itinerary.legs;
-  final leg = legs[legIndex];
-  final next = _nextAction(request, itinerary, legIndex);
+  final ls = legs ?? itinerary.legs;
+  final leg = ls[legIndex];
+  final next = _nextAction(request, ls, legIndex);
   if (leg.transitLeg) {
     final to = legEndpointName(request, leg.toName, leg.toLat, leg.toLon);
     final unit = leg.mode == 'BUS' ? '정류장' : '역';
@@ -177,8 +180,7 @@ String withObjectParticle(String word) {
 }
 
 /// 이 구간 다음에 할 일. 환승·하차 후 출구·대여·반납·도착.
-String _nextAction(PlanRequest request, Itinerary itinerary, int legIndex) {
-  final legs = itinerary.legs;
+String _nextAction(PlanRequest request, List<Leg> legs, int legIndex) {
   if (legIndex + 1 >= legs.length) return '도착 · ${request.destination.name}';
   final next = legs[legIndex + 1];
   final to = legEndpointName(request, next.toName, next.toLat, next.toLon);
