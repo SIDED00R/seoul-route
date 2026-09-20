@@ -29,6 +29,13 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        // 안내 중 뒤로가기(lib/util/app_task.dart). 액티비티를 끝내면 안내가 통째로 사라지므로 뒤로 보내기만 한다.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, TASK_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "moveToBack" -> result.success(moveTaskToBack(true))
+                else -> result.notImplemented()
+            }
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when {
                 call.method != "request" -> result.notImplemented()
@@ -54,6 +61,7 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val CHANNEL = "seoul_route/notification_permission"
         private const val STATUS_CHANNEL = "seoul_route/guide_status"
+        private const val TASK_CHANNEL = "seoul_route/app_task"
         private const val REQUEST_CODE = 7301
     }
 }

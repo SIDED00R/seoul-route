@@ -35,4 +35,29 @@ class PlanRequest {
         if (segmentModes.any((m) => m != SegmentMode.any))
           'segment_modes': segmentModes.map((m) => m.value).toList(),
       };
+
+  /// toJson 을 되돌린다(디스크에 남긴 안내를 되살릴 때). _pt 가 이름·좌표만 싣기 때문에 주소는 빈 값이 된다 —
+  /// 안내 문구는 이름만 쓴다. segment_modes 가 없으면 전 구간 any 로 본다(toJson 이 그때 생략한다).
+  factory PlanRequest.fromJson(Map<String, dynamic> j) {
+    final via = ((j['via'] as List<dynamic>?) ?? const []).map(_place).toList();
+    final modes = (j['segment_modes'] as List<dynamic>?)
+        ?.map((v) => SegmentMode.values.firstWhere((m) => m.value == v, orElse: () => SegmentMode.any))
+        .toList();
+    return PlanRequest(
+      origin: _place(j['origin']),
+      destination: _place(j['destination']),
+      via: via,
+      segmentModes: modes ?? List.filled(via.length + 1, SegmentMode.any),
+    );
+  }
+
+  static Place _place(dynamic v) {
+    final m = v as Map<String, dynamic>;
+    return Place(
+      name: (m['name'] as String?) ?? '',
+      address: '',
+      lat: (m['lat'] as num).toDouble(),
+      lon: (m['lon'] as num).toDouble(),
+    );
+  }
 }

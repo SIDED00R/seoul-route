@@ -11,14 +11,23 @@ class LegTracker {
   /// legs 는 복사해 갖는다 — 경로 이탈 재탐색이 호출자의 Itinerary 를 바꾸지 않게.
   LegTracker(List<Leg> legs, {DateTime? now})
       : legs = List.of(legs),
-        points = [
-          for (final l in legs)
-            l.polyline.isEmpty
-                ? [LatLng(l.fromLat, l.fromLon), LatLng(l.toLat, l.toLon)]
-                : decodePolyline(l.polyline)
-        ] {
+        points = _decode(legs) {
     _enter(now ?? DateTime.now());
   }
+
+  /// 디스크에 남겨 둔 안내를 이어받는다(앱이 죽었다 다시 켜진 경우). 구간과 밀린 시간은 저장된 값을 그대로 쓴다 —
+  /// _enter 로 다시 재면 이미 지나온 구간의 계획 출발과 지금 시각 차이만큼 잘못 밀린다.
+  LegTracker.resume(List<Leg> legs, {required int index, required this.shift})
+      : legs = List.of(legs),
+        points = _decode(legs),
+        index = index < 0 ? 0 : (index >= legs.length ? legs.length - 1 : index);
+
+  static List<List<LatLng>> _decode(List<Leg> legs) => [
+        for (final l in legs)
+          l.polyline.isEmpty
+              ? [LatLng(l.fromLat, l.fromLon), LatLng(l.toLat, l.toLon)]
+              : decodePolyline(l.polyline)
+      ];
 
   final List<Leg> legs;
 
@@ -167,10 +176,7 @@ class LegTracker {
     if (fresh.isEmpty) return;
     final plannedEnd = DateTime.tryParse(current.end);
     legs.replaceRange(index, index + 1, fresh);
-    points.replaceRange(index, index + 1, [
-      for (final l in fresh)
-        l.polyline.isEmpty ? [LatLng(l.fromLat, l.fromLon), LatLng(l.toLat, l.toLon)] : decodePolyline(l.polyline)
-    ]);
+    points.replaceRange(index, index + 1, _decode(fresh));
     _hits = 0;
     _hitLeg = -1;
     _lastGoodFix = now;

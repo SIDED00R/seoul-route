@@ -13,8 +13,10 @@ import '../models/trace_sample.dart';
 import '../settings/settings_store.dart';
 import '../util/hhmm.dart';
 import 'activity_classifier.dart';
+import 'arrival_detector.dart';
 import 'background_location.dart';
 import 'geo.dart' as geo;
+import 'guide_store.dart';
 import 'instruction.dart';
 import 'leg_tracker.dart';
 import 'off_route.dart';
@@ -34,10 +36,32 @@ class GuideSession extends ChangeNotifier {
     required this.request,
     required this.itinerary,
     this.speak,
+    this.store = const GuideStore(),
     DateTime Function()? clock,
   })  : _clock = clock,
+        _resumedTripId = null,
         startedAt = (clock ?? DateTime.now)() {
     tracker = LegTracker(itinerary.legs, now: now());
+    _initTrackers();
+  }
+
+  /// 디스크에 남겨 둔 안내를 이어받는다(앱이 죽었다 다시 켜진 경우). start() 는 trip 을 새로 내지 않고
+  /// 저장된 trip 에 이어 올린다.
+  GuideSession.resume(
+    GuideSnapshot snap, {
+    required this.api,
+    this.speak,
+    this.store = const GuideStore(),
+  })  : request = snap.request,
+        itinerary = snap.itinerary,
+        _clock = null,
+        _resumedTripId = snap.tripId,
+        startedAt = snap.startedAt {
+    tracker = LegTracker.resume(snap.legs, index: snap.legIndex, shift: snap.shift);
+    _initTrackers();
+  }
+
+  void _initTrackers() {
     _steps = _stepTrackerFor(tracker.current);
     _stops = StopTracker(tracker.current, tracker.currentPoints, shift: tracker.shift);
     _remainingStops = tracker.current.transitLeg ? tracker.current.stops.length + 1 : 0;
@@ -60,7 +84,13 @@ class GuideSession extends ChangeNotifier {
 
   /// 음성 안내 발화. 기본은 폰 내장 음성(TtsSpeaker)이고 테스트에서 바꿔 끼운다.
   final Speak? speak;
+
+  /// 진행 중인 안내를 디스크에 남기는 곳. 앱이 죽어도 다시 켤 때 이어받는다.
+  final GuideStore store;
   final DateTime Function()? _clock;
+
+  /// 이어받은 안내의 서버 trip. null 이면 start() 가 새로 발급한다.
+  final String? _resumedTripId;
 
   /// 안내를 시작한 시각. "현재 경로" 탭이 언제 시작했는지 보여 준다.
   final DateTime startedAt;
@@ -75,6 +105,7 @@ class GuideSession extends ChangeNotifier {
   final GuideStatusNotification _statusNotification = GuideStatusNotification();
   final ActivityClassifier _activity = ActivityClassifier();
   final OffRouteDetector _offRoute = OffRouteDetector();
+  final ArrivalDetector _arrival = ArrivalDetector();
   final VoiceGuide _voice = VoiceGuide(enabled: false);
   late final DateTime? _eta = DateTime.tryParse(itinerary.end);
   Timer? _ticker;
@@ -147,13 +178,15 @@ class GuideSession extends ChangeNotifier {
     _positions = Geolocator.getPositionStream(locationSettings: guideLocationSettings(sampleInterval))
         .listen(_onPosition, onError: (e) => _set(() => _status = '위치 오류: $e'));
     try {
-      final tripId = await api.startTrip();
+      final tripId = _resumedTripId ?? await api.startTrip();
       if (_closed) {
-        // trip 발급을 기다리는 동안 안내를 놓았다면 서버에 열린 기록을 남기지 않는다.
-        try {
-          await api.endTrip(tripId);
-        } catch (_) {
-          // 이미 놓은 안내라 정리는 최선 노력으로 끝낸다.
+        // trip 발급을 기다리는 동안 안내를 놓았다면 서버에 열린 기록을 남기지 않는다(이어받은 trip 은 그대로 둔다).
+        if (_resumedTripId == null) {
+          try {
+            await api.endTrip(tripId);
+          } catch (_) {
+            // 이미 놓은 안내라 정리는 최선 노력으로 끝낸다.
+          }
         }
         return;
       }
@@ -164,6 +197,7 @@ class GuideSession extends ChangeNotifier {
       _set(() => _status = 'trip 발급 실패: $e');
       return;
     }
+    _persist();
     _set(() => _status = '안내 중');
     _ticker = Timer.periodic(tickInterval, (_) => _onTick());
     await _startVoice();
@@ -239,6 +273,22 @@ class GuideSession extends ChangeNotifier {
     _instr = _buildInstruction(here: here);
     _announce();
     _notify();
+    _checkArrived(p);
+  }
+
+  /// 마지막 구간에서 목적지에 닿았으면 사용자가 누르지 않아도 끝낸다.
+  void _checkArrived(Position p) {
+    if (!tracker.isLast || _ending || _ended) return;
+    final leg = tracker.current;
+    if (!_arrival.update(geo.distanceM(p.latitude, p.longitude, leg.toLat, leg.toLon), p.accuracy)) return;
+    unawaited(_autoEnd());
+  }
+
+  /// 도착을 알리고 안내를 끝낸다. 실패하면 상태줄에 사유가 남고 사용자가 종료를 누른다 — ArrivalDetector 가
+  /// 한 번만 참을 주므로 표본마다 다시 시도하지 않는다.
+  Future<void> _autoEnd() async {
+    await _voice.say('목적지에 도착했습니다', cueKey: 'arrived');
+    if (await end() != null) _set(() => _status = '목적지에 도착해 안내를 끝냈습니다');
   }
 
   /// 위치가 끊긴 동안에도 시간표로 구간·남은 정거장을 따라간다(지하).
@@ -313,11 +363,34 @@ class GuideSession extends ChangeNotifier {
   /// 구간이 바뀌었을 때(자동·버튼 공통) 단계·정차 추적을 새 구간으로 갈아 끼우고 문구를 다시 만든다.
   void _enterLeg() {
     final leg = tracker.current;
+    _arrival.reset(); // 마지막 구간을 벗어났거나 갈아 끼웠으면 도착 셈을 다시 시작한다
     _steps = _stepTrackerFor(leg);
     _stops = StopTracker(leg, tracker.currentPoints, shift: tracker.shift);
     _remainingStops = leg.transitLeg ? leg.stops.length + 1 : 0;
     _instr = _buildInstruction();
     _announce();
+    _persist(); // 구간·밀린 시간이 바뀔 때만 남기면 된다(나머지는 안내 내내 그대로다)
+  }
+
+  /// 진행 중인 안내를 디스크에 남긴다. trip 발급 전이거나 끝나는 중이면 남길 것이 없다.
+  void _persist() {
+    final up = _uploader;
+    if (up == null || _ending || _ended || _closed) return;
+    unawaited(store.save(GuideSnapshot(
+      tripId: up.tripId,
+      request: request,
+      itinerary: itinerary,
+      legs: tracker.legs,
+      legIndex: tracker.index,
+      shift: tracker.shift,
+      startedAt: startedAt,
+    )));
+  }
+
+  /// 안내가 끝났다. 끝난 안내는 되살리지 않는다.
+  void _finished() {
+    _set(() => _ended = true);
+    unawaited(store.clear());
   }
 
   /// 사용자가 손으로 앞뒤 구간을 맞춘다.
@@ -380,8 +453,11 @@ class GuideSession extends ChangeNotifier {
     });
     await _positions?.cancel();
     _positions = null;
+    // 화면이 닫힌 채 스스로 끝나면(목적지 도착) 아무도 dispose 를 부르지 않는다 — 여기서 같이 끊는다.
+    await _activities?.cancel();
+    _activities = null;
     if (up == null) {
-      _set(() => _ended = true);
+      _finished();
       return const {};
     }
     await up.flush();
@@ -394,15 +470,13 @@ class GuideSession extends ChangeNotifier {
     }
     try {
       final res = await api.endTrip(up.tripId);
-      _set(() => _ended = true);
+      _finished();
       return res;
     } on ApiException catch (e) {
       // 409 = 서버가 이미 이 trip 을 닫고 학습까지 반영한 상태(앞선 종료 요청의 응답만 잃은 경우). 완료로 본다.
       if (e.status == 409) {
-        _set(() {
-          _ended = true;
-          _status = '이미 종료된 안내입니다.';
-        });
+        _set(() => _status = '이미 종료된 안내입니다.');
+        _finished();
         return const {};
       }
       _endFailed(e);
@@ -432,6 +506,9 @@ class GuideSession extends ChangeNotifier {
   @override
   void dispose() {
     _closed = true;
+    // 놓은 안내는 되살리지 않는다. 새 안내로 갈아타는 경우 ActiveGuide.set 이 이 dispose 를 먼저 부르고
+    // 새 세션은 start() 뒤에 남기므로, 여기서 지워도 새 것을 지우지 않는다.
+    unawaited(store.clear());
     _positions?.cancel();
     _activities?.cancel();
     _uploader?.dispose();

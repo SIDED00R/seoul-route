@@ -33,6 +33,7 @@ class Leg {
     this.headsign = '',
     this.steps = const [],
     this.stops = const [],
+    this.raw = const {},
   });
 
   final String mode; // WALK / BICYCLE / BUS / SUBWAY ...
@@ -65,7 +66,12 @@ class Leg {
   final List<WalkStep> steps; // 도보·자전거 안내 단계
   final List<TransitStop> stops; // 중간 정차(탑승·하차 제외)
 
+  /// 이 leg 를 만든 서버 응답 그대로. 진행 중인 안내를 디스크에 남겼다가 되살릴 때 쓴다(guide/guide_store.dart).
+  /// 필드를 하나씩 다시 쓰지 않으므로 fromJson 과 어긋날 수 없다. 코드로 만든 leg(테스트)는 비어 있다.
+  final Map<String, dynamic> raw;
+
   factory Leg.fromJson(Map<String, dynamic> j) => Leg(
+        raw: j,
         mode: j['mode'] as String,
         durationSec: (j['duration_sec'] as num).toDouble(),
         distanceM: (j['distance_m'] as num).toDouble(),
@@ -165,6 +171,7 @@ class Itinerary {
     this.departInSec = 0,
     this.crossingWaitSec = 0,
     this.replanned = false,
+    this.raw = const {},
   });
 
   final String start;
@@ -179,7 +186,11 @@ class Itinerary {
   final double crossingWaitSec; // 도보·따릉이 구간 신호 횡단보도 기대 대기 합(초, durationSec 에 포함)
   final bool replanned; // 횡단보도 대기로 탑승을 놓쳐 그 지점부터 다시 탐색한 여정
 
+  /// 이 여정을 만든 서버 응답 그대로(Leg.raw 와 같은 쓰임).
+  final Map<String, dynamic> raw;
+
   factory Itinerary.fromJson(Map<String, dynamic> j) => Itinerary(
+        raw: j,
         start: (j['start'] as String?) ?? '',
         end: (j['end'] as String?) ?? '',
         durationSec: (j['duration_sec'] as num).toDouble(),
