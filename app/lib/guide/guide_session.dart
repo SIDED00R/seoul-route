@@ -7,14 +7,17 @@ import 'package:latlong2/latlong.dart';
 
 import '../api/client.dart';
 import '../models/itinerary.dart';
+import '../models/place.dart';
 import '../models/plan_request.dart';
 import '../models/trace_sample.dart';
 import '../settings/settings_store.dart';
 import '../util/hhmm.dart';
 import 'activity_classifier.dart';
 import 'background_location.dart';
+import 'geo.dart' as geo;
 import 'instruction.dart';
 import 'leg_tracker.dart';
+import 'off_route.dart';
 import 'status_notification.dart';
 import 'step_tracker.dart';
 import 'stop_tracker.dart';
@@ -48,6 +51,9 @@ class GuideSession extends ChangeNotifier {
   /// 위치가 아예 끊기는 지하에서도 시간표로 구간을 넘기려고 이 간격으로 한 번씩 본다.
   static const tickInterval = Duration(seconds: 10);
 
+  /// 경로 이탈 재탐색을 이 간격보다 자주 하지 않는다. 다시 찾은 경로에서도 벗어나면 서버 호출이 이어진다.
+  static const rerouteMinGap = Duration(minutes: 1);
+
   final ApiClient api;
   final PlanRequest request;
   final Itinerary itinerary;
@@ -68,6 +74,7 @@ class GuideSession extends ChangeNotifier {
   late int _remainingStops;
   final GuideStatusNotification _statusNotification = GuideStatusNotification();
   final ActivityClassifier _activity = ActivityClassifier();
+  final OffRouteDetector _offRoute = OffRouteDetector();
   final VoiceGuide _voice = VoiceGuide(enabled: false);
   late final DateTime? _eta = DateTime.tryParse(itinerary.end);
   Timer? _ticker;
@@ -82,6 +89,8 @@ class GuideSession extends ChangeNotifier {
   int _samples = 0;
   String _status = '준비 중…';
   bool _ending = false;
+  bool _rerouting = false;
+  DateTime? _lastReroute;
   bool _ended = false;
   bool _closed = false;
 
@@ -207,9 +216,11 @@ class GuideSession extends ChangeNotifier {
     _activity.settle(at);
     final here = LatLng(p.latitude, p.longitude);
     if (tracker.update(p.latitude, p.longitude, accuracyM: p.accuracy, now: at)) {
+      _offRoute.reset();
       _enterLeg();
     } else {
       _steps.update(p.latitude, p.longitude, accuracyM: p.accuracy);
+      _checkOffRoute(p, at);
     }
     _remainingStops = tracker.current.transitLeg ? _stops.remaining(p.latitude, p.longitude, p.accuracy, at) : 0;
     _uploader?.add(TraceSample(
@@ -243,6 +254,63 @@ class GuideSession extends ChangeNotifier {
     _notify();
   }
 
+  /// 도보 구간에서 경로를 벗어났으면 그 구간을 현재 위치에서 다시 찾는다. 대중교통은 정해진 노선을 따라가므로
+  /// 보지 않는다. 자전거도 지금은 보지 않는다 — 서버에 "타고 있던 자전거로 계속" 을 요청할 수단이 없고
+  /// `SegmentMode.bike` 는 대여 경로(도보+자전거+도보)로 나간다.
+  void _checkOffRoute(Position p, DateTime at) {
+    if (_rerouting || _ending || tracker.current.mode != 'WALK') return;
+    final away = geo.projectOnPolyline(p.latitude, p.longitude, tracker.currentPoints).distM;
+    if (!_offRoute.update(away, p.accuracy)) return;
+    final last = _lastReroute;
+    if (last != null && at.difference(last) < rerouteMinGap) {
+      _offRoute.reset(); // 제한에 걸려 버린 신호라 다음 표본부터 다시 센다
+      return;
+    }
+    _lastReroute = at;
+    _replanLeg(LatLng(p.latitude, p.longitude));
+  }
+
+  /// 현재 위치에서 이 구간의 도착지까지 도보로 다시 찾아 구간을 갈아 끼운다. 뒤 구간은 그대로 둔다 —
+  /// 다시 찾은 결과로 뒤 탑승을 놓치는 경우는 보지 않는다.
+  Future<void> _replanLeg(LatLng from) async {
+    final leg = tracker.current;
+    _set(() {
+      _rerouting = true;
+      _status = '경로를 벗어나 다시 찾는 중…';
+    });
+    try {
+      final res = await api.plan(PlanRequest(
+        origin: Place(name: '현재 위치', address: '', lat: from.latitude, lon: from.longitude),
+        destination: Place(name: leg.toName, address: '', lat: leg.toLat, lon: leg.toLon),
+        segmentModes: const [SegmentMode.walk],
+      ));
+      if (_closed || _ending) return;
+      // 기다리는 동안 구간이 넘어갔으면(자동 인계·버튼) 이 결과는 남의 구간 것이다. 이탈 셈은 구간이 바뀔 때
+      // 이미 지워졌다.
+      if (!identical(leg, tracker.current)) {
+        _set(() => _status = '안내 중');
+        return;
+      }
+      final fresh = res.itineraries.isEmpty ? const <Leg>[] : res.itineraries.first.legs;
+      if (fresh.isEmpty) {
+        _offRoute.reset();
+        _set(() => _status = '다시 찾은 경로가 없습니다 — 원래 경로로 안내합니다');
+        return;
+      }
+      tracker.replaceCurrent(fresh, now());
+      _offRoute.reset();
+      _voice.forget('L${tracker.index}:');
+      await _voice.say('경로를 벗어나 다시 찾았습니다', cueKey: 'reroute:${now().millisecondsSinceEpoch}');
+      _enterLeg();
+      _set(() => _status = '경로를 다시 찾았습니다');
+    } catch (e) {
+      _offRoute.reset();
+      _set(() => _status = '재탐색 실패: $e. 원래 경로로 안내합니다');
+    } finally {
+      _set(() => _rerouting = false);
+    }
+  }
+
   /// 구간이 바뀌었을 때(자동·버튼 공통) 단계·정차 추적을 새 구간으로 갈아 끼우고 문구를 다시 만든다.
   void _enterLeg() {
     final leg = tracker.current;
@@ -257,6 +325,7 @@ class GuideSession extends ChangeNotifier {
   void prevLeg() {
     if (tracker.index == 0 || _ending) return;
     tracker.prev(now: now());
+    _offRoute.reset();
     _voice.forget('L${tracker.index}:');
     _enterLeg();
     _notify();
@@ -265,6 +334,7 @@ class GuideSession extends ChangeNotifier {
   void nextLeg() {
     if (tracker.isLast || _ending) return;
     tracker.next(now: now());
+    _offRoute.reset();
     _voice.forget('L${tracker.index}:');
     _enterLeg();
     _notify();
@@ -287,6 +357,7 @@ class GuideSession extends ChangeNotifier {
       request: request,
       itinerary: itinerary,
       legIndex: tracker.index,
+      legs: tracker.legs,
       stepIndex: _steps.index,
       stepRemainM: at == null || _steps.isEmpty ? null : _steps.remainM(at.latitude, at.longitude),
       remainingStops: _remainingStops,

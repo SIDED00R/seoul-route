@@ -8,8 +8,10 @@ import 'geo.dart' as geo;
 /// 시작하면 그 구간으로 넘기고, 위치를 믿을 수 없는 지하에서는 시간표로 넘긴다. 사용자가 손으로 앞뒤로 옮길 수도 있다.
 /// 화면은 이 객체에서 현재 구간(index·mode·경로선)과 밀린 시간(shift)을 읽고, mode 를 업로드 샘플에 싣는다.
 class LegTracker {
-  LegTracker(this.legs, {DateTime? now})
-      : points = [
+  /// legs 는 복사해 갖는다 — 경로 이탈 재탐색이 호출자의 Itinerary 를 바꾸지 않게.
+  LegTracker(List<Leg> legs, {DateTime? now})
+      : legs = List.of(legs),
+        points = [
           for (final l in legs)
             l.polyline.isEmpty
                 ? [LatLng(l.fromLat, l.fromLon), LatLng(l.toLat, l.toLon)]
@@ -159,4 +161,25 @@ class LegTracker {
     if (index > 0) _goto(index - 1, now ?? DateTime.now(), manual: true);
   }
 
+  /// 현재 구간을 다시 찾은 구간들로 갈아 끼운다(경로 이탈 재탐색). index 는 첫 새 구간을 가리킨 채로 둔다.
+  /// 밀린 시간은 "새 구간들이 끝나는 시각 − 갈아 끼운 구간의 계획 종료" 로 다시 잡되 줄이지는 않는다.
+  void replaceCurrent(List<Leg> fresh, DateTime now) {
+    if (fresh.isEmpty) return;
+    final plannedEnd = DateTime.tryParse(current.end);
+    legs.replaceRange(index, index + 1, fresh);
+    points.replaceRange(index, index + 1, [
+      for (final l in fresh)
+        l.polyline.isEmpty ? [LatLng(l.fromLat, l.fromLon), LatLng(l.toLat, l.toLon)] : decodePolyline(l.polyline)
+    ]);
+    _hits = 0;
+    _hitLeg = -1;
+    _lastGoodFix = now;
+    if (plannedEnd == null) return;
+    var sec = 0.0;
+    for (final l in fresh) {
+      sec += l.durationSec;
+    }
+    final late = now.add(Duration(seconds: sec.round())).difference(plannedEnd);
+    if (late > shift) shift = late;
+  }
 }
