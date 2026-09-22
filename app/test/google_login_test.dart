@@ -6,6 +6,8 @@ import 'package:seoul_route/auth/google_login.dart';
 import 'package:seoul_route/screens/settings_screen.dart';
 import 'package:seoul_route/settings/settings_store.dart';
 
+import 'scroll_to.dart';
+
 class MemoryTokenStorage implements TokenStorage {
   String? token;
 
@@ -64,6 +66,7 @@ void main() {
     final store = SettingsStore(tokenStorage: MemoryTokenStorage());
     await openAndLogin(tester, (_) async => null, <Future<Settings?>>[], store);
     expect(find.byType(SettingsScreen), findsOneWidget);
+    await scrollTo(tester, find.text('로그인 취소')); // 상태 문구는 목록 맨 아래(화면 밖)
     expect(find.text('로그인 취소'), findsOneWidget);
     expect((await store.load()).token, '');
   });

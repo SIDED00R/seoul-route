@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../auth/google_login.dart';
 import '../models/itinerary.dart';
+import '../models/favorite_place.dart';
 import '../models/place.dart';
 import '../models/plan_request.dart';
 import '../models/recent_route.dart';
@@ -22,15 +23,16 @@ class ApiException implements Exception {
 class ApiClient {
   ApiClient({required this.baseUrl, required this.token});
 
-  final String baseUrl; // 예: http://10.0.2.2:8081 (에뮬레이터) / http://192.168.x.x:8081 (실기기)
+  final String
+  baseUrl; // 예: http://10.0.2.2:8081 (에뮬레이터) / http://192.168.x.x:8081 (실기기)
   final String token; // JWT
 
   static const planTimeout = Duration(seconds: 70); // 서버 상한 60초보다 길게
 
   Map<String, String> get _headers => {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      };
+    'Authorization': 'Bearer $token',
+    'Content-Type': 'application/json',
+  };
 
   /// 타일 URL 템플릿과 헤더. flutter_map 의 NetworkTileProvider 에 그대로 넘긴다.
   String get tileUrlTemplate => '$baseUrl/tiles/{z}/{x}/{y}.png';
@@ -54,11 +56,17 @@ class ApiClient {
   /// Google ID 토큰 → 서버 JWT(무인증).
   Future<LoginResult> loginGoogle(String idToken) async {
     final r = await http
-        .post(Uri.parse('$baseUrl/auth/google'),
-            headers: {'Content-Type': 'application/json'}, body: jsonEncode({'id_token': idToken}))
+        .post(
+          Uri.parse('$baseUrl/auth/google'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'id_token': idToken}),
+        )
         .timeout(const Duration(seconds: 15));
     final j = _decode(r);
-    return LoginResult(token: j['token'] as String, userId: j['user_id'] as String);
+    return LoginResult(
+      token: j['token'] as String,
+      userId: j['user_id'] as String,
+    );
   }
 
   Future<Map<String, dynamic>> me() async {
@@ -69,21 +77,86 @@ class ApiClient {
   }
 
   /// 좌표를 건물·주소 이름으로 바꾼다(GET /places/reverse). 이름을 못 찾으면 빈 문자열이 온다.
-  Future<({String name, String address})> reversePlace(double lat, double lon) async {
+  Future<({String name, String address})> reversePlace(
+    double lat,
+    double lon,
+  ) async {
     final uri = Uri.parse('$baseUrl/places/reverse')
         .replace(queryParameters: {'lat': '$lat', 'lon': '$lon'});
-    final r = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
+    final r = await http
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 10));
     final j = _decode(r);
-    return (name: (j['name'] as String?) ?? '', address: (j['address'] as String?) ?? '');
+    return (
+      name: (j['name'] as String?) ?? '',
+      address: (j['address'] as String?) ?? '',
+    );
   }
 
   Future<List<Place>> searchPlaces(String q) async {
-    final uri = Uri.parse('$baseUrl/places/search').replace(queryParameters: {'q': q});
-    final r = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 15));
+    final uri = Uri.parse('$baseUrl/places/search')
+        .replace(queryParameters: {'q': q});
+    final r = await http
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 15));
     final j = _decode(r);
     return ((j['places'] as List<dynamic>?) ?? const [])
         .map((e) => Place.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<GuideLandmark?> landmark(double lat, double lon) async {
+    final uri = Uri.parse('$baseUrl/places/landmark')
+        .replace(queryParameters: {'lat': '$lat', 'lon': '$lon'});
+    final j = _decode(
+      await http
+          .get(uri, headers: _headers)
+          .timeout(const Duration(seconds: 10)),
+    );
+    final value = j['landmark'];
+    return value == null
+        ? null
+        : GuideLandmark.fromJson(value as Map<String, dynamic>);
+  }
+
+  Future<List<FavoritePlace>> favoritePlaces() async {
+    final j = _decode(
+      await http
+          .get(Uri.parse('$baseUrl/users/me/favorites'), headers: _headers)
+          .timeout(const Duration(seconds: 10)),
+    );
+    return ((j['favorites'] as List<dynamic>?) ?? const [])
+        .map((e) => FavoritePlace.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<FavoritePlace> createFavoritePlace(FavoritePlace favorite) async {
+    final r = await http
+        .post(
+          Uri.parse('$baseUrl/users/me/favorites'),
+          headers: _headers,
+          body: jsonEncode(favorite.toInputJson()),
+        )
+        .timeout(const Duration(seconds: 10));
+    return FavoritePlace.fromJson(_decode(r));
+  }
+
+  Future<FavoritePlace> updateFavoritePlace(FavoritePlace favorite) async {
+    final r = await http
+        .put(
+          Uri.parse('$baseUrl/users/me/favorites/${favorite.id}'),
+          headers: _headers,
+          body: jsonEncode(favorite.toInputJson()),
+        )
+        .timeout(const Duration(seconds: 10));
+    return FavoritePlace.fromJson(_decode(r));
+  }
+
+  Future<void> deleteFavoritePlace(String id) async {
+    final r = await http
+        .delete(Uri.parse('$baseUrl/users/me/favorites/$id'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    _decode(r);
   }
 
   /// 안내 1회 = trip. 서버가 발급한 id 로만 샘플을 올릴 수 있다.
@@ -96,8 +169,13 @@ class ApiClient {
 
   Future<void> uploadTraces(String tripId, List<TraceSample> samples) async {
     final r = await http
-        .post(Uri.parse('$baseUrl/trips/$tripId/traces'),
-            headers: _headers, body: jsonEncode({'samples': samples.map((s) => s.toJson()).toList()}))
+        .post(
+          Uri.parse('$baseUrl/trips/$tripId/traces'),
+          headers: _headers,
+          body: jsonEncode({
+            'samples': samples.map((s) => s.toJson()).toList(),
+          }),
+        )
         .timeout(const Duration(seconds: 15));
     _decode(r);
   }
@@ -117,7 +195,8 @@ class ApiClient {
     final j = _decode(r);
     return {
       for (final mode in ['walk', 'bicycle'])
-        if (j[mode] != null) mode: SpeedProfile.fromJson(j[mode] as Map<String, dynamic>),
+        if (j[mode] != null)
+          mode: SpeedProfile.fromJson(j[mode] as Map<String, dynamic>),
     };
   }
 
@@ -140,15 +219,23 @@ class ApiClient {
 
   Future<PlanResult> plan(PlanRequest req) async {
     final r = await http
-        .post(Uri.parse('$baseUrl/routes/plan'), headers: _headers, body: jsonEncode(req.toJson()))
+        .post(
+          Uri.parse('$baseUrl/routes/plan'),
+          headers: _headers,
+          body: jsonEncode(req.toJson()),
+        )
         .timeout(planTimeout);
     return PlanResult.fromJson(_decode(r));
   }
 
   Map<String, dynamic> _decode(http.Response r) {
-    final body = r.body.isEmpty ? <String, dynamic>{} : jsonDecode(utf8.decode(r.bodyBytes));
+    final body = r.body.isEmpty
+        ? <String, dynamic>{}
+        : jsonDecode(utf8.decode(r.bodyBytes));
     if (r.statusCode >= 400) {
-      final msg = body is Map && body['error'] != null ? body['error'] as String : r.reasonPhrase ?? '';
+      final msg = body is Map && body['error'] != null
+          ? body['error'] as String
+          : r.reasonPhrase ?? '';
       throw ApiException(r.statusCode, msg);
     }
     return body as Map<String, dynamic>;

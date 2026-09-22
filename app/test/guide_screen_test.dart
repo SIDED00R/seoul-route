@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:seoul_route/api/client.dart';
 import 'package:seoul_route/guide/active_guide.dart';
 import 'package:seoul_route/models/fast_exit.dart';
+import 'package:seoul_route/models/favorite_place.dart';
 import 'package:seoul_route/models/itinerary.dart';
 import 'package:seoul_route/models/leg_detail.dart';
 import 'package:seoul_route/models/place.dart';
@@ -25,7 +26,8 @@ class PushGeolocator extends GeolocatorPlatform {
   final List<LocationSettings?> streamCalls = [];
 
   @override
-  Future<LocationPermission> checkPermission() async => LocationPermission.whileInUse;
+  Future<LocationPermission> checkPermission() async =>
+      LocationPermission.whileInUse;
 
   @override
   Future<bool> isLocationServiceEnabled() async => true;
@@ -41,18 +43,35 @@ class FakeApi extends ApiClient {
   FakeApi() : super(baseUrl: 'http://x', token: 't');
 
   final List<List<dynamic>> uploads = [];
+  final Map<double, int> landmarkCalls = {};
+  double? failLandmarkOnceAt;
 
   @override
   Future<String> startTrip() async => 'T1';
 
   @override
-  Future<void> uploadTraces(String tripId, List samples) async => uploads.add(samples);
+  Future<void> uploadTraces(String tripId, List samples) async =>
+      uploads.add(samples);
 
   @override
   Future<Map<String, dynamic>> endTrip(String tripId) async => const {};
+
+  @override
+  Future<GuideLandmark?> landmark(double lat, double lon) async {
+    final calls = (landmarkCalls[lat] ?? 0) + 1;
+    landmarkCalls[lat] = calls;
+    if (lat == failLandmarkOnceAt && calls == 1) {
+      throw ApiException(502, '일시 오류');
+    }
+    if (lat == failLandmarkOnceAt) {
+      return GuideLandmark(name: '우리은행', lat: lat, lon: lon, distanceM: 8);
+    }
+    return null;
+  }
 }
 
-Position pos(double lat, double lon, {double acc = 8, DateTime? ts}) => Position(
+Position pos(double lat, double lon, {double acc = 8, DateTime? ts}) =>
+    Position(
       latitude: lat,
       longitude: lon,
       timestamp: ts ?? DateTime.now(),
@@ -67,12 +86,22 @@ Position pos(double lat, double lon, {double acc = 8, DateTime? ts}) => Position
 
 // 시각은 실행 시각 기준으로 만든다 — 고정 시각을 쓰면 StopTracker 의 시간표 판정이 벽시계에 따라 달라진다.
 final _base = DateTime.now();
-String _t(int minutes) => _base.add(Duration(minutes: minutes)).toIso8601String();
+String _t(int minutes) =>
+    _base.add(Duration(minutes: minutes)).toIso8601String();
 
 // 도보(모퉁이 2곳·출입구) → 2호선(중간 정차 2곳) → 도보(출구). 경도 0.0001도 ≈ 8.8m, 위도 0.0001도 ≈ 11.1m.
-final _walkLine = encodePolyline([const LatLng(37.5, 127.0), const LatLng(37.502, 127.0)]);
-final _subwayLine = encodePolyline([const LatLng(37.502, 127.0), const LatLng(37.506, 127.0)]);
-final _lastLine = encodePolyline([const LatLng(37.506, 127.0), const LatLng(37.508, 127.0)]);
+final _walkLine = encodePolyline([
+  const LatLng(37.5, 127.0),
+  const LatLng(37.502, 127.0),
+]);
+final _subwayLine = encodePolyline([
+  const LatLng(37.502, 127.0),
+  const LatLng(37.506, 127.0),
+]);
+final _lastLine = encodePolyline([
+  const LatLng(37.506, 127.0),
+  const LatLng(37.508, 127.0),
+]);
 
 final _legs = [
   Leg(
@@ -92,9 +121,21 @@ final _legs = [
     start: _t(0),
     end: _t(5),
     steps: const [
-      WalkStep(dir: 'DEPART', street: '테헤란로', distanceM: 124, lat: 37.5, lon: 127.0),
+      WalkStep(
+        dir: 'DEPART',
+        street: '테헤란로',
+        distanceM: 124,
+        lat: 37.5,
+        lon: 127.0,
+      ),
       WalkStep(dir: 'RIGHT', distanceM: 98, lat: 37.5011, lon: 127.0),
-      WalkStep(dir: 'ENTER_STATION', entrance: '강남 8번 출구', distanceM: 0, lat: 37.502, lon: 127.0),
+      WalkStep(
+        dir: 'ENTER_STATION',
+        entrance: '강남 8번 출구',
+        distanceM: 0,
+        lat: 37.502,
+        lon: 127.0,
+      ),
     ],
   ),
   Leg(
@@ -139,8 +180,20 @@ final _legs = [
     start: _t(17),
     end: _t(21),
     steps: const [
-      WalkStep(dir: 'EXIT_STATION', entrance: '역삼 1번 출구', distanceM: 0, lat: 37.506, lon: 127.0),
-      WalkStep(dir: 'CONTINUE', street: '테헤란로', distanceM: 222, lat: 37.5061, lon: 127.0),
+      WalkStep(
+        dir: 'EXIT_STATION',
+        entrance: '역삼 1번 출구',
+        distanceM: 0,
+        lat: 37.506,
+        lon: 127.0,
+      ),
+      WalkStep(
+        dir: 'CONTINUE',
+        street: '테헤란로',
+        distanceM: 222,
+        lat: 37.5061,
+        lon: 127.0,
+      ),
     ],
   ),
 ];
@@ -190,21 +243,24 @@ void main() {
 
   tearDown(() {
     ActiveGuide.instance.clear(); // 세션의 10초 타이머가 테스트 뒤에 남지 않게
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
   });
 
   /// 시각은 픽스처를 만든 순간(_base)으로 고정한다. 실제 시계를 쓰면 LegTracker 가 구간 1 에 늦게 들어온
   /// 것으로 보고 도착 예정을 그만큼 밀어, _base 의 초에 따라 카드의 분이 한 칸 올라간다.
   Future<void> pumpGuide(WidgetTester tester, {bool voice = true}) async {
-    await tester.pumpWidget(MaterialApp(
-      home: GuideScreen(
-        api: api,
-        request: _request,
-        itinerary: _itinerary,
-        speak: voice ? (t) async => spoken.add(t) : null,
-        clock: () => _base,
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideScreen(
+          api: api,
+          request: _request,
+          itinerary: _itinerary,
+          speak: voice ? (t) async => spoken.add(t) : null,
+          clock: () => _base,
+        ),
       ),
-    ));
+    );
     await _settle(tester);
   }
 
@@ -226,10 +282,13 @@ void main() {
   testWidgets('첫 위치에 카드 문구와 발화가 나오고, 같은 자리면 다시 읽지 않는다', (tester) async {
     await pumpGuide(tester);
     await _push(tester, geo, pos(37.5, 127.0));
-    expect(find.textContaining('도착 예정 ${hhmm(DateTime.parse(_t(21)))}'), findsOneWidget);
-    expect(find.text('테헤란로 따라 120m 직진 후 우회전'), findsOneWidget);
+    expect(
+      find.textContaining('도착 예정 ${hhmm(DateTime.parse(_t(21)))}'),
+      findsOneWidget,
+    );
+    expect(find.text('120m 직진 후 우회전'), findsOneWidget);
     expect(find.text('다음: 탑승 · 2호선 성수 방면 · 강남(2호선)'), findsOneWidget);
-    expect(spoken, ['테헤란로 따라 120m 직진 후 우회전']);
+    expect(spoken, ['120m 직진 후 우회전']);
     await _push(tester, geo, pos(37.5, 127.0));
     expect(spoken.length, 1); // 같은 문장은 되풀이하지 않는다
     await close(tester);
@@ -238,16 +297,30 @@ void main() {
   testWidgets('모퉁이를 지나면 다음 단계 문구를 읽는다', (tester) async {
     await pumpGuide(tester);
     await _push(tester, geo, pos(37.5, 127.0));
+    final before = spoken.length;
     await _push(tester, geo, pos(37.50111, 127.0)); // 모퉁이에서 1m
     expect(find.textContaining('강남 8번 출구로 들어가기'), findsOneWidget);
     expect(spoken.last, contains('강남 8번 출구로 들어가기'));
+    expect(
+      spoken.length,
+      before + 1,
+      reason: '단계 변경과 랜드마크 갱신이 같은 문장을 두 번 읽으면 안 된다',
+    );
+    await close(tester);
+  });
+
+  testWidgets('랜드마크 일시 오류는 한 번 재시도해 첫 안내에 반영한다', (tester) async {
+    api.failLandmarkOnceAt = 37.5011;
+    await pumpGuide(tester);
+    expect(api.landmarkCalls[37.5011], 2);
+    expect(spoken.single, contains('우리은행'));
     await close(tester);
   });
 
   testWidgets('오차가 큰 표본은 단계를 넘기지 않는다(화면이 정확도를 넘겨야 한다)', (tester) async {
     await pumpGuide(tester);
     await _push(tester, geo, pos(37.5, 127.0));
-    expect(find.text('테헤란로 따라 120m 직진 후 우회전'), findsOneWidget);
+    expect(find.text('120m 직진 후 우회전'), findsOneWidget);
     // 정확도가 좋았다면 다음 단계로 넘어갈 자리(모퉁이에서 1m). 남은 거리 표시는 이 표본으로도 갱신된다.
     await _push(tester, geo, pos(37.50111, 127.0, acc: 100));
     expect(find.textContaining('직진 후 우회전'), findsOneWidget); // 단계는 그대로
@@ -294,14 +367,16 @@ void main() {
       walkM: 222,
       legs: [_legs[1], _legs[2]],
     );
-    await tester.pumpWidget(MaterialApp(
-      home: GuideScreen(
-        api: api,
-        request: _request,
-        itinerary: fromStation,
-        speak: (t) async => spoken.add(t),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideScreen(
+          api: api,
+          request: _request,
+          itinerary: fromStation,
+          speak: (t) async => spoken.add(t),
+        ),
       ),
-    ));
+    );
     await _settle(tester);
     expect(find.textContaining('3정거장 뒤 역삼에서 내리기'), findsOneWidget);
     expect(spoken, ['2호선 성수 방면을 타고 3정거장 뒤 역삼에서 내리세요']);
@@ -327,22 +402,29 @@ void main() {
   testWidgets('위치가 끊겨도 시간표로 구간이 넘어가고 알림창 내용이 따라온다', (tester) async {
     const status = MethodChannel('seoul_route/guide_status');
     final shown = <String>[];
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(status, (call) async {
-      if (call.method == 'show') shown.add((call.arguments as Map)['title'] as String);
-      return null;
-    });
-    addTearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(status, null));
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(status, (call) async {
+          if (call.method == 'show') {
+            shown.add((call.arguments as Map)['title'] as String);
+          }
+          return null;
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(status, null),
+    );
     var now = _base;
-    await tester.pumpWidget(MaterialApp(
-      home: GuideScreen(
-        api: api,
-        request: _request,
-        itinerary: _itinerary,
-        speak: (t) async => spoken.add(t),
-        clock: () => now,
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideScreen(
+          api: api,
+          request: _request,
+          itinerary: _itinerary,
+          speak: (t) async => spoken.add(t),
+          clock: () => now,
+        ),
       ),
-    ));
+    );
     await _settle(tester);
     await tester.tap(find.text('다음 구간')); // 지하철 탑승(계획 +6분 출발, +16분 도착)
     await _settle(tester);
@@ -357,24 +439,28 @@ void main() {
     await tester.pump(const Duration(seconds: 10)); // 위치 표본 없이 시간만 흘렀다
     await _settle(tester);
     expect(find.textContaining('구간 3/3'), findsOneWidget);
-    expect(shown.last, endsWith('역삼 1번 출구로 나가서 테헤란로 따라 220m 직진 하면 도착지 도착'));
+    expect(shown.last, endsWith('역삼 1번 출구로 나가서 220m 직진 하면 도착지 도착'));
     expect(shown.last, startsWith('남은 ')); // 접힌 알림에서도 남은 시간이 보인다
     await close(tester);
   });
 
   testWidgets('안내를 늦게 시작하면 도착 예정도 그만큼 늦다', (tester) async {
     final started = _base.add(const Duration(minutes: 3));
-    await tester.pumpWidget(MaterialApp(
-      home: GuideScreen(
-        api: api,
-        request: _request,
-        itinerary: _itinerary,
-        speak: (t) async => spoken.add(t),
-        clock: () => started,
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideScreen(
+          api: api,
+          request: _request,
+          itinerary: _itinerary,
+          speak: (t) async => spoken.add(t),
+          clock: () => started,
+        ),
       ),
-    ));
+    );
     await _settle(tester);
-    final eta = hhmm(_base.add(const Duration(minutes: 24))); // 계획 도착 +21분에 밀린 3분
+    final eta = hhmm(
+      _base.add(const Duration(minutes: 24)),
+    ); // 계획 도착 +21분에 밀린 3분
     expect(find.textContaining('도착 예정 $eta'), findsOneWidget);
     await close(tester);
   });
@@ -389,10 +475,12 @@ void main() {
   });
 
   testWidgets('음성 안내가 꺼져 있으면 읽지 않는다', (tester) async {
-    SharedPreferences.setMockInitialValues(<String, Object>{'voice_guide': false});
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'voice_guide': false,
+    });
     await pumpGuide(tester, voice: false);
     await _push(tester, geo, pos(37.5, 127.0));
-    expect(find.text('테헤란로 따라 120m 직진 후 우회전'), findsOneWidget);
+    expect(find.text('120m 직진 후 우회전'), findsOneWidget);
     expect(spoken, isEmpty);
     await close(tester);
   });
@@ -401,10 +489,17 @@ void main() {
     await pumpGuide(tester);
     final t0 = DateTime.utc(2026, 9, 18, 0, 0, 0);
     for (final sec in [0, 2, 4, 6, 10]) {
-      await _push(tester, geo, pos(37.5, 127.0, ts: t0.add(Duration(seconds: sec))));
+      await _push(
+        tester,
+        geo,
+        pos(37.5, 127.0, ts: t0.add(Duration(seconds: sec))),
+      );
     }
     expect(find.textContaining('샘플 5'), findsOneWidget); // 화면은 받은 대로 센다
-    expect(find.textContaining('대기 2'), findsOneWidget); // 직전에 올린 표본과 5초 이상 벌어진 0·6초만 남는다
+    expect(
+      find.textContaining('대기 2'),
+      findsOneWidget,
+    ); // 직전에 올린 표본과 5초 이상 벌어진 0·6초만 남는다
     await close(tester);
   });
 }

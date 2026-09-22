@@ -131,8 +131,10 @@ docker compose --env-file .env.dev -f deploy/compose.dev.yml up -d
 | `GET /gbfs/*.json` | 아니요 | OTP용 따릉이 GBFS |
 | `POST /routes/plan` | 예 | 경로 탐색 |
 | `GET`, `DELETE /routes/recent` | 예 | 최근 경로 조회·삭제 |
-| `GET /places/search`, `/places/reverse` | 예 | 장소 검색·역지오코딩 |
+| `GET /places/search`, `/places/reverse`, `/places/landmark` | 예 | 장소 검색·역지오코딩·회전점 랜드마크 |
 | `GET /tiles/{z}/{x}/{y}.png` | 예 | 지도 타일 |
+| `GET`, `POST /users/me/favorites` | 예 | 자주 가는 곳 조회·추가 |
+| `PUT`, `DELETE /users/me/favorites/{id}` | 예 | 자주 가는 곳 수정·삭제 |
 | `POST /trips`, `/trips/{id}/traces`, `/trips/{id}/end` | 예 | 안내 궤적과 속도 학습 |
 | `GET /users/me/speed` | 예 | 개인 속도 |
 
