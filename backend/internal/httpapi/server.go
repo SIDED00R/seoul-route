@@ -29,6 +29,8 @@ type Server struct {
 	OTPURL         string
 	HTTP           *http.Client
 	Log            *slog.Logger
+	Version        string // 빌드한 git 커밋(cmd/api 의 -X main.version). /health 로 나간다. 비면 "dev"
+
 	Planner        *route.Planner
 	GBFS           http.Handler // nil 이면 /gbfs/* 은 503
 	KakaoKey       string       // 비면 /places/search·/places/reverse 503

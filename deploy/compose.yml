@@ -32,6 +32,8 @@ services:
   api:
     build:
       context: ../backend
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown} # deploy/release.ps1 이 현재 커밋을 넣는다. /health version 으로 나간다
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://seoul:seoul@postgres:5432/seoul_route?sslmode=disable

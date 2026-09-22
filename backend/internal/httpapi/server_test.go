@@ -78,8 +78,12 @@ func do(t *testing.T, h http.Handler, method, path, body, bearer string) (*httpt
 func TestHealth(t *testing.T) {
 	s, _ := testServer(t)
 	rr, out := do(t, s.Router(), http.MethodGet, "/health", "", "")
-	if rr.Code != 200 || out["db"] != "ok" || out["otp"] != "ok" {
-		t.Fatalf("code=%d body=%v", rr.Code, out)
+	if rr.Code != 200 || out["db"] != "ok" || out["otp"] != "ok" || out["version"] != "dev" {
+		t.Fatalf("code=%d body=%v (Version 미설정이면 version=dev)", rr.Code, out)
+	}
+	s.Version = "abc1234" // 빌드 커밋. 배포 스모크가 체크아웃 커밋과 대조한다
+	if _, out := do(t, s.Router(), http.MethodGet, "/health", "", ""); out["version"] != "abc1234" {
+		t.Fatalf("version 이 그대로 나가야 한다: body=%v", out)
 	}
 	s.OTPURL = "http://127.0.0.1:1"
 	s.HTTP = &http.Client{Timeout: time.Second}

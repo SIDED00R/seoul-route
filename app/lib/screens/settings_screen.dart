@@ -83,6 +83,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final s = _current;
     final api = ApiClient(baseUrl: s.baseUrl, token: s.token);
     // 응답 전에 화면을 나가면 State 가 폐기되므로 await 뒤 setState 마다 mounted 를 본다.
+    if (s.baseUrl.isEmpty) {
+      setState(() {
+        _busy = false;
+        _status = '서버 주소를 먼저 입력하세요';
+      });
+      return;
+    }
+    // 실패 원인을 구분해 보여 준다: 주소에 닿지 않음 / 토큰 없음·만료 / 그 외. (허용목록 밖 계정은 로그인 때 403 —
+    // 토큰이 발급되지 않아 여기서는 401 로 나타난다. 그 안내는 _loginGoogle 이 한다.)
     try {
       final h = await api.health();
       final me = await api.me();
@@ -90,15 +99,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       setState(
         () => _status =
-            '서버 OK (db ${h['db']}, otp ${h['otp']}) · 사용자 ${me['user_id']}\n'
+            '서버 OK (db ${h['db']}, otp ${h['otp']}, 버전 ${h['version'] ?? '?'}) · 사용자 ${me['user_id']}\n'
             '내 속도 — 걷기 ${sp['walk']?.label} · 자전거 ${sp['bicycle']?.label}',
       );
     } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() => _status = '실패: $e');
+      setState(() => _status = switch (e.status) {
+        401 => '서버는 닿았지만 토큰이 없거나 만료됨 — Google 로그인(개발은 devtoken)으로 다시 받으세요',
+        _ => '실패: $e',
+      });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _status = '연결 실패: $e');
+      setState(() => _status = '서버에 닿지 않음: ${s.baseUrl} — 주소·PC 서버·Tailscale 상태를 확인하세요 ($e)');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -126,7 +138,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       Navigator.pop(context, _current);
     } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() => _status = '로그인 실패: $e');
+      // 403 = 서버 허용목록(AUTH_ALLOWED_EMAILS) 밖 계정. 토큰이 발급되지 않으므로 여기서만 알려 줄 수 있다.
+      setState(() => _status = e.status == 403
+          ? '로그인 실패: 이 계정은 이 서버의 허용목록에 없습니다(서버 AUTH_ALLOWED_EMAILS 확인)'
+          : '로그인 실패: $e');
     } catch (e) {
       if (!mounted) return;
       setState(() => _status = '로그인 실패: $e');
@@ -164,7 +179,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               labelText: '서버 주소',
               helperText: Env.isProd
                   ? '운영 빌드에 고정된 주소라 바꿀 수 없습니다'
-                  : '개발 스택 — 에뮬레이터: http://10.0.2.2:8082 · USB 실기기(adb reverse): http://127.0.0.1:8082',
+                  : '개발 스택 — 폰: http://<PC>.<tailnet>.ts.net:8082 · 에뮬레이터: http://10.0.2.2:8082 · '
+                      'USB(adb reverse): http://127.0.0.1:8082',
               errorText: Env.isProd && _url.text.isEmpty ? '빌드에 서버 주소가 없습니다(env.prod.json 의 API_BASE_URL)' : null,
             ),
             keyboardType: TextInputType.url,

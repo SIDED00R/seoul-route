@@ -27,6 +27,9 @@ import (
 	"github.com/SIDED00R/seoul-route/backend/internal/speed"
 )
 
+// version 은 빌드한 git 커밋(Dockerfile 의 -X main.version). /health 로 나가 배포 스모크가 체크아웃과 대조한다.
+var version = "dev"
+
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	cfg, err := config.Load()
@@ -153,7 +156,7 @@ func main() {
 	}()
 	srv := &httpapi.Server{
 		DB: pool, JWT: auth.NewJWT(cfg.JWTSecret), Google: google, GoogleClientID: googleClientID, Allowed: allowed,
-		OTPURL: cfg.OTPURL, HTTP: httpClient, Log: log,
+		OTPURL: cfg.OTPURL, HTTP: httpClient, Log: log, Version: version,
 		Planner: planner, KakaoKey: cfg.KakaoRESTKey, VWorldKey: cfg.VWorldKey,
 	}
 	if cfg.KakaoRESTKey == "" {

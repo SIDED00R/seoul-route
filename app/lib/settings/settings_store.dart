@@ -26,8 +26,9 @@ class Settings {
   static const minOverlayOpacity = 0.2;
   static const maxOverlayOpacity = 0.8;
 
-  // dev flavor 기본값: 안드로이드 에뮬레이터에서 호스트 PC 의 loopback 은 10.0.2.2, 개발 스택(compose.dev.yml) api 는 8082.
-  static const defaultBaseUrl = 'http://10.0.2.2:8082';
+  // dev flavor 는 서버 주소를 비워 두고 사용자가 넣게 한다. 에뮬레이터 주소(10.0.2.2:8082)를 몰래 넣으면 폰에서는
+  // 닿지 않는 주소로 조용히 타임아웃만 난다(2026-09-22 실측). 비어 있으면 홈이 "먼저 설정하세요"를 띄운다.
+  static const defaultBaseUrl = '';
 
   bool get ready => baseUrl.isNotEmpty && token.isNotEmpty;
 }
