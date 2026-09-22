@@ -10,16 +10,29 @@ Flutter 클라이언트입니다. Android만 지원하며 경로 계산, 장소 
 flutter pub get
 flutter analyze
 flutter test
-flutter run
+flutter run --flavor dev
 ```
 
-앱 설정에서 API 주소와 인증 정보를 입력합니다.
+## 개발계·운영 분리 (flavor)
+
+앱은 Android product flavor 두 개로 빌드합니다. `--flavor`를 빼면 Gradle이 빌드를 거부합니다.
+
+| | `dev` | `prod` |
+|---|---|---|
+| 패키지 · 이름 | `kr.seoulroute.seoul_route.dev` · 서울 길찾기 Dev | `kr.seoulroute.seoul_route` · 서울 길찾기 |
+| 붙는 서버 | 개발 스택(`deploy/compose.dev.yml`, 8082). 설정 화면에서 바꿀 수 있음 | 빌드에 박힌 `API_BASE_URL`(운영 스택 8081). 설정 화면은 읽기 전용 |
+| 인증 | Google 로그인 또는 devtoken 붙여넣기 | Google 로그인만. 첫 실행 때 이전 앱이 남긴 토큰을 버리므로 한 번 다시 로그인한다 |
+| 실행 | `flutter run --flavor dev` | `flutter build apk --flavor prod --dart-define-from-file=env.prod.json` |
+
+두 앱은 패키지가 달라 한 폰에 같이 설치됩니다. `env.prod.json`은 `env.prod.json.example`을 복사해 운영 API 주소(Tailscale 호스트명 URL)를 넣고, 커밋하지 않습니다. `API_BASE_URL` 없이 prod를 빌드하면 설정 화면이 "빌드에 서버 주소가 없습니다"라고 알립니다.
+
+dev flavor 의 API 주소:
 
 | 환경 | API 주소 |
 |---|---|
-| Android 에뮬레이터 | `http://10.0.2.2:8081` |
-| USB 실기기 | `adb reverse tcp:8081 tcp:8081` 후 `http://127.0.0.1:8081` |
-| Tailscale | PC에서 API를 serve한 tailnet 호스트명 URL |
+| Android 에뮬레이터 | `http://10.0.2.2:8082` (기본값) |
+| USB 실기기 | `adb reverse tcp:8082 tcp:8082` 후 `http://127.0.0.1:8082` |
+| Tailscale | PC에서 개발 API를 serve한 tailnet 호스트명 URL |
 
 Compose는 API를 `127.0.0.1`에만 공개하므로 같은 Wi-Fi의 사설 IP로 직접 연결할 수 없습니다.
 
@@ -27,10 +40,10 @@ Compose는 API를 `127.0.0.1`에만 공개하므로 같은 Wi-Fi의 사설 IP로
 
 같은 Google Cloud 프로젝트에 다음 OAuth client가 필요합니다.
 
-1. 웹 client ID를 루트 `.env`의 `GOOGLE_OAUTH_CLIENT_ID`에 설정합니다.
-2. Android client를 패키지 `kr.seoulroute.seoul_route`와 앱 서명 SHA-1로 만듭니다.
-3. 동의 화면이 테스트 상태라면 사용할 계정을 테스트 사용자에 추가합니다.
-4. API를 재시작합니다.
+1. 웹 client ID를 루트 `.env`(운영)와 `.env.dev`(개발)의 `GOOGLE_OAUTH_CLIENT_ID`에 설정합니다(같은 값이어도 됩니다).
+2. Android client를 flavor 마다 만듭니다: 운영 `kr.seoulroute.seoul_route`, 개발 `kr.seoulroute.seoul_route.dev`. 둘 다 앱 서명 SHA-1이 필요합니다.
+3. 동의 화면이 테스트 상태라면 사용할 계정(실제 계정과 테스트 계정)을 테스트 사용자에 추가합니다.
+4. 서버의 `AUTH_ALLOWED_EMAILS`에 운영은 실제 계정, 개발은 테스트 계정만 넣고 API를 재시작합니다. 목록 밖 계정은 로그인 403.
 
 디버그 서명 SHA-1은 다음 명령으로 확인합니다.
 
@@ -68,6 +81,12 @@ test/           모델·화면·안내 회귀 테스트
 ```
 
 ## 실행 검증
+
+prod flavor 전용 테스트(첫 실행 토큰 폐기·고정 주소)는 기본 `flutter test`에서 skip되므로 따로 돌립니다.
+
+```powershell
+flutter test --flavor prod --dart-define=API_BASE_URL=http://prod.example:8081 test/prod_flavor_test.dart
+```
 
 1. 설정 화면에서 `/health`, `/users/me`, `/users/me/speed` 연결 확인
 2. 장소 검색 → 경로 목록 → 지도 상세 진입

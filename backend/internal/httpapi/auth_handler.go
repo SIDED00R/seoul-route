@@ -25,11 +25,18 @@ func (s *Server) handleAuthGoogle(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "id_token 필요")
 		return
 	}
-	sub, err := s.Google.Subject(r.Context(), in.IDToken)
+	id, err := s.Google.Verify(r.Context(), in.IDToken)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "Google 토큰 무효")
 		return
 	}
+	// 환경별 허용 계정(AUTH_ALLOWED_EMAILS) 밖이면 사용자 행을 만들지 않고 403. 이메일은 로그에도 남기지 않는다.
+	if !s.Allowed.Allows(id.Email, id.EmailVerified) {
+		s.Log.Warn("google login denied", "reason", "허용목록 밖 계정")
+		writeError(w, http.StatusForbidden, "이 서버에서 허용되지 않은 계정")
+		return
+	}
+	sub := id.Sub
 	var userID string
 	var deleted bool
 	err = s.DB.QueryRow(r.Context(), `
