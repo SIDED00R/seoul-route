@@ -160,13 +160,13 @@ class GuideOverlayControls(
         label = value
         val seek = SeekBar(appContext).apply {
             max = MAX_PERCENT - MIN_PERCENT
-            progress = (opacity * 100).roundToInt() - MIN_PERCENT
+            progress = percentOf(opacity) - MIN_PERCENT
             progressTintList = ColorStateList.valueOf(Color.WHITE)
             thumbTintList = ColorStateList.valueOf(Color.WHITE)
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(bar: SeekBar, progress: Int, fromUser: Boolean) {
                     if (!fromUser) return
-                    opacity = (progress + MIN_PERCENT) / 100f
+                    opacity = (progress + MIN_PERCENT) / 100f * MAX_ALPHA
                     value.text = percent(opacity)
                     onPreview(opacity)
                     restartCollapse()
@@ -210,7 +210,10 @@ class GuideOverlayControls(
         handler.postDelayed(collapse, COLLAPSE_MS)
     }
 
-    private fun percent(value: Float): String = "${(value * 100).roundToInt()}%"
+    /** 알파 → 화면 퍼센트. 100% = MAX_ALPHA(Settings.overlayPercentOf 와 같은 식). */
+    private fun percentOf(alpha: Float): Int = (alpha / MAX_ALPHA * 100).roundToInt()
+
+    private fun percent(value: Float): String = "${percentOf(value)}%"
 
     private fun dp(value: Int): Int = (value * appContext.resources.displayMetrics.density).toInt()
 
@@ -220,8 +223,9 @@ class GuideOverlayControls(
         private const val STRIP_DP = 56
         private const val MARGIN_DP = 8
         private const val COLLAPSE_MS = 4000L
-        // 앱 설정 슬라이더와 같은 범위(Settings.minOverlayOpacity / maxOverlayOpacity). 80 은 Android 터치 차단 상한.
-        private const val MIN_PERCENT = 20
-        private const val MAX_PERCENT = 80
+        // 화면은 5~100%, 알파는 퍼센트 × MAX_ALPHA(앱 Settings.overlayAlphaOf 와 같은 식). 0.8 은 Android 터치 차단 상한.
+        private const val MIN_PERCENT = 5
+        private const val MAX_PERCENT = 100
+        private const val MAX_ALPHA = 0.8f
     }
 }

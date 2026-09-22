@@ -43,17 +43,17 @@ void main() {
     final store = SettingsStore(tokenStorage: MemoryTokenStorage());
     await tester.pumpWidget(MaterialApp(
       home: SettingsScreen(
-        initial: const Settings(baseUrl: 'http://x', token: 't', overlayGuide: true, overlayOpacity: 0.5),
+        initial: const Settings(baseUrl: 'http://x', token: 't', overlayGuide: true, overlayOpacity: 0.4),
         settingsStore: store,
       ),
     ));
-    expect(find.text('미니 지도 진하기 50%'), findsOneWidget);
+    expect(find.text('미니 지도 진하기 50%'), findsOneWidget); // 알파 0.4 = 화면 50%
 
-    // 슬라이더를 오른쪽 끝(상한)으로 끈다.
+    // 슬라이더를 오른쪽 끝(100% = 알파 0.8, Android 터치 차단 상한)으로 끈다.
     final slider = find.byType(Slider);
     await tester.drag(slider, const Offset(600, 0));
     await tester.pumpAndSettle();
-    expect(find.text('미니 지도 진하기 80%'), findsOneWidget);
+    expect(find.text('미니 지도 진하기 100%'), findsOneWidget);
     expect(calls.map((c) => c.method), ['setOpacity']);
     expect((calls.single.arguments as Map)['opacity'], closeTo(0.8, 1e-9));
 
@@ -71,10 +71,10 @@ void main() {
     await GuideOverlayPlatform.setEnabled(true, opacity: 0.5); // 이때 앱→네이티브 핸들러가 걸린다
     await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
       channel.name,
-      const StandardMethodCodec().encodeMethodCall(const MethodCall('opacityChanged', 0.3)),
+      const StandardMethodCodec().encodeMethodCall(const MethodCall('opacityChanged', 0.24)), // 화면 30%
       (_) {},
     );
-    expect(await SettingsStore.loadOverlayOpacity(), closeTo(0.3, 1e-9));
+    expect(await SettingsStore.loadOverlayOpacity(), closeTo(0.24, 1e-9));
 
     await tester.pumpWidget(MaterialApp(
       home: SettingsScreen(

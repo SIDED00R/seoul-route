@@ -22,9 +22,17 @@ class Settings {
   // 막으므로 네이티브가 기기 상한(maximumObscuringOpacityForTouch)으로 한 번 더 자른다.
   final double overlayOpacity;
 
-  static const defaultOverlayOpacity = 0.5;
-  static const minOverlayOpacity = 0.2;
+  // 화면은 5~100% 로 보여 주고 내부 알파는 0.04~0.8 이다(100% = 0.8 = Android 터치 차단 상한). 기본 50% = 0.4.
+  static const defaultOverlayOpacity = 0.4;
+  static const minOverlayOpacity = 0.04;
   static const maxOverlayOpacity = 0.8;
+  static const minOverlayPercent = 5;
+
+  /// 알파 → 화면 퍼센트(0.8 을 100 으로).
+  static int overlayPercentOf(double alpha) => (alpha / maxOverlayOpacity * 100).round();
+
+  /// 화면 퍼센트 → 알파.
+  static double overlayAlphaOf(num percent) => percent / 100 * maxOverlayOpacity;
 
   // dev flavor 는 서버 주소를 비워 두고 사용자가 넣게 한다. 에뮬레이터 주소(10.0.2.2:8082)를 몰래 넣으면 폰에서는
   // 닿지 않는 주소로 조용히 타임아웃만 난다(2026-09-22 실측). 비어 있으면 홈이 "먼저 설정하세요"를 띄운다.

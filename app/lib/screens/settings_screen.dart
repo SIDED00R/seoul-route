@@ -220,21 +220,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             value: _overlayGuide,
             onChanged: _busy ? null : _setOverlayGuide,
           ),
-          // 미니 지도 진하기. 상한 0.8 은 Android 가 뒤 앱 터치를 막기 시작하는 값(Settings.maxOverlayOpacity).
+          // 미니 지도 진하기. 화면은 5~100%, 내부 알파는 Settings.overlayAlphaOf 로 0.04~0.8(100% = Android 터치 차단 상한).
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: Text('미니 지도 진하기 ${(_overlayOpacity * 100).round()}%'),
+            title: Text('미니 지도 진하기 ${Settings.overlayPercentOf(_overlayOpacity)}%'),
             subtitle: Slider(
-              value: _overlayOpacity,
-              min: Settings.minOverlayOpacity,
-              max: Settings.maxOverlayOpacity,
-              divisions: 12,
-              label: '${(_overlayOpacity * 100).round()}%',
+              value: Settings.overlayPercentOf(_overlayOpacity).toDouble(),
+              min: Settings.minOverlayPercent.toDouble(),
+              max: 100,
+              divisions: 19,
+              label: '${Settings.overlayPercentOf(_overlayOpacity)}%',
               onChanged: _busy || !_overlayGuide
                   ? null
-                  : (v) => setState(() => _overlayOpacity = v),
+                  : (v) => setState(() => _overlayOpacity = Settings.overlayAlphaOf(v)),
               // 안내 중이면 떠 있는 창에 바로 반영된다(저장은 "저장" 버튼).
-              onChangeEnd: (v) => GuideOverlayPlatform.setOpacity(v),
+              onChangeEnd: (v) => GuideOverlayPlatform.setOpacity(Settings.overlayAlphaOf(v)),
             ),
           ),
           const SizedBox(height: 8),
