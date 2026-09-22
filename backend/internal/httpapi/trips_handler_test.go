@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -221,14 +220,15 @@ func TestTripTracesAndSpeedLearning(t *testing.T) {
 	if r1.code+r2.code != 200+409 {
 		t.Fatalf("동시 종료 code=%d,%d (200+409 여야)", r1.code, r2.code)
 	}
-	rr, out = &httptest.ResponseRecorder{Code: 200}, r1.body
+	// 200 을 받은 쪽의 본문만 profile 을 담는다(상태코드 합은 위에서 이미 확인했다).
+	out = r1.body
 	if r1.code != 200 {
 		out = r2.body
 	}
 	pw = out["profile"].(map[string]any)["walk"].(map[string]any)
 	v2 := out["trip"].(map[string]any)["walk"].(map[string]any)["speed_mps"].(float64)
 	want2 := speed.Shrink(Priors["walk"], v1+v2, 2)
-	if rr.Code != 200 || pw["n_trips"] != float64(2) || math.Abs(pw["speed_mps"].(float64)-want2) > 1e-9 {
+	if pw["n_trips"] != float64(2) || math.Abs(pw["speed_mps"].(float64)-want2) > 1e-9 {
 		t.Fatalf("2번째 trip 후 profile walk=%v", pw)
 	}
 	// /routes/plan 이 학습된 걷기 속도를 평지 최대속도로 바꿔 OTP 요청에 넣는다(Planner 는 요청 속도를 그대로

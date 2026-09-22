@@ -117,6 +117,16 @@ docker compose --env-file .env.dev -f deploy/compose.dev.yml up -d
 | `AUTH_ALLOWED_EMAILS` | 실제 개인 계정만 | 테스트 계정만 |
 | `JWT_SECRET` | 서로 다른 값 | 서로 다른 값(운영 토큰이 개발에서 안 통한다) |
 
+배포는 스크립트로 합니다. 현재 체크아웃이 깨끗한지 확인하고, 그 커밋을 이미지에 박아(`GIT_SHA` → `/health`의 `version`) 올린 뒤, 실제 경로를 호출하는 스모크가 통과해야 끝납니다.
+
+```powershell
+.\deploy\release.ps1 prod    # 운영: .env + compose.yml → 8081, 공개·보호(401) 경로 스모크
+.\deploy\release.ps1 dev     # 개발: .env.dev + compose.dev.yml → 8082, devtoken 으로 경로 탐색까지 스모크
+bash deploy/smoke.sh http://localhost:8081            # 스모크만 다시 돌릴 때
+```
+
+스모크는 보호 경로가 404이면 실패합니다(그 빌드에 API가 없다는 뜻). `version`이 체크아웃 커밋과 다르면 다른 트리에서 빌드한 이미지입니다.
+
 `.env.dev`는 `.env.example`을 한 번 더 복사해 만들고, 그래프와 `otp/data/`는 두 스택이 같은 `otp/`를 읽기 전용으로 공유합니다(`OTP_DIR`로 다른 경로 지정 가능). 개발 DB의 `seoul_route_test`는 백엔드 통합 테스트(`TEST_DATABASE_URL=postgres://seoul:seoul@localhost:5433/seoul_route_test?sslmode=disable`)에 씁니다. Compose 실행 전 `otp/graph.obj`와 `otp/data/` 생성물이 필요합니다. 모든 포트는 loopback에만 바인딩됩니다.
 
 앱 실행 방법과 Google OAuth 설정은 [앱 README](app/README.md)를 따릅니다.

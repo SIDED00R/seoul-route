@@ -11,11 +11,16 @@ import (
 )
 
 // handleHealth 는 DB ping 과 OTP GraphQL 응답을 실제로 확인한다. 하나라도 실패하면 503.
-// 헬스가 200 이어도 기능 경로 검증을 대신하지 않는다(운영 스모크는 /routes/plan 실호출).
+// 헬스가 200 이어도 기능 경로 검증을 대신하지 않는다(운영 스모크 deploy/smoke.sh 가 실제 경로를 호출한다).
+// version 은 이 바이너리를 빌드한 git 커밋 — 스모크가 체크아웃 커밋과 대조해 다른 트리에서 빌드한 이미지를 잡는다.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	status := map[string]string{"db": "ok", "otp": "ok"}
+	version := s.Version
+	if version == "" {
+		version = "dev"
+	}
+	status := map[string]string{"db": "ok", "otp": "ok", "version": version}
 	code := http.StatusOK
 	if err := s.DB.Ping(ctx); err != nil {
 		status["db"] = "fail: " + err.Error()

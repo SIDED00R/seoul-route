@@ -26,11 +26,12 @@ flutter run --flavor dev
 
 두 앱은 패키지가 달라 한 폰에 같이 설치됩니다. `env.prod.json`은 `env.prod.json.example`을 복사해 운영 API 주소(Tailscale 호스트명 URL)를 넣고, 커밋하지 않습니다. `API_BASE_URL` 없이 prod를 빌드하면 설정 화면이 "빌드에 서버 주소가 없습니다"라고 알립니다.
 
-dev flavor 의 API 주소:
+dev flavor 의 API 주소(처음엔 비어 있어 홈이 입력을 요구합니다. "연결 확인"은 실패 원인을 주소 미도달·토큰 없음으로 구분해 보여 주고, 허용목록 밖 계정은 Google 로그인 단계에서 알려 줍니다):
 
 | 환경 | API 주소 |
 |---|---|
-| Android 에뮬레이터 | `http://10.0.2.2:8082` (기본값) |
+| 폰(Tailscale) | `http://<PC 호스트명>.<tailnet>.ts.net:8082` |
+| Android 에뮬레이터 | `http://10.0.2.2:8082` |
 | USB 실기기 | `adb reverse tcp:8082 tcp:8082` 후 `http://127.0.0.1:8082` |
 | Tailscale | PC에서 개발 API를 serve한 tailnet 호스트명 URL |
 

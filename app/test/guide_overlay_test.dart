@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
@@ -49,21 +48,39 @@ void main() {
     expect((calls.last.arguments as Map)['enabled'], isFalse);
   });
 
-  testWidgets('오버레이 안내 글씨는 Material 기본 스타일을 사용한다', (tester) async {
+  testWidgets('네이티브가 보낸 update 스냅샷이 오버레이 본문(안내 문구·다음·남은 시간)으로 그려진다', (tester) async {
     const dataChannel = MethodChannel('seoul_route/guide_overlay_data');
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(dataChannel, (_) async => null);
-    addTearDown(
-      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(dataChannel, null),
-    );
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(dataChannel, (_) async => null); // 오버레이 엔진의 'ready' 호출 수신
+    addTearDown(() => messenger.setMockMethodCallHandler(dataChannel, null));
 
     await tester.pumpWidget(const GuideOverlayApp());
     await tester.pump();
+    expect(find.text('안내 준비 중…'), findsOneWidget);
 
-    final context = tester.element(find.text('안내 준비 중…'));
-    final style = DefaultTextStyle.of(context).style;
-    expect(style.fontSize, isNot(48));
-    expect(style.decoration, isNot(TextDecoration.underline));
+    // 네이티브 → 오버레이 엔진 방향 호출을 흉내 낸다(base_url 이 비어 타일 요청은 나가지 않는다).
+    final snapshot = const GuideOverlaySnapshot(
+      baseUrl: '',
+      token: '',
+      points: [LatLng(37.5665, 126.978), LatLng(37.5670, 126.979)],
+      here: LatLng(37.5665, 126.978),
+      turn: LatLng(37.5670, 126.979),
+      now: '80m 직진 후 우회전',
+      next: '탑승 · 버스 402',
+      remainMin: 12,
+      eta: '09:30',
+      color: 0xFF1565C0,
+    ).toMap();
+    await messenger.handlePlatformMessage(
+      dataChannel.name,
+      const StandardMethodCodec().encodeMethodCall(MethodCall('update', snapshot)),
+      (_) {},
+    );
+    await tester.pump();
+
+    expect(find.text('안내 준비 중…'), findsNothing);
+    expect(find.text('80m 직진 후 우회전'), findsOneWidget);
+    expect(find.text('다음: 탑승 · 버스 402'), findsOneWidget);
+    expect(find.text('12분\n09:30'), findsOneWidget);
   });
 }
