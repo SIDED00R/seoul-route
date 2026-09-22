@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../api/client.dart';
 import '../models/itinerary.dart';
+import '../models/leg_detail.dart';
 import '../models/place.dart';
 import '../models/plan_request.dart';
 import '../models/trace_sample.dart';
@@ -16,6 +17,7 @@ import 'activity_classifier.dart';
 import 'arrival_detector.dart';
 import 'background_location.dart';
 import 'geo.dart' as geo;
+import 'guide_overlay.dart';
 import 'guide_store.dart';
 import 'instruction.dart';
 import 'leg_tracker.dart';
@@ -38,9 +40,9 @@ class GuideSession extends ChangeNotifier {
     this.speak,
     this.store = const GuideStore(),
     DateTime Function()? clock,
-  })  : _clock = clock,
-        _resumedTripId = null,
-        startedAt = (clock ?? DateTime.now)() {
+  }) : _clock = clock,
+       _resumedTripId = null,
+       startedAt = (clock ?? DateTime.now)() {
     tracker = LegTracker(itinerary.legs, now: now());
     _initTrackers();
   }
@@ -52,19 +54,29 @@ class GuideSession extends ChangeNotifier {
     required this.api,
     this.speak,
     this.store = const GuideStore(),
-  })  : request = snap.request,
-        itinerary = snap.itinerary,
-        _clock = null,
-        _resumedTripId = snap.tripId,
-        startedAt = snap.startedAt {
-    tracker = LegTracker.resume(snap.legs, index: snap.legIndex, shift: snap.shift);
+  }) : request = snap.request,
+       itinerary = snap.itinerary,
+       _clock = null,
+       _resumedTripId = snap.tripId,
+       startedAt = snap.startedAt {
+    tracker = LegTracker.resume(
+      snap.legs,
+      index: snap.legIndex,
+      shift: snap.shift,
+    );
     _initTrackers();
   }
 
   void _initTrackers() {
     _steps = _stepTrackerFor(tracker.current);
-    _stops = StopTracker(tracker.current, tracker.currentPoints, shift: tracker.shift);
-    _remainingStops = tracker.current.transitLeg ? tracker.current.stops.length + 1 : 0;
+    _stops = StopTracker(
+      tracker.current,
+      tracker.currentPoints,
+      shift: tracker.shift,
+    );
+    _remainingStops = tracker.current.transitLeg
+        ? tracker.current.stops.length + 1
+        : 0;
     _instr = _buildInstruction();
   }
 
@@ -124,6 +136,9 @@ class GuideSession extends ChangeNotifier {
   DateTime? _lastReroute;
   bool _ended = false;
   bool _closed = false;
+  bool _overlayEnabled = false;
+  final Map<String, String?> _landmarks = {};
+  final Set<String> _landmarksRequested = {};
 
   Instruction get instr => _instr;
   LatLng? get here => _here;
@@ -139,7 +154,9 @@ class GuideSession extends ChangeNotifier {
   TraceUploader? get uploader => _uploader;
 
   /// 구간 수단과 감지된 활동이 다르다(그 동안의 샘플은 속도 학습에서 빠진다).
-  bool get activityMismatch => _activityOn && ActivityClassifier.mismatch(tracker.mode, _activity.current);
+  bool get activityMismatch =>
+      _activityOn &&
+      ActivityClassifier.mismatch(tracker.mode, _activity.current);
 
   /// 도착 예정 시각. 놓친 열차만큼 밀린 시간(LegTracker.shift)을 더한다.
   DateTime? get eta => _eta?.add(tracker.shift);
@@ -161,7 +178,8 @@ class GuideSession extends ChangeNotifier {
       perm = await Geolocator.requestPermission();
     }
     if (_closed) return;
-    if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) {
+    if (perm == LocationPermission.denied ||
+        perm == LocationPermission.deniedForever) {
       _set(() => _status = '위치 권한이 없어 안내를 시작할 수 없습니다. 설정에서 허용한 뒤 다시 시작하세요.');
       return;
     }
@@ -175,8 +193,9 @@ class GuideSession extends ChangeNotifier {
     // 위치 포그라운드 서비스는 앱이 백그라운드로 간 뒤에는 시작되지 않는다(Android 12+,
     // ForegroundServiceStartNotAllowedException). 스트림은 trip 발급을 기다리기 전에 연다.
     // 발급 전 샘플은 서버에 올리지 않는다.
-    _positions = Geolocator.getPositionStream(locationSettings: guideLocationSettings(sampleInterval))
-        .listen(_onPosition, onError: (e) => _set(() => _status = '위치 오류: $e'));
+    _positions = Geolocator.getPositionStream(
+      locationSettings: guideLocationSettings(sampleInterval),
+    ).listen(_onPosition, onError: (e) => _set(() => _status = '위치 오류: $e'));
     try {
       final tripId = _resumedTripId ?? await api.startTrip();
       if (_closed) {
@@ -200,8 +219,26 @@ class GuideSession extends ChangeNotifier {
     _persist();
     _set(() => _status = '안내 중');
     _ticker = Timer.periodic(tickInterval, (_) => _onTick());
+    // 첫 발화부터 랜드마크를 쓰되 외부 검색 때문에 안내 시작이 지연되지 않게 2초만 기다린다.
+    // 늦게 도착한 결과는 진행 중인 안내에 비동기로 반영하고, 실패하면 거리 안내로 계속한다.
+    final firstLandmarks = _prefetchLandmarks();
+    try {
+      await firstLandmarks.timeout(const Duration(seconds: 2));
+    } on TimeoutException {
+      unawaited(_refreshLandmarks(firstLandmarks));
+    }
+    if (_closed) return;
+    _instr = _buildInstruction();
     await _startVoice();
     await _startActivity();
+    _overlayEnabled = await SettingsStore.loadOverlayGuide();
+    final overlayOpacity = await SettingsStore.loadOverlayOpacity();
+    if (_closed) return;
+    await GuideOverlayPlatform.setEnabled(
+      _overlayEnabled,
+      opacity: overlayOpacity,
+    );
+    _updateOverlay();
   }
 
   /// 음성 안내 준비. 설정이 꺼져 있거나 폰에 쓸 수 있는 음성 엔진이 없으면 소리 없이 진행한다.
@@ -247,32 +284,45 @@ class GuideSession extends ChangeNotifier {
   void _onPosition(Position p) {
     if (_closed || _ending) return;
     final at = now();
+    var refreshLandmarks = false;
     _activity.settle(at);
     final here = LatLng(p.latitude, p.longitude);
-    if (tracker.update(p.latitude, p.longitude, accuracyM: p.accuracy, now: at)) {
+    if (tracker.update(
+      p.latitude,
+      p.longitude,
+      accuracyM: p.accuracy,
+      now: at,
+    )) {
       _offRoute.reset();
       _enterLeg();
     } else {
-      _steps.update(p.latitude, p.longitude, accuracyM: p.accuracy);
+      if (_steps.update(p.latitude, p.longitude, accuracyM: p.accuracy)) {
+        refreshLandmarks = true;
+      }
       _checkOffRoute(p, at);
     }
-    _remainingStops = tracker.current.transitLeg ? _stops.remaining(p.latitude, p.longitude, p.accuracy, at) : 0;
-    _uploader?.add(TraceSample(
-      ts: p.timestamp,
-      lat: p.latitude,
-      lon: p.longitude,
-      accuracyM: p.accuracy,
-      mode: tracker.mode,
-      activity: _activityOn ? _activity.current : null,
-      activityRaw: _rawActivity?.$1,
-      activityConf: _rawActivity?.$2,
-    ));
+    _remainingStops = tracker.current.transitLeg
+        ? _stops.remaining(p.latitude, p.longitude, p.accuracy, at)
+        : 0;
+    _uploader?.add(
+      TraceSample(
+        ts: p.timestamp,
+        lat: p.latitude,
+        lon: p.longitude,
+        accuracyM: p.accuracy,
+        mode: tracker.mode,
+        activity: _activityOn ? _activity.current : null,
+        activityRaw: _rawActivity?.$1,
+        activityConf: _rawActivity?.$2,
+      ),
+    );
     _here = here;
     _accuracyM = p.accuracy;
     _samples++;
     _instr = _buildInstruction(here: here);
     _announce();
     _notify();
+    if (refreshLandmarks) unawaited(_refreshLandmarks());
     _checkArrived(p);
   }
 
@@ -280,7 +330,12 @@ class GuideSession extends ChangeNotifier {
   void _checkArrived(Position p) {
     if (!tracker.isLast || _ending || _ended) return;
     final leg = tracker.current;
-    if (!_arrival.update(geo.distanceM(p.latitude, p.longitude, leg.toLat, leg.toLon), p.accuracy)) return;
+    if (!_arrival.update(
+      geo.distanceM(p.latitude, p.longitude, leg.toLat, leg.toLon),
+      p.accuracy,
+    )) {
+      return;
+    }
     unawaited(_autoEnd());
   }
 
@@ -298,7 +353,9 @@ class GuideSession extends ChangeNotifier {
     // 위치가 아예 끊긴 지하에서도 활동 판정이 흐르게 한다 — 그러지 않으면 정지 감쇠가 멈춰 직전 활동이 화면에 박힌다.
     _activity.settle(at);
     if (tracker.tick(at)) _enterLeg();
-    if (tracker.current.transitLeg) _remainingStops = _stops.remaining(null, null, 0, at);
+    if (tracker.current.transitLeg) {
+      _remainingStops = _stops.remaining(null, null, 0, at);
+    }
     _instr = _buildInstruction();
     _announce();
     _notify();
@@ -308,7 +365,9 @@ class GuideSession extends ChangeNotifier {
   /// 자전거는 양끝이 대여소로 묶여 있어(어디로 달리든 대여소에 반납한다) 둘 다 경로 이탈이 성립하지 않는다.
   void _checkOffRoute(Position p, DateTime at) {
     if (_rerouting || _ending || tracker.current.mode != 'WALK') return;
-    final away = geo.projectOnPolyline(p.latitude, p.longitude, tracker.currentPoints).distM;
+    final away = geo
+        .projectOnPolyline(p.latitude, p.longitude, tracker.currentPoints)
+        .distM;
     if (!_offRoute.update(away, p.accuracy)) return;
     final last = _lastReroute;
     if (last != null && at.difference(last) < rerouteMinGap) {
@@ -328,11 +387,23 @@ class GuideSession extends ChangeNotifier {
       _status = '경로를 벗어나 다시 찾는 중…';
     });
     try {
-      final res = await api.plan(PlanRequest(
-        origin: Place(name: '현재 위치', address: '', lat: from.latitude, lon: from.longitude),
-        destination: Place(name: leg.toName, address: '', lat: leg.toLat, lon: leg.toLon),
-        segmentModes: const [SegmentMode.walk],
-      ));
+      final res = await api.plan(
+        PlanRequest(
+          origin: Place(
+            name: '현재 위치',
+            address: '',
+            lat: from.latitude,
+            lon: from.longitude,
+          ),
+          destination: Place(
+            name: leg.toName,
+            address: '',
+            lat: leg.toLat,
+            lon: leg.toLon,
+          ),
+          segmentModes: const [SegmentMode.walk],
+        ),
+      );
       if (_closed || _ending) return;
       // 기다리는 동안 구간이 넘어갔으면(자동 인계·버튼) 이 결과는 남의 구간 것이다. 이탈 셈은 구간이 바뀔 때
       // 이미 지워졌다.
@@ -340,7 +411,9 @@ class GuideSession extends ChangeNotifier {
         _set(() => _status = '안내 중');
         return;
       }
-      final fresh = res.itineraries.isEmpty ? const <Leg>[] : res.itineraries.first.legs;
+      final fresh = res.itineraries.isEmpty
+          ? const <Leg>[]
+          : res.itineraries.first.legs;
       if (fresh.isEmpty) {
         _offRoute.reset();
         _set(() => _status = '다시 찾은 경로가 없습니다 — 원래 경로로 안내합니다');
@@ -349,7 +422,10 @@ class GuideSession extends ChangeNotifier {
       tracker.replaceCurrent(fresh, now());
       _offRoute.reset();
       _voice.forget('L${tracker.index}:');
-      await _voice.say('경로를 벗어나 다시 찾았습니다', cueKey: 'reroute:${now().millisecondsSinceEpoch}');
+      await _voice.say(
+        '경로를 벗어나 다시 찾았습니다',
+        cueKey: 'reroute:${now().millisecondsSinceEpoch}',
+      );
       _enterLeg();
       _set(() => _status = '경로를 다시 찾았습니다');
     } catch (e) {
@@ -368,6 +444,7 @@ class GuideSession extends ChangeNotifier {
     _stops = StopTracker(leg, tracker.currentPoints, shift: tracker.shift);
     _remainingStops = leg.transitLeg ? leg.stops.length + 1 : 0;
     _instr = _buildInstruction();
+    unawaited(_refreshLandmarks());
     _announce();
     _persist(); // 구간·밀린 시간이 바뀔 때만 남기면 된다(나머지는 안내 내내 그대로다)
   }
@@ -376,20 +453,25 @@ class GuideSession extends ChangeNotifier {
   void _persist() {
     final up = _uploader;
     if (up == null || _ending || _ended || _closed) return;
-    unawaited(store.save(GuideSnapshot(
-      tripId: up.tripId,
-      request: request,
-      itinerary: itinerary,
-      legs: tracker.legs,
-      legIndex: tracker.index,
-      shift: tracker.shift,
-      startedAt: startedAt,
-    )));
+    unawaited(
+      store.save(
+        GuideSnapshot(
+          tripId: up.tripId,
+          request: request,
+          itinerary: itinerary,
+          legs: tracker.legs,
+          legIndex: tracker.index,
+          shift: tracker.shift,
+          startedAt: startedAt,
+        ),
+      ),
+    );
   }
 
   /// 안내가 끝났다. 끝난 안내는 되살리지 않는다.
   void _finished() {
     _set(() => _ended = true);
+    unawaited(GuideOverlayPlatform.stop());
     unawaited(store.clear());
   }
 
@@ -418,22 +500,79 @@ class GuideSession extends ChangeNotifier {
     // 알림창은 접힌 상태에서 제목 한 줄만 보이므로 남은 시간을 제목 앞에 둔다.
     final at = eta;
     final when = at == null ? '' : '도착 예정 ${hhmm(at.toLocal())} · ';
-    _statusNotification.show('남은 $remainMin분 · ${_instr.now}', '$when다음: ${_instr.next}');
+    _statusNotification.show(
+      '남은 $remainMin분 · ${_instr.now}',
+      '$when다음: ${_instr.next}',
+    );
   }
 
-  StepTracker _stepTrackerFor(Leg leg) => StepTracker(leg.steps, endLat: leg.toLat, endLon: leg.toLon);
+  StepTracker _stepTrackerFor(Leg leg) =>
+      StepTracker(leg.steps, endLat: leg.toLat, endLon: leg.toLon);
+
+  String _landmarkKey(WalkStep step) =>
+      '${step.lat.toStringAsFixed(5)},${step.lon.toStringAsFixed(5)}';
+
+  Future<void> _prefetchLandmarks() async {
+    final leg = tracker.current;
+    if (leg.transitLeg || leg.steps.isEmpty) return;
+    final targets = <WalkStep>[];
+    var from = _steps.index;
+    while (targets.length < 3) {
+      final index = nextTurnStepIndex(leg.steps, from);
+      if (index < 0) break;
+      targets.add(leg.steps[index]);
+      from = index;
+    }
+    await Future.wait(
+      targets.map((step) async {
+        final key = _landmarkKey(step);
+        if (!_landmarksRequested.add(key)) return;
+        for (var attempt = 0; attempt < 2; attempt++) {
+          try {
+            _landmarks[key] = (await api.landmark(step.lat, step.lon))?.name;
+            return;
+          } catch (_) {
+            if (attempt == 0) continue;
+            _landmarks.remove(key);
+            _landmarksRequested.remove(key);
+          }
+        }
+      }),
+    );
+  }
+
+  Future<void> _refreshLandmarks([Future<void>? pending]) async {
+    final before = _instr;
+    await (pending ?? _prefetchLandmarks());
+    if (_closed || _ending) return;
+    final after = _buildInstruction();
+    if (after.cueKey != before.cueKey || after.now == before.now) return;
+    _instr = after;
+    // 현재 회전 조회가 늦게 끝난 경우에만 보강 문장을 한 번 읽는다. 평소에는 앞선 단계에서 미리 받아 이 경로를 타지 않는다.
+    await _voice.say(after.utterance, cueKey: '${after.cueKey}:landmark');
+    _notify();
+  }
 
   Instruction _buildInstruction({LatLng? here}) {
     final at = here ?? _here;
+    final leg = tracker.current;
+    var landmark = '';
+    if (!leg.transitLeg && leg.steps.isNotEmpty) {
+      final turn = nextTurnStepIndex(leg.steps, _steps.index);
+      if (turn >= 0) landmark = _landmarks[_landmarkKey(leg.steps[turn])] ?? '';
+    }
     return buildInstruction(
       request: request,
       itinerary: itinerary,
       legIndex: tracker.index,
       legs: tracker.legs,
       stepIndex: _steps.index,
-      stepRemainM: at == null || _steps.isEmpty ? null : _steps.remainM(at.latitude, at.longitude),
+      stepRemainM: at == null || _steps.isEmpty
+          ? null
+          : _steps.remainM(at.latitude, at.longitude),
       remainingStops: _remainingStops,
       nextStopName: _stops.nextStopName(),
+      landmark: landmark,
     );
   }
 
@@ -464,7 +603,8 @@ class GuideSession extends ChangeNotifier {
     if (up.pending > 0) {
       _set(() {
         _ending = false;
-        _status = '샘플 ${up.pending}개 전송 실패(${up.lastError}). 다시 종료를 누르면 재전송합니다.';
+        _status =
+            '샘플 ${up.pending}개 전송 실패(${up.lastError}). 다시 종료를 누르면 재전송합니다.';
       });
       return null;
     }
@@ -488,9 +628,9 @@ class GuideSession extends ChangeNotifier {
   }
 
   void _endFailed(Object e) => _set(() {
-        _ending = false;
-        _status = '종료 실패: $e. 다시 종료를 누르세요.';
-      });
+    _ending = false;
+    _status = '종료 실패: $e. 다시 종료를 누르세요.';
+  });
 
   void _set(void Function() change) {
     if (_closed) return;
@@ -499,7 +639,47 @@ class GuideSession extends ChangeNotifier {
   }
 
   void _notify() {
-    if (!_closed) notifyListeners();
+    if (!_closed) {
+      notifyListeners();
+      _updateOverlay();
+    }
+  }
+
+  void _updateOverlay() {
+    if (!_overlayEnabled || _closed || _ended) return;
+    final leg = tracker.current;
+    LatLng? turn;
+    if (!leg.transitLeg && leg.steps.isNotEmpty) {
+      final index = nextTurnStepIndex(leg.steps, _steps.index);
+      if (index >= 0) turn = LatLng(leg.steps[index].lat, leg.steps[index].lon);
+    }
+    turn ??= LatLng(leg.toLat, leg.toLon);
+    var color = int.tryParse(leg.color, radix: 16);
+    color = color == null
+        ? switch (leg.mode) {
+            'WALK' => 0xFF616161,
+            'BICYCLE' => 0xFF2E7D32,
+            'BUS' => 0xFF1565C0,
+            'SUBWAY' || 'RAIL' => 0xFFD84315,
+            _ => 0xFF6A1B9A,
+          }
+        : 0xFF000000 | color;
+    unawaited(
+      GuideOverlayPlatform.update(
+        GuideOverlaySnapshot(
+          baseUrl: api.baseUrl,
+          token: api.token,
+          points: tracker.currentPoints,
+          here: _here,
+          turn: turn,
+          now: _instr.now,
+          next: _instr.next,
+          remainMin: remainMin,
+          eta: eta == null ? '' : hhmm(eta!.toLocal()),
+          color: color,
+        ),
+      ),
+    );
   }
 
   /// 안내를 놓는다(화면이 아니라 세션 자체를 버릴 때). end() 와 달리 서버의 trip 을 닫지 않는다.
@@ -516,7 +696,7 @@ class GuideSession extends ChangeNotifier {
     _ticker?.cancel();
     _speaker?.stop();
     _statusNotification.cancel();
+    GuideOverlayPlatform.stop();
     super.dispose();
   }
 }
-

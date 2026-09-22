@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'guide/guide_overlay.dart';
 import 'screens/home_screen.dart';
 import 'settings/settings_store.dart';
 
@@ -9,6 +10,9 @@ Future<void> main() async {
   final settings = await SettingsStore().load();
   runApp(SeoulRouteApp(settings: settings));
 }
+
+@pragma('vm:entry-point')
+void overlayMain() => runGuideOverlay();
 
 class SeoulRouteApp extends StatelessWidget {
   const SeoulRouteApp({super.key, required this.settings});

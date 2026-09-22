@@ -206,23 +206,24 @@ func TestTripTracesAndSpeedLearning(t *testing.T) {
 		}()
 	}
 	warm.Wait()
-	codes := make(chan int, 2)
-	results := make(chan map[string]any, 2)
+	type endResult struct {
+		code int
+		body map[string]any
+	}
+	results := make(chan endResult, 2)
 	for i := 0; i < 2; i++ {
 		go func() {
 			rr, out := do(t, h, http.MethodPost, "/trips/"+trip2+"/end", "", token)
-			codes <- rr.Code
-			results <- out
+			results <- endResult{code: rr.Code, body: out}
 		}()
 	}
-	c1, c2 := <-codes, <-codes
 	r1, r2 := <-results, <-results
-	if c1+c2 != 200+409 {
-		t.Fatalf("동시 종료 code=%d,%d (200+409 여야)", c1, c2)
+	if r1.code+r2.code != 200+409 {
+		t.Fatalf("동시 종료 code=%d,%d (200+409 여야)", r1.code, r2.code)
 	}
-	rr, out = &httptest.ResponseRecorder{Code: 200}, r1
-	if c1 != 200 {
-		out = r2
+	rr, out = &httptest.ResponseRecorder{Code: 200}, r1.body
+	if r1.code != 200 {
+		out = r2.body
 	}
 	pw = out["profile"].(map[string]any)["walk"].(map[string]any)
 	v2 := out["trip"].(map[string]any)["walk"].(map[string]any)["speed_mps"].(float64)

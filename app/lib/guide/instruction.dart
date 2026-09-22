@@ -6,7 +6,12 @@ import '../util/leg_names.dart';
 /// 안내 카드에 넣을 문구. now 는 실시간 남은 거리·정거장 수가 들어가 매 위치마다 바뀐다. utterance 는 읽어 줄 문장이고
 /// cueKey 는 그 안내 시점의 이름(탑승·하차·몇 번째 회전)이다 — VoiceGuide 는 같은 cueKey 를 한 번만 읽는다.
 class Instruction {
-  const Instruction({required this.now, required this.next, this.utterance, this.cueKey = ''});
+  const Instruction({
+    required this.now,
+    required this.next,
+    this.utterance,
+    this.cueKey = '',
+  });
 
   final String now;
   final String next;
@@ -55,10 +60,18 @@ String turnPhrase(String dir, {String entrance = '', String exit = ''}) {
 /// 거리 문구. 10m 단위로 끊고, 그보다 짧으면 "잠시".
 String _distText(double m) => m < 10 ? '잠시' : '${(m / 10).round() * 10}m';
 
-String _go(String street, double distM, {required bool bike}) {
+String _go(double distM, {required bool bike}) {
   final verb = bike ? '주행' : '직진';
-  final head = street.isEmpty ? '' : '$street 따라 ';
-  return '$head${_distText(distM)} $verb';
+  return '${_distText(distM)} $verb';
+}
+
+/// 현재 단계부터 이어지는 CONTINUE 를 건너뛴 다음 실제 행동 단계. 없으면 -1이다.
+int nextTurnStepIndex(List<WalkStep> steps, int stepIndex) {
+  var j = stepIndex.clamp(0, steps.isEmpty ? 0 : steps.length - 1) + 1;
+  while (j < steps.length && steps[j].dir == 'CONTINUE') {
+    j++;
+  }
+  return j < steps.length ? j : -1;
 }
 
 /// 안내 카드 문구를 만든다. stepRemainM 은 현재 단계의 남은 거리(도보·자전거), remainingStops 는 하차까지
@@ -74,6 +87,7 @@ Instruction buildInstruction({
   double? stepRemainM,
   int remainingStops = 0,
   String? nextStopName,
+  String landmark = '',
 }) {
   final ls = legs ?? itinerary.legs;
   final leg = ls[legIndex];
@@ -106,7 +120,12 @@ Instruction buildInstruction({
   if (leg.steps.isEmpty) {
     final mins = (leg.durationSec / 60).round();
     final text = '$to까지 ${leg.label} $mins분';
-    return Instruction(now: text, next: next, utterance: text, cueKey: 'L$legIndex:walk');
+    return Instruction(
+      now: text,
+      next: next,
+      utterance: text,
+      cueKey: 'L$legIndex:walk',
+    );
   }
   final i = stepIndex.clamp(0, leg.steps.length - 1);
   final step = leg.steps[i];
@@ -114,16 +133,9 @@ Instruction buildInstruction({
   // 다음 "실제 회전"까지 이어지는 직진 단계들은 한 안내로 합친다(OTP 는 길 이름·종류가 바뀔 때마다 CONTINUE 를 낸다).
   var j = i + 1;
   var ahead = 0.0; // 현재 단계 뒤, 회전 전까지의 직진 단계 거리 합
-  // 길 이름은 합친 단계 중 가장 긴 단계의 것을 쓴다(7m 짜리 광장 이름으로 120m 를 부르지 않게).
-  var street = step.street;
-  var longest = step.distanceM;
   while (j < leg.steps.length && leg.steps[j].dir == 'CONTINUE') {
     final s = leg.steps[j];
     ahead += s.distanceM;
-    if (s.distanceM > longest) {
-      longest = s.distanceM;
-      street = s.street;
-    }
     j++;
   }
   final live = (stepRemainM ?? step.distanceM) + ahead;
@@ -131,18 +143,23 @@ Instruction buildInstruction({
   final lead = _actionLead(step);
   if (j >= leg.steps.length) {
     return Instruction(
-      now: '$lead${_go(street, live, bike: bike)} 하면 $to 도착',
+      now: '$lead${_go(live, bike: bike)} 하면 $to 도착',
       next: next,
-      utterance: '$lead${_go(street, fixed, bike: bike)} 하면 $to 도착',
+      utterance: '$lead${_go(fixed, bike: bike)} 하면 $to 도착',
       cueKey: 'L$legIndex:arrive',
     );
   }
   final after = leg.steps[j];
-  final turn = turnPhrase(after.dir, entrance: after.entrance, exit: after.exit);
+  final turn = turnPhrase(
+    after.dir,
+    entrance: after.entrance,
+    exit: after.exit,
+  );
+  final cue = landmark.isEmpty ? turn : '$landmark 근처에서 $turn';
   return Instruction(
-    now: '$lead${_go(street, live, bike: bike)} 후 $turn',
+    now: '$lead${_go(live, bike: bike)} 후 $cue',
     next: next,
-    utterance: '$lead${_go(street, fixed, bike: bike)} 후 $turn',
+    utterance: '$lead${_go(fixed, bike: bike)} 후 $cue',
     cueKey: 'L$legIndex:T$j', // 같은 회전을 향하는 동안은 단계가 바뀌어도 같은 안내다
   );
 }
@@ -162,7 +179,8 @@ String _actionLead(WalkStep step) {
   }
 }
 
-String _headsignText(Leg leg) => leg.headsign.isEmpty ? '' : ' ${leg.headsign} 방면';
+String _headsignText(Leg leg) =>
+    leg.headsign.isEmpty ? '' : ' ${leg.headsign} 방면';
 
 /// 목적격 조사를 붙인다("2호선을"·"버스 402를"). 받침이 있으면 을, 없으면 를. 숫자는 읽는 소리로 가린다.
 String withObjectParticle(String word) {
@@ -185,17 +203,31 @@ String _nextAction(PlanRequest request, List<Leg> legs, int legIndex) {
   final next = legs[legIndex + 1];
   final to = legEndpointName(request, next.toName, next.toLat, next.toLon);
   if (next.transitLeg) {
-    final board = legEndpointName(request, next.fromName, next.fromLat, next.fromLon);
+    final board = legEndpointName(
+      request,
+      next.fromName,
+      next.fromLat,
+      next.fromLon,
+    );
     final verb = legs[legIndex].transitLeg ? '환승' : '탑승';
     return '$verb · ${next.label}${_headsignText(next)} · $board';
   }
-  if (next.mode == 'BICYCLE') return '${next.rentedBike ? '따릉이 대여' : '자전거 타기'} · $to';
-  if (legs[legIndex].mode == 'BICYCLE') return '${legs[legIndex].rentedBike ? '따릉이 반납' : '자전거 세우기'} · $to';
+  if (next.mode == 'BICYCLE') {
+    return '${next.rentedBike ? '따릉이 대여' : '자전거 타기'} · $to';
+  }
+  if (legs[legIndex].mode == 'BICYCLE') {
+    return '${legs[legIndex].rentedBike ? '따릉이 반납' : '자전거 세우기'} · $to';
+  }
   if (legs[legIndex].transitLeg) {
     // 내린 뒤 도보가 다음 탑승으로 이어지면(역 안 환승 통로·정류장 간 도보) 환승으로 안내한다.
     if (legIndex + 2 < legs.length && legs[legIndex + 2].transitLeg) {
       final ride = legs[legIndex + 2];
-      final board = legEndpointName(request, ride.fromName, ride.fromLat, ride.fromLon);
+      final board = legEndpointName(
+        request,
+        ride.fromName,
+        ride.fromLat,
+        ride.fromLon,
+      );
       return '환승 · ${ride.label}${_headsignText(ride)} · $board';
     }
     // 출구 안내는 역 출입구를 실제로 지날 때만 한다(버스 정류장에는 출구가 없다).

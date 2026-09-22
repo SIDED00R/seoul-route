@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../api/client.dart';
 import '../location/current_location.dart';
 import '../models/place.dart';
+import '../models/favorite_place.dart';
 import '../models/plan_request.dart';
 import '../settings/settings_store.dart';
 import 'place_search_screen.dart';
+import 'favorite_places_screen.dart';
 import 'results_screen.dart';
 
 /// 최근 경로에서 고른 검색. 같은 값이 다시 와도 입력을 덮어쓰도록 새 객체인지로 구분한다.
@@ -51,6 +53,9 @@ class _PlanScreenState extends State<PlanScreen> {
   bool _busy = false;
   bool _locating = false;
   String _error = '';
+  List<FavoritePlace>? _favorites;
+  String _favoritesError = '';
+  int _favoritesLoadGeneration = 0;
 
   static const maxVia = 5;
 
@@ -58,12 +63,25 @@ class _PlanScreenState extends State<PlanScreen> {
   void initState() {
     super.initState();
     _applyPreset();
+    if (widget.settings.ready) _loadFavorites();
   }
 
   @override
   void didUpdateWidget(PlanScreen old) {
     super.didUpdateWidget(old);
     if (!identical(widget.preset, old.preset)) _applyPreset();
+    if (widget.settings.token != old.settings.token ||
+        widget.settings.baseUrl != old.settings.baseUrl) {
+      if (widget.settings.ready) {
+        _loadFavorites(clear: true);
+      } else {
+        _favoritesLoadGeneration++;
+        setState(() {
+          _favorites = null;
+          _favoritesError = '';
+        });
+      }
+    }
   }
 
   /// 최근 경로에서 고른 검색으로 입력을 채운다.
@@ -78,19 +96,56 @@ class _PlanScreenState extends State<PlanScreen> {
         ..addAll(p.request.via);
       _modes
         ..clear()
-        ..addAll(p.request.segmentModes.isEmpty
-            ? List.filled(p.request.via.length + 1, SegmentMode.any)
-            : p.request.segmentModes);
+        ..addAll(
+          p.request.segmentModes.isEmpty
+              ? List.filled(p.request.via.length + 1, SegmentMode.any)
+              : p.request.segmentModes,
+        );
       _error = '';
     });
   }
 
-  ApiClient get _api => ApiClient(baseUrl: widget.settings.baseUrl, token: widget.settings.token);
+  ApiClient get _api =>
+      ApiClient(baseUrl: widget.settings.baseUrl, token: widget.settings.token);
+
+  Future<void> _loadFavorites({bool clear = false}) async {
+    final generation = ++_favoritesLoadGeneration;
+    final api = _api;
+    if (clear) {
+      setState(() {
+        _favorites = null;
+        _favoritesError = '';
+      });
+    }
+    try {
+      final values = await api.favoritePlaces();
+      if (mounted && generation == _favoritesLoadGeneration) {
+        setState(() {
+          _favorites = values;
+          _favoritesError = '';
+        });
+      }
+    } catch (_) {
+      if (mounted && generation == _favoritesLoadGeneration) {
+        setState(() => _favoritesError = '자주 가는 곳을 불러오지 못했습니다.');
+      }
+    }
+  }
+
+  Future<void> _manageFavorites() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => FavoritePlacesScreen(api: _api)),
+    );
+    if (mounted) await _loadFavorites();
+  }
 
   Future<Place?> _pick(String title) => Navigator.push<Place>(
-        context,
-        MaterialPageRoute(builder: (_) => PlaceSearchScreen(api: _api, title: title)),
-      );
+    context,
+    MaterialPageRoute(
+      builder: (_) => PlaceSearchScreen(api: _api, title: title),
+    ),
+  );
 
   Future<void> _plan() async {
     final o = _origin;
@@ -100,16 +155,27 @@ class _PlanScreenState extends State<PlanScreen> {
       _busy = true;
       _error = '';
     });
-    final req = PlanRequest(origin: o, destination: d, via: List.of(_via), segmentModes: List.of(_modes));
+    final req = PlanRequest(
+      origin: o,
+      destination: d,
+      via: List.of(_via),
+      segmentModes: List.of(_modes),
+    );
     try {
       final res = await _api.plan(req);
       if (!mounted) return;
       await Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => ResultsScreen(api: _api, request: req, result: res)),
+        MaterialPageRoute(
+          builder: (_) => ResultsScreen(api: _api, request: req, result: res),
+        ),
       );
     } on ApiException catch (e) {
-      setState(() => _error = e.status == 401 ? '토큰이 없거나 만료됨 — 설정에서 입력' : '실패: ${e.message}');
+      setState(
+        () => _error = e.status == 401
+            ? '토큰이 없거나 만료됨 — 설정에서 입력'
+            : '실패: ${e.message}',
+      );
     } catch (e) {
       setState(() => _error = '연결 실패: $e');
     } finally {
@@ -135,118 +201,220 @@ class _PlanScreenState extends State<PlanScreen> {
   }
 
   void _addVia(Place p) => setState(() {
-        _via.add(p);
-        _modes.add(SegmentMode.any);
-      });
+    _via.add(p);
+    _modes.add(SegmentMode.any);
+  });
 
   void _removeVia(int i) => setState(() {
-        _via.removeAt(i);
-        _modes.removeAt(i + 1);
-      });
+    _via.removeAt(i);
+    _modes.removeAt(i + 1);
+  });
 
   @override
   Widget build(BuildContext context) {
-    final ready = widget.settings.ready && _origin != null && _destination != null && !_busy && !_locating;
+    final ready =
+        widget.settings.ready &&
+        _origin != null &&
+        _destination != null &&
+        !_busy &&
+        !_locating;
     // 홈이 앱바·탭을 들고 있으므로 여기서는 본문만 낸다. Scaffold 는 ListTile 이 필요로 하는 Material 바탕을 준다.
     return Scaffold(
       body: ListView(
-          padding: const EdgeInsets.all(12),
-          children: [
-            if (!widget.settings.ready)
-              Card(
-                color: Theme.of(context).colorScheme.errorContainer,
-                child: ListTile(
-                  title: const Text('서버 주소와 토큰을 먼저 설정하세요'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: widget.onOpenSettings,
-                ),
+        padding: const EdgeInsets.all(12),
+        children: [
+          if (!widget.settings.ready)
+            Card(
+              color: Theme.of(context).colorScheme.errorContainer,
+              child: ListTile(
+                title: const Text('서버 주소와 토큰을 먼저 설정하세요'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: widget.onOpenSettings,
               ),
-            _placeTile('출발', Icons.trip_origin, _origin, () async {
-              if (_locating || _busy) return; // 현재 위치를 받는 동안·경로 요청 중에는 출발지 검색을 열지 않는다
+            ),
+          _placeTile(
+            '출발',
+            Icons.trip_origin,
+            _origin,
+            () async {
+              if (_locating || _busy) {
+                return; // 현재 위치를 받는 동안·경로 요청 중에는 출발지 검색을 열지 않는다
+              }
               final p = await _pick('출발지');
               if (p != null) setState(() => _origin = p);
             },
-                extra: _locating
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
-                      )
-                    : IconButton(
-                        tooltip: '현재 위치',
-                        icon: const Icon(Icons.my_location),
-                        onPressed: _busy ? null : _useCurrentLocation, // 탐색 요청 중에는 출발지를 바꾸지 않는다
-                      )),
-            _segmentMode(0),
-            for (var i = 0; i < _via.length; i++) ...[
-              ListTile(
-                leading: const Icon(Icons.flag),
-                title: Text('경유 ${i + 1}: ${_via[i].name}'),
-                subtitle: Text(_via[i].address),
-                trailing: IconButton(icon: const Icon(Icons.close), onPressed: _busy ? null : () => _removeVia(i)),
+            extra: _locating
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : IconButton(
+                    tooltip: '현재 위치',
+                    icon: const Icon(Icons.my_location),
+                    onPressed: _busy
+                        ? null
+                        : _useCurrentLocation, // 탐색 요청 중에는 출발지를 바꾸지 않는다
+                  ),
+          ),
+          _segmentMode(0),
+          for (var i = 0; i < _via.length; i++) ...[
+            ListTile(
+              leading: const Icon(Icons.flag),
+              title: Text('경유 ${i + 1}: ${_via[i].name}'),
+              subtitle: Text(_via[i].address),
+              trailing: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: _busy ? null : () => _removeVia(i),
               ),
-              _segmentMode(i + 1),
-            ],
-            if (_via.length < maxVia)
-              TextButton.icon(
-                onPressed: _busy
-                    ? null
-                    : () async {
-                        final p = await _pick('경유지 ${_via.length + 1}');
-                        if (p != null) _addVia(p);
-                      },
-                icon: const Icon(Icons.add),
-                label: const Text('경유지 추가'),
-              ),
-            _placeTile('도착', Icons.place, _destination, () async {
-              if (_busy) return; // 경로 요청 중에는 도착지 검색을 열지 않는다
-              final p = await _pick('도착지');
-              if (p != null) setState(() => _destination = p);
-            }),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: ready ? _plan : null,
-              icon: _busy
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.directions),
-              label: Text(_busy ? '탐색 중 (경유지가 있으면 30초 이상)' : '지금 출발 경로 찾기'),
             ),
-          if (_error.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error)),
+            _segmentMode(i + 1),
+          ],
+          if (_via.length < maxVia)
+            TextButton.icon(
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      final p = await _pick('경유지 ${_via.length + 1}');
+                      if (p != null) _addVia(p);
+                    },
+              icon: const Icon(Icons.add),
+              label: const Text('경유지 추가'),
+            ),
+          _placeTile('도착', Icons.place, _destination, () async {
+            if (_busy) return; // 경로 요청 중에는 도착지 검색을 열지 않는다
+            final p = await _pick('도착지');
+            if (p != null) setState(() => _destination = p);
+          }),
+          if (widget.settings.ready) _favoriteDestinations(),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: ready ? _plan : null,
+            icon: _busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.directions),
+            label: Text(_busy ? '탐색 중 (경유지가 있으면 30초 이상)' : '지금 출발 경로 찾기'),
+          ),
+          if (_error.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(_error),
+            ),
         ],
       ),
     );
   }
 
   /// extra 는 검색 아이콘 앞에 붙는 버튼(출발지의 현재 위치).
-  Widget _placeTile(String label, IconData icon, Place? p, VoidCallback onTap, {Widget? extra}) => ListTile(
-        leading: Icon(icon),
-        title: Text(p == null ? '$label지 선택' : '$label: ${p.name}'),
-        subtitle: p == null ? null : Text(p.address),
-        trailing: extra == null
-            ? const Icon(Icons.search)
-            : Row(mainAxisSize: MainAxisSize.min, children: [extra, const Icon(Icons.search)]),
-        onTap: onTap,
-      );
+  Widget _placeTile(
+    String label,
+    IconData icon,
+    Place? p,
+    VoidCallback onTap, {
+    Widget? extra,
+  }) => ListTile(
+    leading: Icon(icon),
+    title: Text(p == null ? '$label지 선택' : '$label: ${p.name}'),
+    subtitle: p == null ? null : Text(p.address),
+    trailing: extra == null
+        ? const Icon(Icons.search)
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [extra, const Icon(Icons.search)],
+          ),
+    onTap: onTap,
+  );
 
-  /// 구간 i(출발→경유1 이 0)의 수단 고정 선택.
-  Widget _segmentMode(int i) => Padding(
-        padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
-        child: Row(
+  Widget _favoriteDestinations() => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            SizedBox(width: 72, child: Text('구간 ${i + 1} 수단', style: Theme.of(context).textTheme.bodySmall)),
-            Expanded(
-              child: SegmentedButton<SegmentMode>(
-                segments: [for (final m in SegmentMode.values) ButtonSegment(value: m, label: Text(m.label))],
-                selected: {_modes[i]},
-                showSelectedIcon: false,
-                style: const ButtonStyle(
-                  visualDensity: VisualDensity.compact,
-                  padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 6)),
-                ),
-                // 경로 요청 중에는 수단을 바꾸지 않는다(null 이면 버튼이 꺼진다).
-                onSelectionChanged: _busy ? null : (s) => setState(() => _modes[i] = s.first),
-              ),
+            Text('자주 가는 곳', style: Theme.of(context).textTheme.labelLarge),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: _busy ? null : _manageFavorites,
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('추가·관리'),
             ),
           ],
         ),
-      );
+        if (_favorites == null && _favoritesError.isEmpty)
+          const LinearProgressIndicator()
+        else if (_favorites != null && _favorites!.isEmpty)
+          const Text('집·회사·자주 가는 장소를 추가해 빠르게 선택하세요.')
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final favorite in _favorites ?? const <FavoritePlace>[])
+                ActionChip(
+                  avatar: Icon(_favoriteIcon(favorite.kind), size: 18),
+                  label: Text(favorite.label),
+                  onPressed: _busy
+                      ? null
+                      : () => setState(() => _destination = favorite.place),
+                ),
+            ],
+          ),
+        if (_favoritesError.isNotEmpty)
+          Text(
+            _favoritesError,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+      ],
+    ),
+  );
+
+  static IconData _favoriteIcon(FavoriteKind kind) => switch (kind) {
+    FavoriteKind.home => Icons.home,
+    FavoriteKind.work => Icons.business,
+    FavoriteKind.custom => Icons.star,
+  };
+
+  /// 구간 i(출발→경유1 이 0)의 수단 고정 선택.
+  Widget _segmentMode(int i) => Padding(
+    padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+    child: Row(
+      children: [
+        SizedBox(
+          width: 72,
+          child: Text(
+            '구간 ${i + 1} 수단',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+        Expanded(
+          child: SegmentedButton<SegmentMode>(
+            segments: [
+              for (final m in SegmentMode.values)
+                ButtonSegment(value: m, label: Text(m.label)),
+            ],
+            selected: {_modes[i]},
+            showSelectedIcon: false,
+            style: const ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              padding: WidgetStatePropertyAll(
+                EdgeInsets.symmetric(horizontal: 6),
+              ),
+            ),
+            // 경로 요청 중에는 수단을 바꾸지 않는다(null 이면 버튼이 꺼진다).
+            onSelectionChanged: _busy
+                ? null
+                : (s) => setState(() => _modes[i] = s.first),
+          ),
+        ),
+      ],
+    ),
+  );
 }
