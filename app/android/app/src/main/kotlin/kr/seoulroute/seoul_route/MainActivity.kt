@@ -141,7 +141,10 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
-        if (::guideOverlay.isInitialized && isFinishing) guideOverlay.stop()
+        // isFinishing 이 아닌 파괴("활동 보존 안 함"·백그라운드 회수)에서도 정리한다. 이 Activity 의 Flutter 엔진(안내 세션)이
+        // 같이 죽어 창을 갱신할 주체가 없고, 재생성된 Activity 가 새 창을 띄우면 두 겹이 된다(진하기가 높으면 합산
+        // 불투명도가 터치 상한을 넘겨 뒤 앱 터치도 막힌다 — GuideOverlayController 클래스 주석의 합산 규칙).
+        if (::guideOverlay.isInitialized) guideOverlay.stop()
         super.onDestroy()
     }
 

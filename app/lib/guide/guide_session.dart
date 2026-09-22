@@ -550,24 +550,30 @@ class GuideSession extends ChangeNotifier {
 
   Future<void> _refreshLandmarks([Future<void>? pending]) async {
     final before = _instr;
+    final hadLandmark = _currentTurnLandmark().isNotEmpty;
     await (pending ?? _prefetchLandmarks());
     if (_closed || _ending) return;
     final after = _buildInstruction();
-    if (after.cueKey != before.cueKey || after.now == before.now) return;
+    // 같은 회전인데 랜드마크 이름이 새로 붙었을 때만 다시 읽는다. 거리(now)는 걷기만 해도 바뀌므로 비교 기준이 못 된다 —
+    // 결과가 null 이거나 실패한 늦은 조회는 같은 문장을 두 번 읽게 했다.
+    if (after.cueKey != before.cueKey || hadLandmark || _currentTurnLandmark().isEmpty) return;
     _instr = after;
     // 현재 회전 조회가 늦게 끝난 경우에만 보강 문장을 한 번 읽는다. 평소에는 앞선 단계에서 미리 받아 이 경로를 타지 않는다.
     await _voice.say(after.utterance, cueKey: '${after.cueKey}:landmark');
     _notify();
   }
 
+  /// 현재 구간의 다음 회전점에 붙은 랜드마크 이름. 없으면 빈 문자열.
+  String _currentTurnLandmark() {
+    final leg = tracker.current;
+    if (leg.transitLeg || leg.steps.isEmpty) return '';
+    final turn = nextTurnStepIndex(leg.steps, _steps.index);
+    return turn >= 0 ? _landmarks[_landmarkKey(leg.steps[turn])] ?? '' : '';
+  }
+
   Instruction _buildInstruction({LatLng? here}) {
     final at = here ?? _here;
-    final leg = tracker.current;
-    var landmark = '';
-    if (!leg.transitLeg && leg.steps.isNotEmpty) {
-      final turn = nextTurnStepIndex(leg.steps, _steps.index);
-      if (turn >= 0) landmark = _landmarks[_landmarkKey(leg.steps[turn])] ?? '';
-    }
+    final landmark = _currentTurnLandmark();
     return buildInstruction(
       request: request,
       itinerary: itinerary,
