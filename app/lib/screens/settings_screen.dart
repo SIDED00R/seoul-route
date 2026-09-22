@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../api/client.dart';
 import '../auth/google_login.dart';
+import '../env.dart';
 import '../settings/settings_store.dart';
 
 /// 서버 주소와 토큰 입력. "연결 확인" 은 /health(무인증)와 /users/me·/users/me/speed(인증) 를 실제로 호출한다.
+/// prod flavor 는 서버 주소가 빌드에 고정돼 읽기 전용이고 개발용 토큰 칸이 없다(Env).
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
@@ -111,9 +113,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           TextField(
             controller: _url,
-            decoration: const InputDecoration(
+            readOnly: Env.isProd,
+            decoration: InputDecoration(
               labelText: '서버 주소',
-              helperText: '에뮬레이터: http://10.0.2.2:8081 · USB 실기기(adb reverse): http://127.0.0.1:8081',
+              helperText: Env.isProd
+                  ? '운영 빌드에 고정된 주소라 바꿀 수 없습니다'
+                  : '개발 스택 — 에뮬레이터: http://10.0.2.2:8082 · USB 실기기(adb reverse): http://127.0.0.1:8082',
+              errorText: Env.isProd && _url.text.isEmpty ? '빌드에 서버 주소가 없습니다(env.prod.json 의 API_BASE_URL)' : null,
             ),
             keyboardType: TextInputType.url,
           ),
@@ -124,14 +130,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             label: const Text('Google 계정으로 로그인'),
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _token,
-            decoration: const InputDecoration(
-              labelText: '토큰(JWT)',
-              helperText: 'Google 로그인이 채운다. 개발용: PC 에서 go run ./cmd/devtoken <이름> 으로 발급해 붙여 넣기',
+          // 개발용 토큰 붙여넣기는 dev 에만. prod 는 Google 로그인이 채운 토큰만 보이지 않게 들고 있다
+          // (첫 실행 때 이전 앱이 남긴 토큰은 SettingsStore.load 가 버린다).
+          if (!Env.isProd)
+            TextField(
+              controller: _token,
+              decoration: const InputDecoration(
+                labelText: '토큰(JWT)',
+                helperText: 'Google 로그인이 채운다. 개발용: PC 에서 go run ./cmd/devtoken <이름> 으로 발급해 붙여 넣기',
+              ),
+              maxLines: 3,
             ),
-            maxLines: 3,
-          ),
           const SizedBox(height: 8),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
