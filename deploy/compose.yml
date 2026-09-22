@@ -38,6 +38,7 @@ services:
       OTP_URL: http://otp:8080
       JWT_SECRET: ${JWT_SECRET}
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      AUTH_ALLOWED_EMAILS: ${AUTH_ALLOWED_EMAILS:-} # 운영은 실제 개인 계정만. 비면 모든 계정 허용(기동 로그 경고). 개발 스택은 compose.dev.yml
       SEOUL_OPENAPI_KEY: ${SEOUL_OPENAPI_KEY:-} # 비면 GBFS 비활성(/gbfs 503) — 따릉이 라우팅이 죽는다
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-} # 비면 /places/search 503
       VWORLD_API_KEY: ${VWORLD_API_KEY:-}         # 비면 /tiles 503

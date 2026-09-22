@@ -16,6 +16,7 @@ type Config struct {
 	OTPURL              string
 	JWTSecret           string
 	GoogleOAuthClientID string // 비어 있으면 /auth/google 이 503 을 돌려준다
+	AuthAllowedEmails   string // 쉼표 구분 허용 계정 이메일. 비어 있으면 모든 Google 계정 허용(auth.EmailAllowlist)
 	SeoulOpenAPIKey     string // 비어 있으면 따릉이 GBFS 어댑터를 띄우지 않는다
 	PublicURL           string // OTP 가 GBFS 를 읽어갈 이 서버의 주소
 	KakaoRESTKey        string // 비어 있으면 /places/search 가 503. 키는 서버에만 두고 앱에는 내려보내지 않는다
@@ -52,6 +53,7 @@ func Load() (Config, error) {
 		OTPURL:              strings.TrimRight(get("OTP_URL", "http://localhost:8080"), "/"),
 		JWTSecret:           get("JWT_SECRET", ""),
 		GoogleOAuthClientID: get("GOOGLE_OAUTH_CLIENT_ID", ""),
+		AuthAllowedEmails:   get("AUTH_ALLOWED_EMAILS", ""),
 		SeoulOpenAPIKey:     get("SEOUL_OPENAPI_KEY", ""),
 		KakaoRESTKey:        get("KAKAO_REST_API_KEY", ""),
 		VWorldKey:           get("VWORLD_API_KEY", ""),

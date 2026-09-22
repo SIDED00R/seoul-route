@@ -44,14 +44,17 @@ func testServer(t *testing.T) (*Server, *pgxpool.Pool) {
 	}, pool
 }
 
-// fakeGoogle: "good:<sub>" 형식만 통과시킨다.
+// fakeGoogle: "good:<sub>" 형식만 통과시킨다(이메일 <sub>@example.com, 확인됨). "unverified:<sub>" 는 미확인 이메일.
 type fakeGoogle struct{}
 
-func (fakeGoogle) Subject(_ context.Context, tok string) (string, error) {
+func (fakeGoogle) Verify(_ context.Context, tok string) (auth.Identity, error) {
 	if sub, ok := strings.CutPrefix(tok, "good:"); ok {
-		return sub, nil
+		return auth.Identity{Sub: sub, Email: sub + "@example.com", EmailVerified: true}, nil
 	}
-	return "", errors.New("bad token")
+	if sub, ok := strings.CutPrefix(tok, "unverified:"); ok {
+		return auth.Identity{Sub: sub, Email: sub + "@example.com", EmailVerified: false}, nil
+	}
+	return auth.Identity{}, errors.New("bad token")
 }
 
 func do(t *testing.T, h http.Handler, method, path, body, bearer string) (*httptest.ResponseRecorder, map[string]any) {

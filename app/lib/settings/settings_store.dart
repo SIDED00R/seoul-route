@@ -1,7 +1,10 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// 서버 주소는 SharedPreferences에, Google 로그인 또는 devtoken으로 발급한 JWT는 보안 저장소에 둔다.
+import '../env.dart';
+
+// 서버 주소는 SharedPreferences에(prod flavor 는 빌드에 박힌 Env.fixedBaseUrl 만 쓴다), Google 로그인 또는 devtoken으로
+// 발급한 JWT는 보안 저장소에 둔다.
 class Settings {
   const Settings({
     required this.baseUrl,
@@ -23,8 +26,8 @@ class Settings {
   static const minOverlayOpacity = 0.2;
   static const maxOverlayOpacity = 0.8;
 
-  // 안드로이드 에뮬레이터에서 호스트 PC 의 loopback 은 10.0.2.2 다.
-  static const defaultBaseUrl = 'http://10.0.2.2:8081';
+  // dev flavor 기본값: 안드로이드 에뮬레이터에서 호스트 PC 의 loopback 은 10.0.2.2, 개발 스택(compose.dev.yml) api 는 8082.
+  static const defaultBaseUrl = 'http://10.0.2.2:8082';
 
   bool get ready => baseUrl.isNotEmpty && token.isNotEmpty;
 }
@@ -40,6 +43,7 @@ class SettingsStore {
   static const _kVoiceGuide = 'voice_guide';
   static const _kOverlayGuide = 'overlay_guide';
   static const _kOverlayOpacity = 'overlay_opacity';
+  static const _kProdTokenPurged = 'prod_token_purged'; // prod 첫 실행 토큰 폐기를 한 번만 하기 위한 표시
   final TokenStorage tokenStorage;
 
   Future<Settings> load() async {
@@ -53,8 +57,17 @@ class SettingsStore {
       token = legacyToken;
     }
     if (legacyToken != null) await p.remove(_kLegacyToken);
+    // prod 첫 실행 1회: flavor 가 없던 시절의 앱이 같은 패키지에 남긴 토큰(붙여 넣은 devtoken 일 수 있다)을 버린다.
+    // prod 는 Google 로그인만 허용하므로 출처를 모르는 토큰은 쓰지 않는다. 홈이 "먼저 설정하세요" 를 띄워 재로그인을 이끈다.
+    // 레거시 평문 토큰 수입(위) 뒤에 둬야 지운 직후 되살아나지 않는다.
+    if (Env.isProd && !(p.getBool(_kProdTokenPurged) ?? false)) {
+      await tokenStorage.delete();
+      token = null;
+      await p.setBool(_kProdTokenPurged, true);
+    }
     return Settings(
-      baseUrl: p.getString(_kBaseUrl) ?? Settings.defaultBaseUrl,
+      // prod 는 저장값을 무시하고 빌드에 박힌 주소만 쓴다(설정 화면에서도 못 바꾼다).
+      baseUrl: Env.isProd ? Env.fixedBaseUrl : (p.getString(_kBaseUrl) ?? Settings.defaultBaseUrl),
       token: token ?? '',
       voiceGuide: p.getBool(_kVoiceGuide) ?? true,
       overlayGuide: p.getBool(_kOverlayGuide) ?? false,

@@ -58,6 +58,7 @@ Copy-Item .env.example .env
 | `KAKAO_REST_API_KEY` | 장소 검색·역지오코딩 |
 | `VWORLD_API_KEY` | 지도 타일 |
 | `GOOGLE_OAUTH_CLIENT_ID` | Google 로그인 |
+| `AUTH_ALLOWED_EMAILS` | Google 로그인 허용 계정(쉼표 구분). 비우면 전부 허용, 목록 밖은 403 |
 | `ODSAY_API_KEY` | 경로 정확도 대조 |
 
 값에 `$`가 있으면 Compose 보간을 막도록 작은따옴표로 감쌉니다. `.env`, API 키, OTP jar, 원천 데이터와 생성물은 커밋하지 않습니다.
@@ -100,14 +101,23 @@ go run ./cmd/api
 go run ./cmd/devtoken local-user  # Google 로그인 전 개발 토큰
 ```
 
-전체 서버 스택은 루트에서 실행할 수 있습니다.
+전체 서버 스택은 루트에서 실행할 수 있습니다. 운영과 개발은 프로젝트명·DB 볼륨·포트·환경 파일이 다른 두 스택으로 나란히 돕니다.
 
 ```powershell
+# 운영: .env, OTP 8080 · API 8081 (앱 prod flavor 가 붙는다)
 docker compose --env-file .env -f deploy/compose.yml up -d
-docker compose --env-file .env -f deploy/compose.yml ps
+# 개발: .env.dev, OTP 8083 · API 8082 · DB 5433 (앱 dev flavor 가 붙는다)
+docker compose --env-file .env.dev -f deploy/compose.dev.yml up -d
 ```
 
-Compose 실행 전 `otp/graph.obj`와 `otp/data/` 생성물이 필요합니다. 8080·8081 포트는 loopback에만 바인딩됩니다.
+| | 운영 | 개발 |
+|---|---|---|
+| 파일 | `deploy/compose.yml` + `.env` | `deploy/compose.dev.yml` + `.env.dev` |
+| API / OTP / DB | 8081 / 8080 / 내부만 | 8082 / 8083 / 5433 |
+| `AUTH_ALLOWED_EMAILS` | 실제 개인 계정만 | 테스트 계정만 |
+| `JWT_SECRET` | 서로 다른 값 | 서로 다른 값(운영 토큰이 개발에서 안 통한다) |
+
+`.env.dev`는 `.env.example`을 한 번 더 복사해 만들고, 그래프와 `otp/data/`는 두 스택이 같은 `otp/`를 읽기 전용으로 공유합니다(`OTP_DIR`로 다른 경로 지정 가능). 개발 DB의 `seoul_route_test`는 백엔드 통합 테스트(`TEST_DATABASE_URL=postgres://seoul:seoul@localhost:5433/seoul_route_test?sslmode=disable`)에 씁니다. Compose 실행 전 `otp/graph.obj`와 `otp/data/` 생성물이 필요합니다. 모든 포트는 loopback에만 바인딩됩니다.
 
 앱 실행 방법과 Google OAuth 설정은 [앱 README](app/README.md)를 따릅니다.
 

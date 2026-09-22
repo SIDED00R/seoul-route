@@ -22,6 +22,8 @@ type Server struct {
 	DB     *pgxpool.Pool
 	JWT    *auth.JWT
 	Google auth.GoogleVerifier // nil 이면 /auth/google 은 503
+	// Allowed 는 이 서버에 로그인할 수 있는 Google 계정 이메일 목록(AUTH_ALLOWED_EMAILS). 비어 있으면 전부 허용.
+	Allowed auth.EmailAllowlist
 	// GoogleClientID 는 /auth/config 로 앱에 내려주는 웹 클라이언트 ID(Google 이 비밀로 보지 않는 값). Google 이 nil 이면 빈 문자열.
 	GoogleClientID string
 	OTPURL         string

@@ -78,6 +78,10 @@ func main() {
 	} else {
 		log.Warn("google login disabled", "reason", err.Error())
 	}
+	allowed := auth.ParseEmailAllowlist(cfg.AuthAllowedEmails)
+	if google != nil && allowed.Empty() {
+		log.Warn("google login open to any account", "reason", "AUTH_ALLOWED_EMAILS 없음")
+	}
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	otpClient := &otp.Client{URL: cfg.OTPURL, HTTP: &http.Client{Timeout: httpapi.PlanTimeout}}
 	planner := &route.Planner{OTP: otpClient, CrossingSec: crossing.ExpectedWaitSec}
@@ -148,7 +152,7 @@ func main() {
 		}
 	}()
 	srv := &httpapi.Server{
-		DB: pool, JWT: auth.NewJWT(cfg.JWTSecret), Google: google, GoogleClientID: googleClientID,
+		DB: pool, JWT: auth.NewJWT(cfg.JWTSecret), Google: google, GoogleClientID: googleClientID, Allowed: allowed,
 		OTPURL: cfg.OTPURL, HTTP: httpClient, Log: log,
 		Planner: planner, KakaoKey: cfg.KakaoRESTKey, VWorldKey: cfg.VWorldKey,
 	}
