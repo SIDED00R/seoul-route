@@ -47,7 +47,7 @@ class GuideOverlayController(private val appContext: Context) {
 
     /** 창 불투명도. 떠 있으면 바로 다시 그린다. 값은 기기 터치 상한으로 자른다(touchSafeAlpha). */
     fun setOpacity(value: Float) {
-        opacity = value.coerceIn(0.05f, 1f)
+        opacity = value.coerceIn(0.04f, 1f) // 하한 = 앱 Settings.minOverlayOpacity(화면 5%)
         controls?.setOpacity(opacity)
         val flutterView = view ?: return
         val wm = windowManager ?: return
@@ -221,6 +221,7 @@ class GuideOverlayController(private val appContext: Context) {
         const val DATA_CHANNEL = "seoul_route/guide_overlay_data"
         private const val TAG = "GuideOverlay"
         private const val OVERLAY_HEIGHT_DP = 260 // 미니 지도 창 높이. 손잡이 창(GuideOverlayControls)은 이 창 안쪽 오른쪽 위에 따로 뜬다
-        private const val DEFAULT_OPACITY = 0.5f // 앱이 setEnabled 로 설정값을 넘기기 전 기본(Settings.defaultOverlayOpacity 와 같다)
+        // 앱이 setEnabled 로 설정값을 넘기기 전 기본. Settings.defaultOverlayOpacity 와 같다(화면 50%).
+        private const val DEFAULT_OPACITY = 0.4f
     }
 }
