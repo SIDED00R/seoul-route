@@ -26,6 +26,7 @@ class _FavoritePlacesScreenState extends State<FavoritePlacesScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return; // 저장·삭제 응답을 기다리는 동안 화면을 닫았으면 갱신할 State 가 없다
     setState(() {
       _busy = true;
       _error = '';
