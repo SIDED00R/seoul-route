@@ -4,6 +4,7 @@ import '../api/client.dart';
 import '../auth/google_login.dart';
 import '../env.dart';
 import '../settings/settings_store.dart';
+import '../guide/active_guide.dart';
 import '../guide/guide_overlay.dart';
 
 /// 서버 주소와 토큰 입력. "연결 확인" 은 /health(무인증)와 /users/me·/users/me/speed(인증) 를 실제로 호출한다.
@@ -58,10 +59,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     overlayOpacity: _overlayOpacity,
   );
 
+  /// 켜기·끄기 모두 "저장" 때 진행 중인 안내에 반영된다(_save). 여기서는 권한만 확인한다.
   Future<void> _setOverlayGuide(bool value) async {
     if (!value) {
       setState(() => _overlayGuide = false);
-      await GuideOverlayPlatform.setEnabled(false);
       return;
     }
     setState(() => _busy = true);
@@ -136,6 +137,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _save() async {
     await widget.settingsStore.save(_current);
+    // 안내가 진행 중이면 미니 지도 켜짐·진하기를 그 안내에 바로 반영한다(다음 안내까지 기다리지 않게).
+    await ActiveGuide.instance.current?.refreshOverlaySetting();
     if (!mounted) return;
     Navigator.pop(context, _current);
   }

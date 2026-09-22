@@ -38,6 +38,11 @@ type landmarkResult struct {
 	ok    bool
 }
 
+// landmarkPartialTTL: 6개 카테고리 중 일부가 실패(카카오 429·네트워크)한 결과의 캐시 시간. 앱은 구간 진입마다 회전점
+// 3곳 × 6콜을 병렬로 보내 버스트 실패가 정상 흐름에서 난다(2026-09-22 리뷰). 1분이면 다음 회전점 조회 때 다시 채워진다.
+// 카카오 제한이 길어지면 늘리고, 짧은 실패만 보이면 줄인다.
+const landmarkPartialTTL = time.Minute
+
 // handlePlacesLandmark 는 회전점에서 눈에 띄는 시설을 찾는다. 경로 탐색과 분리해 실패해도 안내가 거리 문구로
 // 계속될 수 있게 한다. 좌표는 약 10m 격자로 캐시해 인접한 OTP 단계가 카카오를 반복 호출하지 않게 한다.
 func (s *Server) handlePlacesLandmark(w http.ResponseWriter, r *http.Request) {
@@ -73,9 +78,10 @@ func (s *Server) handlePlacesLandmark(w http.ResponseWriter, r *http.Request) {
 	wg.Wait()
 	close(results)
 	var best *landmark
-	succeeded := false
+	succeeded, partial := false, false
 	for result := range results {
 		if !result.ok {
+			partial = true
 			continue
 		}
 		succeeded = true
@@ -87,9 +93,14 @@ func (s *Server) handlePlacesLandmark(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "랜드마크 조회 실패")
 		return
 	}
+	// 일부 카테고리가 실패한 결과는 더 가까운 시설을 놓쳤을 수 있으므로 짧게만 캐시한다(landmarkPartialTTL).
+	// 아예 캐시하지 않으면 카카오가 제한을 거는 동안 같은 회전점마다 6콜이 계속 나간다.
 	ttl := time.Hour
 	if best != nil {
 		ttl = 24 * time.Hour
+	}
+	if partial {
+		ttl = landmarkPartialTTL
 	}
 	s.cacheLandmark(key, best, ttl)
 	writeJSON(w, http.StatusOK, map[string]any{"landmark": best})

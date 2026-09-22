@@ -231,6 +231,13 @@ class GuideSession extends ChangeNotifier {
     _instr = _buildInstruction();
     await _startVoice();
     await _startActivity();
+    await refreshOverlaySetting();
+  }
+
+  /// 미니 지도 설정(켜짐·진하기)을 저장소에서 다시 읽어 이 안내에 바로 반영한다. 안내 시작 때와, 안내 중 설정 화면이
+  /// 저장한 뒤에 부른다 — 설정값을 네이티브에 반영하는 곳은 여기뿐이라 켜기·끄기가 같은 경로로 반영된다
+  /// (종료·폐기 때의 stop() 은 설정과 무관하게 끄는 별개 경로).
+  Future<void> refreshOverlaySetting() async {
     _overlayEnabled = await SettingsStore.loadOverlayGuide();
     final overlayOpacity = await SettingsStore.loadOverlayOpacity();
     if (_closed) return;

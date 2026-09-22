@@ -22,14 +22,13 @@ import android.widget.TextView
 import kotlin.math.roundToInt
 
 /**
- * 미니 지도(터치 통과 창) 구석의 손잡이(⚙)와, 탭하면 그 자리에 펼쳐지는 진하기 슬라이더 띠.
- * 미니 지도 창은 터치를 못 받으므로 이 작은 창이 대신 입력을 받는다 — 손잡이 44dp(펼치면 띠 56dp 한 줄) 밖은
+ * 미니 지도(터치 통과 창) 오른쪽 위의 손잡이(⚙)와, 탭하면 그 자리에 펼쳐지는 진하기 슬라이더 띠.
+ * 미니 지도 창은 터치를 못 받으므로 이 작은 창이 대신 입력을 받는다 — 손잡이 32dp(펼치면 띠 56dp 한 줄) 밖은
  * FLAG_NOT_TOUCH_MODAL 로 뒤 앱에 그대로 간다. 끄는 동안 [onPreview] 로 미니 지도에 바로 반영하고, 손을 떼면
  * [onCommit] 으로 설정에 저장한다. 바깥을 누르거나(FLAG_WATCH_OUTSIDE_TOUCH) 4초 동안 입력이 없으면 손잡이로 접힌다.
  */
 class GuideOverlayControls(
     private val appContext: Context,
-    private val overlayHeightPx: Int,
     private val onPreview: (Float) -> Unit,
     private val onCommit: (Float) -> Unit,
 ) {
@@ -114,15 +113,21 @@ class GuideOverlayControls(
         ).apply {
             gravity = Gravity.TOP or Gravity.END
             x = if (expanded) 0 else dp(MARGIN_DP)
-            y = overlayHeightPx - height - dp(MARGIN_DP) // 미니 지도 창의 아래쪽 가장자리 안
+            y = statusBarHeightPx() + dp(MARGIN_DP) // 미니 지도 창의 오른쪽 위(상태 표시줄 아래)
         }
+    }
+
+    /** 미니 지도 창은 화면 맨 위(LAYOUT_IN_SCREEN)부터라 상태 표시줄 높이만큼 내려야 손잡이가 시계·아이콘과 안 겹친다. */
+    private fun statusBarHeightPx(): Int {
+        val id = appContext.resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (id > 0) appContext.resources.getDimensionPixelSize(id) else dp(24)
     }
 
     private fun buildHandle(): View {
         val icon = ImageView(appContext).apply {
             setImageResource(android.R.drawable.ic_menu_preferences)
             imageTintList = ColorStateList.valueOf(Color.WHITE)
-            val pad = dp(10)
+            val pad = dp(6)
             setPadding(pad, pad, pad, pad)
         }
         return FrameLayout(appContext).apply {
@@ -211,7 +216,7 @@ class GuideOverlayControls(
 
     companion object {
         private const val TAG = "GuideOverlayControls"
-        private const val HANDLE_DP = 44
+        private const val HANDLE_DP = 32 // 손잡이 지름. 뒤 앱을 가리는(터치를 가로채는) 영역도 이만큼뿐이다
         private const val STRIP_DP = 56
         private const val MARGIN_DP = 8
         private const val COLLAPSE_MS = 4000L

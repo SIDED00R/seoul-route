@@ -22,6 +22,13 @@ func isFavoriteKindConflict(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.ConstraintName == "favorite_places_home_work_idx"
 }
 
+// isInvalidUUID 는 경로의 id 가 UUID 형식이 아닐 때 Postgres 가 내는 22P02 다. 그런 id 의 즐겨찾기는 없으므로 404 로 답한다
+// (다른 DB 오류는 500 그대로 — 장애를 "없음"으로 위장하지 않는다).
+func isInvalidUUID(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "22P02"
+}
+
 type favoritePlace struct {
 	ID    string `json:"id"`
 	Kind  string `json:"kind"`
@@ -106,6 +113,7 @@ func (s *Server) handleCreateFavoritePlace(w http.ResponseWriter, r *http.Reques
 	userID := userIDFrom(r.Context())
 	tx, err := s.DB.Begin(r.Context())
 	if err != nil {
+		s.Log.Error("favorite place begin", "err", err)
 		writeError(w, http.StatusInternalServerError, "즐겨찾기 추가 실패")
 		return
 	}
@@ -118,11 +126,13 @@ func (s *Server) handleCreateFavoritePlace(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err != nil {
+		s.Log.Error("favorite place lock user", "err", err)
 		writeError(w, http.StatusInternalServerError, "즐겨찾기 추가 실패")
 		return
 	}
 	var n int
 	if err := tx.QueryRow(r.Context(), `SELECT count(*) FROM favorite_places WHERE user_id = $1`, userID).Scan(&n); err != nil {
+		s.Log.Error("favorite place count", "err", err)
 		writeError(w, http.StatusInternalServerError, "즐겨찾기 추가 실패")
 		return
 	}
@@ -142,10 +152,12 @@ func (s *Server) handleCreateFavoritePlace(w http.ResponseWriter, r *http.Reques
 			writeError(w, http.StatusConflict, "집·회사는 각각 하나만 저장할 수 있다")
 			return
 		}
+		s.Log.Error("favorite place insert", "err", err)
 		writeError(w, http.StatusInternalServerError, "즐겨찾기 추가 실패")
 		return
 	}
 	if err := tx.Commit(r.Context()); err != nil {
+		s.Log.Error("favorite place commit", "err", err)
 		writeError(w, http.StatusInternalServerError, "즐겨찾기 추가 실패")
 		return
 	}
@@ -165,7 +177,7 @@ func (s *Server) handleUpdateFavoritePlace(w http.ResponseWriter, r *http.Reques
 		in.Kind, in.Label, in.Place.Name, in.Place.Address, in.Place.Category, in.Place.Lat, in.Place.Lon,
 		chi.URLParam(r, "id"), userIDFrom(r.Context())).
 		Scan(&f.ID, &f.Kind, &f.Label, &f.Place.Name, &f.Place.Address, &f.Place.Category, &f.Place.Lat, &f.Place.Lon)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, pgx.ErrNoRows) || isInvalidUUID(err) {
 		writeError(w, http.StatusNotFound, "즐겨찾기 없음")
 		return
 	}
@@ -174,6 +186,7 @@ func (s *Server) handleUpdateFavoritePlace(w http.ResponseWriter, r *http.Reques
 			writeError(w, http.StatusConflict, "집·회사는 각각 하나만 저장할 수 있다")
 			return
 		}
+		s.Log.Error("favorite place update", "err", err)
 		writeError(w, http.StatusInternalServerError, "즐겨찾기 수정 실패")
 		return
 	}
@@ -183,7 +196,12 @@ func (s *Server) handleUpdateFavoritePlace(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleDeleteFavoritePlace(w http.ResponseWriter, r *http.Request) {
 	tag, err := s.DB.Exec(r.Context(), `DELETE FROM favorite_places WHERE id=$1 AND user_id=$2`,
 		chi.URLParam(r, "id"), userIDFrom(r.Context()))
+	if isInvalidUUID(err) {
+		writeError(w, http.StatusNotFound, "즐겨찾기 없음")
+		return
+	}
 	if err != nil {
+		s.Log.Error("favorite place delete", "err", err)
 		writeError(w, http.StatusInternalServerError, "즐겨찾기 삭제 실패")
 		return
 	}

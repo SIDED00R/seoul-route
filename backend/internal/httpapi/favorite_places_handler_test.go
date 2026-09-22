@@ -95,3 +95,22 @@ func TestCreateFavoritePlaceDoesNotResurrectAfterAccountDeletion(t *testing.T) {
 		t.Fatalf("탈퇴 뒤 즐겨찾기=%d", count)
 	}
 }
+
+// UUID 형식이 아닌 id 는 Postgres 22P02 인데, 그런 즐겨찾기는 없는 것이므로 500 이 아니라 404 로 답한다.
+func TestFavoritePlaceNonUUIDIDIs404(t *testing.T) {
+	s, pool := testServer(t)
+	h := s.Router()
+	sub := "sub-favorites-uuid-" + time.Now().Format("150405.000000")
+	t.Cleanup(func() { pool.Exec(context.Background(), `DELETE FROM users WHERE google_sub = $1`, sub) })
+	_, login := do(t, h, http.MethodPost, "/auth/google", `{"id_token":"good:`+sub+`"}`, "")
+	token := login["token"].(string)
+	body := `{"kind":"custom","label":"집","place":{"name":"우리집","lat":37.53,"lon":126.87}}`
+	rr, out := do(t, h, http.MethodPut, "/users/me/favorites/not-a-uuid", body, token)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("PUT code=%d body=%v", rr.Code, out)
+	}
+	rr, out = do(t, h, http.MethodDelete, "/users/me/favorites/not-a-uuid", "", token)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("DELETE code=%d body=%v", rr.Code, out)
+	}
+}

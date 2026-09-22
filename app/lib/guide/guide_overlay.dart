@@ -281,8 +281,7 @@ class _GuideOverlayViewState extends State<GuideOverlayView> {
           ),
           Expanded(
             child: Padding(
-              // 오른쪽은 네이티브 진하기 손잡이(44dp + 여백 8dp, GuideOverlayControls) 자리를 비워 둔다.
-              padding: const EdgeInsets.fromLTRB(12, 6, 64, 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: Row(
                 children: [
                   Icon(
