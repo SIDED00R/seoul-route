@@ -90,6 +90,10 @@ class GuideSession extends ChangeNotifier {
   /// 경로 이탈 재탐색을 이 간격보다 자주 하지 않는다. 다시 찾은 경로에서도 벗어나면 서버 호출이 이어진다.
   static const rerouteMinGap = Duration(minutes: 1);
 
+  /// 도착 자동 종료가 실패하면 10초 점검마다 다시 보낸다. 도착 뒤 이 시간이 지나도 실패하면 위치 스트림을 끊고
+  /// 사용자가 종료를 누르게 둔다.
+  static const arrivalRetryFor = Duration(minutes: 5);
+
   final ApiClient api;
   final PlanRequest request;
   final Itinerary itinerary;
@@ -118,6 +122,10 @@ class GuideSession extends ChangeNotifier {
   final ActivityClassifier _activity = ActivityClassifier();
   final OffRouteDetector _offRoute = OffRouteDetector();
   final ArrivalDetector _arrival = ArrivalDetector();
+
+  /// 도착을 확정한 시각. 구간이 바뀌면 지운다. 값이 있는 동안 표본을 서버에 올리지 않고, 경로 이탈 재탐색을
+  /// 시작하거나 적용하지 않으며, 10초 점검이 종료를 다시 보낸다.
+  DateTime? _arrivedAt;
   final VoiceGuide _voice = VoiceGuide(enabled: false);
   late final DateTime? _eta = DateTime.tryParse(itinerary.end);
   Timer? _ticker;
@@ -311,18 +319,20 @@ class GuideSession extends ChangeNotifier {
     _remainingStops = tracker.current.transitLeg
         ? _stops.remaining(p.latitude, p.longitude, p.accuracy, at)
         : 0;
-    _uploader?.add(
-      TraceSample(
-        ts: p.timestamp,
-        lat: p.latitude,
-        lon: p.longitude,
-        accuracyM: p.accuracy,
-        mode: tracker.mode,
-        activity: _activityOn ? _activity.current : null,
-        activityRaw: _rawActivity?.$1,
-        activityConf: _rawActivity?.$2,
-      ),
-    );
+    if (_arrivedAt == null) {
+      _uploader?.add(
+        TraceSample(
+          ts: p.timestamp,
+          lat: p.latitude,
+          lon: p.longitude,
+          accuracyM: p.accuracy,
+          mode: tracker.mode,
+          activity: _activityOn ? _activity.current : null,
+          activityRaw: _rawActivity?.$1,
+          activityConf: _rawActivity?.$2,
+        ),
+      );
+    }
     _here = here;
     _accuracyM = p.accuracy;
     _samples++;
@@ -346,16 +356,27 @@ class GuideSession extends ChangeNotifier {
     unawaited(_autoEnd());
   }
 
-  /// 도착을 알리고 안내를 끝낸다. 실패하면 상태줄에 사유가 남고 사용자가 종료를 누른다 — ArrivalDetector 가
-  /// 한 번만 참을 주므로 표본마다 다시 시도하지 않는다.
+  /// 도착을 알리고 안내를 끝낸다. 실패하면 상태줄에 사유가 남고 10초 점검(_onTick)이 다시 부른다 — ArrivalDetector 는
+  /// 한 번만 참을 주므로 표본으로는 다시 부르지 않는다. 도착 뒤 arrivalRetryFor 가 지나도 실패하면 위치 스트림을 끊는다.
   Future<void> _autoEnd() async {
+    final arrivedAt = _arrivedAt ??= now();
     await _voice.say('목적지에 도착했습니다', cueKey: 'arrived');
-    if (await end() != null) _set(() => _status = '목적지에 도착해 안내를 끝냈습니다');
+    if (await end(keepSpeech: true) != null) {
+      _set(() => _status = '목적지에 도착해 안내를 끝냈습니다');
+      return;
+    }
+    // 다른 종료가 진행 중이거나 아직 기한 안이면 위치 스트림을 그대로 둔다.
+    if (_ending || _closed || now().difference(arrivedAt) < arrivalRetryFor) return;
+    await _stopTracking();
   }
 
-  /// 위치가 끊긴 동안에도 시간표로 구간·남은 정거장을 따라간다(지하).
+  /// 위치가 끊긴 동안에도 시간표로 구간·남은 정거장을 따라간다(지하). 도착했는데 종료를 못 보냈으면 다시 보낸다.
   void _onTick() {
     if (_closed || _ending) return;
+    if (_arrivedAt != null) {
+      unawaited(_autoEnd());
+      return;
+    }
     final at = now();
     // 위치가 아예 끊긴 지하에서도 활동 판정이 흐르게 한다 — 그러지 않으면 정지 감쇠가 멈춰 직전 활동이 화면에 박힌다.
     _activity.settle(at);
@@ -371,7 +392,7 @@ class GuideSession extends ChangeNotifier {
   /// 도보 구간에서 경로를 벗어났으면 그 구간을 현재 위치에서 다시 찾는다. 대중교통은 정해진 노선을 따라가고
   /// 자전거는 양끝이 대여소로 묶여 있어(어디로 달리든 대여소에 반납한다) 둘 다 경로 이탈이 성립하지 않는다.
   void _checkOffRoute(Position p, DateTime at) {
-    if (_rerouting || _ending || tracker.current.mode != 'WALK') return;
+    if (_rerouting || _ending || _arrivedAt != null || tracker.current.mode != 'WALK') return;
     final away = geo
         .projectOnPolyline(p.latitude, p.longitude, tracker.currentPoints)
         .distM;
@@ -411,7 +432,7 @@ class GuideSession extends ChangeNotifier {
           segmentModes: const [SegmentMode.walk],
         ),
       );
-      if (_closed || _ending) return;
+      if (_closed || _ending || _arrivedAt != null) return;
       // 기다리는 동안 구간이 넘어갔으면(자동 인계·버튼) 이 결과는 남의 구간 것이다. 이탈 셈은 구간이 바뀔 때
       // 이미 지워졌다.
       if (!identical(leg, tracker.current)) {
@@ -437,6 +458,7 @@ class GuideSession extends ChangeNotifier {
       _set(() => _status = '경로를 다시 찾았습니다');
     } catch (e) {
       _offRoute.reset();
+      if (_ending || _arrivedAt != null) return; // 종료 중이거나 도착했으면 그 상태 문구를 덮지 않는다
       _set(() => _status = '재탐색 실패: $e. 원래 경로로 안내합니다');
     } finally {
       _set(() => _rerouting = false);
@@ -447,6 +469,7 @@ class GuideSession extends ChangeNotifier {
   void _enterLeg() {
     final leg = tracker.current;
     _arrival.reset(); // 마지막 구간을 벗어났거나 갈아 끼웠으면 도착 셈을 다시 시작한다
+    _arrivedAt = null;
     _steps = _stepTrackerFor(leg);
     _stops = StopTracker(leg, tracker.currentPoints, shift: tracker.shift);
     _remainingStops = leg.transitLeg ? leg.stops.length + 1 : 0;
@@ -476,10 +499,24 @@ class GuideSession extends ChangeNotifier {
   }
 
   /// 안내가 끝났다. 끝난 안내는 되살리지 않는다.
-  void _finished() {
+  Future<void> _finished() async {
+    await _stopTracking();
+    if (_closed) return; // 알림·미니 지도·저장소는 dispose 가 이미 치웠다. 그 뒤 걸린 새 안내의 것을 건드리지 않는다
+    await _statusNotification.cancel();
     _set(() => _ended = true);
     unawaited(GuideOverlayPlatform.stop());
     unawaited(store.clear());
+  }
+
+  /// 위치 스트림(포그라운드 서비스)·10초 점검·활동 인식을 끊는다. 화면이 닫힌 채 스스로 끝나면(목적지 도착)
+  /// 아무도 dispose 를 부르지 않으므로 종료 경로가 여기서 끊는다.
+  Future<void> _stopTracking() async {
+    _ticker?.cancel();
+    _ticker = null;
+    await _positions?.cancel();
+    _positions = null;
+    await _activities?.cancel();
+    _activities = null;
   }
 
   /// 사용자가 손으로 앞뒤 구간을 맞춘다.
@@ -591,25 +628,19 @@ class GuideSession extends ChangeNotifier {
 
   /// 안내를 끝낸다. 남은 샘플을 보내고 trip 을 닫아 서버가 이번 안내의 속도를 프로파일에 반영하게 한다.
   /// 성공하면 종료 응답(요약용), 보낼 샘플이 남았거나 실패하면 null 이고 status 에 이유가 남는다.
-  Future<Map<String, dynamic>?> end() async {
+  /// keepSpeech 가 참이면 읽던 문장(도착 안내)을 끊지 않고 새 문장만 막는다.
+  Future<Map<String, dynamic>?> end({bool keepSpeech = false}) async {
     if (_ending) return null;
+    // 첫 await 전에 세운다 — 도착 재시도(_onTick)와 종료 버튼이 겹쳐도 한 번만 진행된다.
+    _ending = true;
+    _set(() => _status = '샘플 전송 중…');
     final up = _uploader;
     _voice.enabled = false;
-    _ticker?.cancel();
-    _ticker = null;
-    await _speaker?.stop();
-    await _statusNotification.cancel();
-    _set(() {
-      _ending = true;
-      _status = '샘플 전송 중…';
-    });
-    await _positions?.cancel();
-    _positions = null;
-    // 화면이 닫힌 채 스스로 끝나면(목적지 도착) 아무도 dispose 를 부르지 않는다 — 여기서 같이 끊는다.
-    await _activities?.cancel();
-    _activities = null;
+    if (!keepSpeech) await _speaker?.stop();
+    // 위치 스트림·10초 점검·알림은 _finished 에서 끊는다(서버 종료가 성공한 뒤). 위치 스트림이 포그라운드 서비스라
+    // 먼저 끊으면 백그라운드 앱은 네트워크를 잃어 아래 요청이 나가지 못한다.
     if (up == null) {
-      _finished();
+      await _finished();
       return const {};
     }
     await up.flush();
@@ -623,13 +654,13 @@ class GuideSession extends ChangeNotifier {
     }
     try {
       final res = await api.endTrip(up.tripId);
-      _finished();
+      await _finished();
       return res;
     } on ApiException catch (e) {
       // 409 = 서버가 이미 이 trip 을 닫고 학습까지 반영한 상태(앞선 종료 요청의 응답만 잃은 경우). 완료로 본다.
       if (e.status == 409) {
         _set(() => _status = '이미 종료된 안내입니다.');
-        _finished();
+        await _finished();
         return const {};
       }
       _endFailed(e);
