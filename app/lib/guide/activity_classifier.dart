@@ -5,10 +5,12 @@
 /// LOW 신뢰도·UNKNOWN 은 후보가 되지 않고 후보도 지우지 않는다. STILL 도 후보가 되지는 않지만, stillHold 이상
 /// 이어지면 확정 활동을 미상으로 되돌린다 — 그러지 않으면 열차처럼 폰이 계속 정지로 보는 동안 직전 활동이 그대로 남는다.
 /// 값은 서버 traces.activity 와 같은 walk / bicycle / vehicle / unknown.
+/// 안내 구간 넘김 보류에는 current 대신 ridingView 를 쓴다(vehicle 이 정지 감쇠로 미상이 된 뒤에도 ridingGrace 동안 vehicle).
 class ActivityClassifier {
   ActivityClassifier({
     this.hold = const Duration(seconds: 20),
     this.stillHold = const Duration(minutes: 2),
+    this.ridingGrace = const Duration(minutes: 2),
   });
 
   final Duration hold;
@@ -17,10 +19,25 @@ class ActivityClassifier {
   /// 신호 대기(2분 안팎)에서 미상으로 떨어지지 않도록 2분으로 둔다. 궤적이 더 모이면 재보정한다.
   final Duration stillHold;
 
+  /// vehicle 이 정지 감쇠로 미상이 된 뒤 ridingView 가 vehicle 을 이어 주는 시간.
+  /// 초기값(2026-09-28, 운영 안내 궤적 09-21·09-28 두 건 기준). 궤적이 더 모이면 재보정한다.
+  final Duration ridingGrace;
+
   String current = 'unknown';
   String? _candidate;
   DateTime? _since;
   DateTime? _stillSince;
+
+  /// current 가 vehicle 에서 정지 감쇠로 미상이 된 시각. 다른 활동이 확정되면 지운다.
+  DateTime? _vehicleDecayedAt;
+
+  /// 구간 넘김 보류(LegTracker.riding)에 넘길 활동. current 가 vehicle 에서 정지 감쇠로 미상이 된 뒤 ridingGrace 안이면
+  /// vehicle, 그 밖에는 current 와 같다. 걷기·자전거가 확정되면 바로 current 를 따른다.
+  String ridingView(DateTime now) {
+    final at = _vehicleDecayedAt;
+    if (current == 'unknown' && at != null && now.difference(at) < ridingGrace) return 'vehicle';
+    return current;
+  }
 
   /// 활동 인식 type(WALKING/RUNNING/ON_BICYCLE/IN_VEHICLE/STILL/UNKNOWN)·confidence(HIGH/MEDIUM/LOW) 를 넣는다.
   void observe(String type, String confidence, DateTime now) {
@@ -49,6 +66,7 @@ class ActivityClassifier {
     final c = _candidate, s = _since;
     if (c != null && s != null && now.difference(s) >= hold) {
       current = c;
+      _vehicleDecayedAt = null;
       _candidate = null;
       _since = null;
       // 정지 시계는 건드리지 않는다. 움직임 관측이 이미 지우므로, 여기서 지우면 "움직임 판정이 잠깐 왔다가
@@ -57,6 +75,7 @@ class ActivityClassifier {
     }
     final still = _stillSince;
     if (still == null || current == 'unknown' || now.difference(still) < stillHold) return false;
+    if (current == 'vehicle') _vehicleDecayedAt = now;
     current = 'unknown';
     return true;
   }

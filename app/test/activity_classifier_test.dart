@@ -91,6 +91,36 @@ void main() {
     expect(s.c.current, 'walk');
   });
 
+  test('탈것 안이 정지 감쇠로 미상이 돼도 ridingView 는 2분 더 vehicle 이다', () {
+    final s = _Stream(ActivityClassifier());
+    s.hold('IN_VEHICLE', 'HIGH', 30);
+    s.hold('STILL', 'HIGH', 125); // 정지 2분 → current 미상
+    expect(s.c.current, 'unknown');
+    expect(s.c.ridingView(s.now), 'vehicle');
+    s.hold('STILL', 'HIGH', 110);
+    expect(s.c.ridingView(s.now), 'vehicle'); // 감쇠 뒤 2분 안
+    s.hold('STILL', 'HIGH', 15);
+    expect(s.c.ridingView(s.now), 'unknown');
+    expect(s.c.current, 'unknown');
+  });
+
+  test('감쇠 뒤라도 걷기가 확정되면 ridingView 는 바로 걷기다', () {
+    final s = _Stream(ActivityClassifier());
+    s.hold('IN_VEHICLE', 'HIGH', 30);
+    s.hold('STILL', 'HIGH', 125);
+    s.hold('WALKING', 'HIGH', 25);
+    expect(s.c.current, 'walk');
+    expect(s.c.ridingView(s.now), 'walk');
+  });
+
+  test('걷기가 정지 감쇠로 미상이 된 것은 ridingView 도 미상이다', () {
+    final s = _Stream(ActivityClassifier());
+    s.hold('WALKING', 'HIGH', 30);
+    s.hold('STILL', 'HIGH', 125);
+    expect(s.c.current, 'unknown');
+    expect(s.c.ridingView(s.now), 'unknown');
+  });
+
   test('불일치 판정: 대중교통 구간의 걷기는 정상, 도보 구간의 차량·자전거는 불일치', () {
     expect(ActivityClassifier.mismatch('transit', 'walk'), isFalse);
     expect(ActivityClassifier.mismatch('walk', 'walk'), isFalse);
