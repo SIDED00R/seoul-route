@@ -72,7 +72,8 @@ class LegTracker {
   }
 
   /// 위치를 넣고 구간이 바뀌었으면 true. 마지막 구간 끝에 닿아도 index 는 마지막에 머문다(종료는 사용자가 누른다).
-  bool update(double lat, double lon, {double accuracyM = 0, DateTime? now}) {
+  /// activity 는 폰 활동 인식의 보류용 활동(ActivityClassifier.ridingView)이다.
+  bool update(double lat, double lon, {double accuracyM = 0, DateTime? now, String activity = 'unknown'}) {
     final t = now ?? DateTime.now();
     if (isLast) return false;
     final good = accuracyM <= maxAccuracyM;
@@ -80,13 +81,18 @@ class LegTracker {
     if (good &&
         geo.distanceM(lat, lon, current.toLat, current.toLon) <=
             arriveRadiusM) {
+      if (_holdRiding(index + 1, activity)) return false;
       _goto(index + 1, t);
       return true;
     }
     final target = good ? _legOnRoute(lat, lon) : -1;
     if (target < 0) {
       _hits = 0;
-      return tick(t);
+      return tick(t, activity: activity);
+    }
+    if (_holdRiding(target, activity)) {
+      _hits = 0;
+      return false;
     }
     _hits = target == _hitLeg ? _hits + 1 : 1;
     _hitLeg = target;
@@ -97,15 +103,28 @@ class LegTracker {
 
   /// 위치 없이 시간만 흘렀을 때도 부른다(지하에서는 표본이 아예 끊기기도 한다). 현재 구간이 지하일 수 있는 구간
   /// (대중교통·역 안 환승 통로)이고 믿을 만한 위치가 끊긴 상태에서 예상 종료 시각이 지났으면 다음 구간으로 넘긴다.
-  bool tick(DateTime now) {
+  bool tick(DateTime now, {String activity = 'unknown'}) {
     if (isLast || !(current.transitLeg || current.inStation)) return false;
     final last = _lastGoodFix;
     if (last != null && now.difference(last) < blindAfter) return false;
     final end = DateTime.tryParse(current.end);
     if (end == null || now.isBefore(end.add(shift))) return false;
+    if (_holdRiding(index + 1, activity)) return false;
     _goto(index + 1, now);
     return true;
   }
+
+  /// 아직 탈것 안(activity == 'vehicle')이고 지금이 대중교통 구간이나 그 바로 뒤 구간(내려서 걷는 구간)이다.
+  bool riding(String activity) =>
+      activity == 'vehicle' && (current.transitLeg || (index > 0 && legs[index - 1].transitLeg));
+
+  /// riding 인데 대중교통이 아닌 구간으로 넘기려 하면 true. 대중교통으로, 또는 다음이 대중교통인 도보(환승 도보)로
+  /// 넘기는 것은 막지 않는다.
+  bool _holdRiding(int target, String activity) =>
+      riding(activity) &&
+      target < legs.length &&
+      !legs[target].transitLeg &&
+      !(legs[target].mode == 'WALK' && target + 1 < legs.length && legs[target + 1].transitLeg);
 
   /// 위치가 뒤 구간 경로선 위에 있으면 그 구간 번호, 아니면 -1. 바로 다음 구간은 수단을 가리지 않는다. 그보다 뒤는
   /// 현재 구간이 지하일 수 있는 구간(대중교통·역 안 환승 통로)일 때만, 지상 구간(도보·자전거)에 한해 본다 —

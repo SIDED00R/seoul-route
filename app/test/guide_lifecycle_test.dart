@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -828,6 +829,228 @@ void main() {
       s.prevLeg();
       expect(s.staying, isFalse);
       expect(s.tracker.index, 0);
+    });
+  });
+
+  group('대중교통에서 내리기 전 탈것 안(이슈 #133)', () {
+    // 활동 인식이 IN_VEHICLE 을 준다. 활동 판정은 20초 이어져야 확정되므로 세션 시계를 1분 앞에 두어 첫 위치에서 확정된다.
+    Future<GuideSession> ride(List<Map<String, dynamic>> legs) async {
+      const actMethod = MethodChannel('flutter_activity_recognition/method');
+      const actEvents = EventChannel('flutter_activity_recognition/updates');
+      final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(actMethod, (_) async => 'GRANTED');
+      messenger.setMockStreamHandler(actEvents, MockStreamHandler.inline(onListen: (_, sink) {
+        sink.success(jsonEncode({'type': 'IN_VEHICLE', 'confidence': 'HIGH'}));
+      }));
+      addTearDown(() {
+        messenger.setMockMethodCallHandler(actMethod, null);
+        messenger.setMockStreamHandler(actEvents, null);
+      });
+      final s = GuideSession(
+        api: api,
+        request: _request,
+        itinerary: Itinerary.fromJson(_itineraryJson(legs)),
+        speak: (t) async => spoken.add(t),
+        store: store,
+        clock: () => DateTime.now().add(const Duration(minutes: 1)),
+      );
+      ActiveGuide.instance.set(s);
+      await s.start();
+      await pumpEventQueue();
+      return s;
+    }
+
+    Map<String, dynamic> subway(double toLat) =>
+        {..._legJson(to: '역', toLat: toLat), 'mode': 'SUBWAY', 'transit_leg': true, 'route': '2호선'};
+
+    test('열차 안 정지로 활동이 미상이 돼도 2분 동안은 지하철 끝점 위치로 넘기지 않고, 그 뒤에는 넘긴다', () async {
+      const actMethod = MethodChannel('flutter_activity_recognition/method');
+      const actEvents = EventChannel('flutter_activity_recognition/updates');
+      final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      MockStreamHandlerEventSink? events;
+      messenger.setMockMethodCallHandler(actMethod, (_) async => 'GRANTED');
+      messenger.setMockStreamHandler(actEvents, MockStreamHandler.inline(onListen: (_, sink) {
+        events = sink;
+        sink.success(jsonEncode({'type': 'IN_VEHICLE', 'confidence': 'HIGH'}));
+      }));
+      addTearDown(() {
+        messenger.setMockMethodCallHandler(actMethod, null);
+        messenger.setMockStreamHandler(actEvents, null);
+      });
+      // 관측 시각은 기기 시계, 확정·감쇠 시각은 세션 시계다. 세션 시계를 기기 시계보다 앞으로 옮겨 가며 잰다.
+      final t0 = DateTime.now();
+      var clock = t0.add(const Duration(minutes: 1));
+      final s = GuideSession(
+        api: api,
+        request: _request,
+        itinerary: Itinerary.fromJson(_itineraryJson([
+          subway(37.501),
+          {..._legJson(to: '도착지', toLat: 37.502), 'from_lat': 37.501},
+        ])),
+        speak: (t) async => spoken.add(t),
+        store: store,
+        clock: () => clock,
+      );
+      ActiveGuide.instance.set(s);
+      await s.start();
+      await pumpEventQueue();
+      await push(_pos(37.5005, 127.0)); // 지하철 구간 중간 — 탈것 안 확정
+      expect(s.activity, 'vehicle');
+      events!.success(jsonEncode({'type': 'STILL', 'confidence': 'HIGH'}));
+      await pumpEventQueue();
+      clock = t0.add(const Duration(minutes: 3));
+      await push(_pos(37.5005, 127.0)); // 정지 2분 → 확정 활동 미상
+      expect(s.activity, 'unknown');
+      clock = t0.add(const Duration(minutes: 4));
+      await push(_pos(37.50095, 127.0)); // 지하철 끝점에서 약 6m, 감쇠 뒤 1분
+      expect(s.tracker.index, 0);
+      clock = t0.add(const Duration(minutes: 5, seconds: 10));
+      await push(_pos(37.50095, 127.0)); // 감쇠 뒤 2분 넘음
+      expect(s.tracker.index, 1);
+    });
+
+    // 활동 인식 모의: IN_VEHICLE 을 먼저 주고, 돌려준 함수로 뒤 판정(STILL 등)을 흘린다.
+    void Function(String type) mockActivity() {
+      const actMethod = MethodChannel('flutter_activity_recognition/method');
+      const actEvents = EventChannel('flutter_activity_recognition/updates');
+      final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      MockStreamHandlerEventSink? events;
+      messenger.setMockMethodCallHandler(actMethod, (_) async => 'GRANTED');
+      messenger.setMockStreamHandler(actEvents, MockStreamHandler.inline(onListen: (_, sink) {
+        events = sink;
+        sink.success(jsonEncode({'type': 'IN_VEHICLE', 'confidence': 'HIGH'}));
+      }));
+      addTearDown(() {
+        messenger.setMockMethodCallHandler(actMethod, null);
+        messenger.setMockStreamHandler(actEvents, null);
+      });
+      return (type) => events!.success(jsonEncode({'type': type, 'confidence': 'HIGH'}));
+    }
+
+    testWidgets('위치가 끊긴 지하에서 정지로 활동이 미상이 돼도 2분 동안은 시간표로 넘기지 않고, 그 뒤에는 넘긴다', (tester) async {
+      final emit = mockActivity();
+      // 관측 시각은 기기 시계라 세션 시계를 기기 시계 기준으로 잡는다. 지하철 t0+1분~t0+4분, 위치 표본은 없다.
+      final t0 = DateTime.now();
+      var now = t0.add(const Duration(minutes: 1));
+      final s = await startTicking(tester, [
+        {
+          ..._legJson(to: '역', toLat: 37.501),
+          'mode': 'SUBWAY',
+          'transit_leg': true,
+          'start': t0.add(const Duration(minutes: 1)).toIso8601String(),
+          'end': t0.add(const Duration(minutes: 4)).toIso8601String(),
+        },
+        {..._legJson(to: '도착지', toLat: 37.502), 'from_lat': 37.501},
+      ], () => now);
+      await tick(tester); // 탈것 안 확정
+      expect(s.activity, 'vehicle');
+      emit('STILL');
+      await settle(tester);
+      now = t0.add(const Duration(minutes: 3));
+      await tick(tester); // 정지 2분 → 확정 활동 미상
+      expect(s.activity, 'unknown');
+      now = t0.add(const Duration(minutes: 4, seconds: 30));
+      await tick(tester); // 계획 종료가 지났지만 감쇠 뒤 1분 30초
+      expect(s.tracker.index, 0);
+      now = t0.add(const Duration(minutes: 5, seconds: 10));
+      await tick(tester);
+      expect(s.tracker.index, 1);
+      ActiveGuide.instance.clear(); // 10초 점검 타이머를 끈다
+      await settle(tester);
+    });
+
+    test('정지로 미상이 된 뒤 2분 안에는 내려서 걷는 마지막 구간의 목적지 도착으로 끝내지 않고, 그 뒤에는 끝낸다', () async {
+      final emit = mockActivity();
+      final t0 = DateTime.now();
+      var clock = t0.add(const Duration(minutes: 1));
+      final s = GuideSession(
+        api: api,
+        request: _request,
+        itinerary: Itinerary.fromJson(_itineraryJson([
+          subway(37.501),
+          {..._legJson(to: '도착지', toLat: 37.502), 'from_lat': 37.501},
+        ])),
+        speak: (t) async => spoken.add(t),
+        store: store,
+        clock: () => clock,
+      );
+      ActiveGuide.instance.set(s);
+      await s.start();
+      await pumpEventQueue();
+      await push(_pos(37.5005, 127.0));
+      expect(s.activity, 'vehicle');
+      emit('STILL');
+      await pumpEventQueue();
+      clock = t0.add(const Duration(minutes: 3));
+      await push(_pos(37.5005, 127.0));
+      expect(s.activity, 'unknown');
+      s.nextLeg(); // 손으로 마지막 도보 구간으로 넘겼다
+      clock = t0.add(const Duration(minutes: 3, seconds: 30));
+      for (var i = 0; i < 3; i++) {
+        await push(_pos(37.50195, 127.0)); // 도착지에서 약 6m
+      }
+      expect(api.ended, isEmpty);
+      clock = t0.add(const Duration(minutes: 5, seconds: 10));
+      for (var i = 0; i < 3; i++) {
+        await push(_pos(37.50195, 127.0));
+      }
+      await pumpEventQueue();
+      expect(api.ended, ['T1']);
+    });
+
+    test('지하철 끝점에 닿은 위치로도 도보 구간으로 넘기지 않는다', () async {
+      final s = await ride([subway(37.501), {..._legJson(to: '도착지', toLat: 37.502), 'from_lat': 37.501}]);
+      await push(_pos(37.50095, 127.0)); // 지하철 끝점에서 약 6m
+      expect(s.activity, 'vehicle');
+      expect(s.tracker.index, 0);
+    });
+
+    test('내려서 걷는 구간에서 튀는 위치로 경로 이탈 재탐색을 하지 않는다', () async {
+      // 지하철(37.50→37.52) → 도보(→37.5215 대여소) → 따릉이(→37.53)
+      final s = await ride([
+        subway(37.52),
+        {..._legJson(to: '대여소', toLat: 37.5215), 'from_lat': 37.52},
+        {..._legJson(to: '도착지', toLat: 37.53), 'from_lat': 37.5215, 'mode': 'BICYCLE', 'rented_bike': true},
+      ]);
+      s.nextLeg(); // 열차 안에서 손으로 도보 구간으로 넘겼다
+      for (var i = 0; i < 5; i++) {
+        await push(_pos(37.525, 127.0, acc: 49)); // 따릉이 경로선 위로 튄 위치(도보 경로선에서 약 400m)
+      }
+      for (var i = 0; i < 5; i++) {
+        await push(_pos(37.515, 127.0, acc: 30)); // 지하철 선 위(도보 경로선에서 약 560m)
+      }
+      expect(s.activity, 'vehicle');
+      expect(s.tracker.index, 1);
+      expect(api.planCalls, 0);
+    });
+
+    test('내려서 걷는 마지막 구간에서 도착지 옆 위치로 목적지 도착 자동 종료를 하지 않는다', () async {
+      final s = await ride([subway(37.501), {..._legJson(to: '도착지', toLat: 37.502), 'from_lat': 37.501}]);
+      s.nextLeg();
+      for (var i = 0; i < 3; i++) {
+        await push(_pos(37.50195, 127.0)); // 도착지에서 약 6m
+      }
+      expect(s.ended, isFalse);
+      expect(api.ended, isEmpty);
+    });
+
+    test('내려서 걷는 구간에서 다음 모퉁이 옆 위치로 도보 안내 단계를 넘기지 않는다', () async {
+      final s = await ride([
+        subway(37.52),
+        {
+          ..._legJson(to: '도착지', toLat: 37.5215),
+          'from_lat': 37.52,
+          'steps': [
+            {'dir': 'DEPART', 'distance_m': 100, 'lat': 37.52, 'lon': 127.0},
+            {'dir': 'LEFT', 'distance_m': 60, 'lat': 37.5209, 'lon': 127.0},
+            {'dir': 'RIGHT', 'distance_m': 60, 'lat': 37.5209, 'lon': 127.0007},
+          ],
+        },
+      ]);
+      s.nextLeg();
+      final before = s.instr.cueKey;
+      await push(_pos(37.5209, 127.0)); // 첫 모퉁이(LEFT) 위
+      expect(s.instr.cueKey, before);
     });
   });
 }

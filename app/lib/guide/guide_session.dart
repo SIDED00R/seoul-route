@@ -322,11 +322,14 @@ class GuideSession extends ChangeNotifier {
           p.longitude,
           accuracyM: p.accuracy,
           now: at,
+          activity: _activity.ridingView(at),
         )) {
       _offRoute.reset();
       _enterLeg(arrived: true);
     } else {
-      if (_steps.update(p.latitude, p.longitude, accuracyM: p.accuracy)) {
+      // 대중교통에서 내리기 전(탈것 안)에는 위치로 도보 안내 단계를 넘기지 않는다.
+      if (!tracker.riding(_activity.ridingView(at)) &&
+          _steps.update(p.latitude, p.longitude, accuracyM: p.accuracy)) {
         refreshLandmarks = true;
       }
       _checkOffRoute(p, at);
@@ -358,9 +361,12 @@ class GuideSession extends ChangeNotifier {
     _checkArrived(p);
   }
 
-  /// 마지막 구간에서 목적지에 닿았으면 사용자가 누르지 않아도 끝낸다.
+  /// 마지막 구간에서 목적지에 닿았으면 사용자가 누르지 않아도 끝낸다. 경유지 체류 중이거나 대중교통에서 내리기 전
+  /// (탈것 안)에는 판정하지 않는다.
   void _checkArrived(Position p) {
-    if (!tracker.isLast || _ending || _ended || _stayUntil != null) return;
+    if (!tracker.isLast || _ending || _ended || _stayUntil != null || tracker.riding(_activity.ridingView(now()))) {
+      return;
+    }
     final leg = tracker.current;
     if (!_arrival.update(
       geo.distanceM(p.latitude, p.longitude, leg.toLat, leg.toLon),
@@ -396,7 +402,7 @@ class GuideSession extends ChangeNotifier {
     // 위치가 아예 끊긴 지하에서도 활동 판정이 흐르게 한다 — 그러지 않으면 정지 감쇠가 멈춰 직전 활동이 화면에 박힌다.
     _activity.settle(at);
     _checkStayOver(at);
-    if (_stayUntil == null && tracker.tick(at)) _enterLeg(arrived: true);
+    if (_stayUntil == null && tracker.tick(at, activity: _activity.ridingView(at))) _enterLeg(arrived: true);
     if (tracker.current.transitLeg) {
       _remainingStops = _stops.remaining(null, null, 0, at);
     }
@@ -407,8 +413,13 @@ class GuideSession extends ChangeNotifier {
 
   /// 도보 구간에서 경로를 벗어났으면 그 구간을 현재 위치에서 다시 찾는다. 대중교통은 정해진 노선을 따라가고
   /// 자전거는 양끝이 대여소로 묶여 있어(어디로 달리든 대여소에 반납한다) 둘 다 경로 이탈이 성립하지 않는다.
+  /// 대중교통 바로 뒤 도보 구간인데 아직 탈것 안(활동 인식 vehicle)이면 판정하지 않는다.
   void _checkOffRoute(Position p, DateTime at) {
     if (_rerouting || _ending || _arrivedAt != null || _stayUntil != null || tracker.current.mode != 'WALK') {
+      return;
+    }
+    if (tracker.riding(_activity.ridingView(at))) {
+      _offRoute.reset();
       return;
     }
     final away = geo
