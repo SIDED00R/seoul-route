@@ -8,7 +8,7 @@ import '../widgets/mode_icon.dart';
 import '../util/stay_label.dart';
 import 'detail_screen.dart';
 
-/// 경로 후보 목록. 처음에는 서버 순서(추천순)로 보여 주고, 위의 전환으로 최소시간순으로 바꿔 볼 수 있다.
+/// 경로 후보 목록. 처음에는 최소시간순으로 보여 주고, 위의 전환으로 서버 순서(추천순)로 바꿔 볼 수 있다.
 class ResultsScreen extends StatefulWidget {
   const ResultsScreen({super.key, required this.api, required this.request, required this.result});
 
@@ -21,7 +21,7 @@ class ResultsScreen extends StatefulWidget {
 }
 
 class _ResultsScreenState extends State<ResultsScreen> {
-  ResultSort _sort = ResultSort.recommended;
+  ResultSort _sort = ResultSort.fastest;
 
   @override
   Widget build(BuildContext context) {

@@ -58,7 +58,7 @@ void main() {
     }
   });
 
-  testWidgets('결과 화면 전환 버튼으로 최소시간순과 추천순을 오간다', (tester) async {
+  testWidgets('결과 화면은 최소시간순으로 열리고, 전환 버튼으로 추천순과 오간다', (tester) async {
     const p = Place(name: 'A', address: '', lat: 37.5, lon: 127.0);
     await tester.pumpWidget(MaterialApp(
       home: ResultsScreen(
@@ -71,13 +71,13 @@ void main() {
           for (final t in tester.widgetList<ListTile>(find.byType(ListTile))) (t.title as Text).data!.split(' ').first
         ];
 
-    expect(titles(), ['66분', '62분', '60분', '62분']);
-    await tester.tap(find.text('최소시간순'));
-    await tester.pump();
     expect(titles(), ['60분', '62분', '62분', '66분']);
     await tester.tap(find.text('추천순'));
     await tester.pump();
     expect(titles(), ['66분', '62분', '60분', '62분']);
+    await tester.tap(find.text('최소시간순'));
+    await tester.pump();
+    expect(titles(), ['60분', '62분', '62분', '66분']);
   });
 
   testWidgets('경로가 없으면 전환 버튼을 보이지 않는다', (tester) async {
