@@ -640,4 +640,194 @@ void main() {
     expect(taskCalls, ['moveToBack']);
     expect(find.byType(HomeScreen), findsOneWidget, reason: '화면이 그대로 남아야 한다');
   });
+
+  group('경유지 체류(이슈 #130)', () {
+    // 09:00~09:05 경유지(코엑스, 37.501)까지 도보 → 체류 30분 → 09:35~09:40 도착지(37.502)까지 도보.
+    // 시각은 지역 시간으로 만들어 기기 시간대와 무관하게 문구를 비교한다.
+    DateTime at(int m) => DateTime(2026, 9, 20, 9, m);
+    Map<String, dynamic> walk(String to, double fromLat, double toLat, int from, int until, {bool stay = false}) => {
+          'mode': 'WALK',
+          'duration_sec': (until - from) * 60,
+          'distance_m': 111,
+          'from_name': 'x',
+          'to_name': to,
+          'from_lat': fromLat,
+          'from_lon': 127.0,
+          'to_lat': toLat,
+          'to_lon': 127.0,
+          'start': at(from).toIso8601String(),
+          'end': at(until).toIso8601String(),
+          if (stay) 'stay_via': 1,
+          if (stay) 'stay_sec': 1800,
+        };
+    final itinerary = Itinerary.fromJson({
+      'start': at(0).toIso8601String(),
+      'end': at(40).toIso8601String(),
+      'duration_sec': 2400,
+      'transfers': 0,
+      'walk_distance_m': 222,
+      'legs': [walk('코엑스', 37.5, 37.501, 0, 5, stay: true), walk('도착지', 37.501, 37.502, 35, 40)],
+    });
+    const viaRequest = PlanRequest(
+      origin: Place(name: '출발', address: '', lat: 37.5, lon: 127.0),
+      destination: Place(name: '도착지', address: '', lat: 37.502, lon: 127.0),
+      via: [Place(name: '코엑스', address: '', lat: 37.501, lon: 127.0)],
+      viaStayMin: [30],
+    );
+    late DateTime clock;
+
+    Future<GuideSession> stayAtVia() async {
+      clock = at(10); // 계획(09:05)보다 5분 늦게 경유지에 닿는다
+      final s = GuideSession(
+        api: api,
+        request: viaRequest,
+        itinerary: itinerary,
+        speak: (t) async => spoken.add(t),
+        store: store,
+        clock: () => clock,
+      );
+      ActiveGuide.instance.set(s);
+      await s.start();
+      await push(_pos(37.501, 127.0));
+      return s;
+    }
+
+    test('경유지에 닿으면 체류 문구·음성으로 바뀌고, 도착 예정은 늦게 닿은 만큼 밀린다', () async {
+      final s = await stayAtVia();
+      expect(s.staying, isTrue);
+      expect(s.tracker.index, 1);
+      expect(s.stayUntil, at(40));
+      expect(s.instr.now, '코엑스에서 머무는 중 · 09:40 출발 · 30분 남음');
+      expect(spoken.last, '코엑스에 도착했습니다. 30분 머무른 뒤 9시 40분에 출발합니다');
+      expect(s.eta, at(45)); // 계획 09:40 도착 + 경유지를 5분 늦게 떠남
+    });
+
+    test('머무는 동안은 멀리 둘러봐도 재탐색하거나 구간을 넘기지 않고, 시각이 되면 다음 구간 안내를 읽는다', () async {
+      final s = await stayAtVia();
+      for (var i = 0; i < 6; i++) {
+        clock = at(11 + i);
+        await push(_pos(37.5035, 127.0)); // 도보 경로선에서 약 170m, 도착지 반경 밖
+      }
+      expect(api.planCalls, 0);
+      expect(s.staying, isTrue);
+      expect(s.tracker.index, 1);
+      clock = at(40);
+      await push(_pos(37.501, 127.0));
+      expect(s.staying, isFalse);
+      expect(spoken.last, startsWith('출발할 시간입니다. '));
+      expect(s.instr.now, isNot(contains('머무는 중')));
+    });
+
+    test('"지금 출발"은 체류를 바로 끝내고 도착 예정을 지금 출발 기준으로 다시 잰다', () async {
+      final s = await stayAtVia();
+      clock = at(20);
+      s.endStay();
+      expect(s.staying, isFalse);
+      expect(spoken.last, startsWith('출발할 시간입니다'));
+      expect(s.eta, at(40)); // 09:20 출발은 계획(09:35)보다 이르므로 밀린 시간 0
+    });
+
+    test('체류 중에 저장한 안내를 이어받으면 체류도 이어진다', () async {
+      await stayAtVia();
+      final snap = await store.load(now: at(10));
+      expect(snap?.stayUntil, at(40));
+      final resumed = GuideSession.resume(snap!, api: api);
+      expect(resumed.staying, isTrue);
+      expect(resumed.instr.now, startsWith('코엑스에서 머무는 중'));
+      resumed.dispose();
+    });
+
+    test('경유지로 가다 재탐색해도 새 경로 끝에서 체류가 시작되고 저장본에도 남는다', () async {
+      api.planGate = Completer<PlanResult>();
+      clock = at(3);
+      final s = GuideSession(
+        api: api,
+        request: viaRequest,
+        itinerary: itinerary,
+        speak: (t) async => spoken.add(t),
+        store: store,
+        clock: () => clock,
+      );
+      ActiveGuide.instance.set(s);
+      await s.start();
+      for (var i = 0; i < 5; i++) {
+        await push(_pos(37.5005, 127.0015)); // 첫 도보 경로선에서 약 130m — 다섯째에 재탐색 요청
+      }
+      expect(api.planCalls, 1);
+      api.planGate!.complete(PlanResult(itineraries: [
+        Itinerary.fromJson({
+          'start': at(3).toIso8601String(),
+          'end': at(6).toIso8601String(),
+          'duration_sec': 180,
+          'transfers': 0,
+          'walk_distance_m': 60,
+          'legs': [walk('코엑스', 37.5005, 37.501, 3, 6)], // 도보 재탐색 응답에는 체류 표식이 없다
+        }),
+      ]));
+      await pumpEventQueue();
+      expect(s.tracker.current.stayVia, 1);
+      clock = at(10);
+      await push(_pos(37.501, 127.0));
+      expect(s.staying, isTrue);
+      expect((await store.load(now: at(10)))!.legs.first.stayVia, 1);
+    });
+
+    test('체류 중에는 도착지 가까이 있어도 목적지 도착으로 끝내지 않는다', () async {
+      final nearEnd = Itinerary.fromJson({
+        'start': at(0).toIso8601String(),
+        'end': at(36).toIso8601String(),
+        'duration_sec': 2160,
+        'transfers': 0,
+        'walk_distance_m': 130,
+        'legs': [walk('코엑스', 37.5, 37.501, 0, 5, stay: true), walk('도착지', 37.501, 37.5012, 35, 36)],
+      });
+      clock = at(10);
+      final s = GuideSession(
+        api: api,
+        request: viaRequest,
+        itinerary: nearEnd,
+        speak: (t) async => spoken.add(t),
+        store: store,
+        clock: () => clock,
+      );
+      ActiveGuide.instance.set(s);
+      await s.start();
+      await push(_pos(37.501, 127.0));
+      expect(s.staying, isTrue);
+      for (var i = 0; i < 3; i++) {
+        await push(_pos(37.5012, 127.0)); // 경유지에서 약 22m 인 도착지
+      }
+      expect(s.ended, isFalse);
+      expect(api.ended, isEmpty);
+    });
+
+    test('체류가 이미 끝난 저장본을 되살리면 시작할 때 체류를 끝내고 지난 체류 문구를 읽지 않는다', () async {
+      await stayAtVia();
+      final snap = (await store.load(now: at(10)))!;
+      // resume 은 기기 시계를 쓰므로 체류 끝을 지금보다 과거로 둔다.
+      final expired = GuideSnapshot(
+        tripId: snap.tripId,
+        request: snap.request,
+        itinerary: snap.itinerary,
+        legs: snap.legs,
+        legIndex: snap.legIndex,
+        shift: snap.shift,
+        startedAt: snap.startedAt,
+        stayUntil: DateTime.now().subtract(const Duration(minutes: 20)),
+      );
+      final heard = <String>[];
+      final resumed = GuideSession.resume(expired, api: api, speak: (t) async => heard.add(t));
+      await resumed.start();
+      expect(resumed.staying, isFalse);
+      expect(heard.where((t) => t.contains('머무른 뒤')), isEmpty);
+      resumed.dispose();
+    });
+
+    test('앞 구간으로 되돌리면 체류를 끝낸다', () async {
+      final s = await stayAtVia();
+      s.prevLeg();
+      expect(s.staying, isFalse);
+      expect(s.tracker.index, 0);
+    });
+  });
 }

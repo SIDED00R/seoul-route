@@ -5,6 +5,7 @@ import '../models/itinerary.dart';
 import '../models/plan_request.dart';
 import '../models/result_sort.dart';
 import '../widgets/mode_icon.dart';
+import '../util/stay_label.dart';
 import 'detail_screen.dart';
 
 /// 경로 후보 목록. 처음에는 서버 순서(추천순)로 보여 주고, 위의 전환으로 최소시간순으로 바꿔 볼 수 있다.
@@ -50,6 +51,12 @@ class _ResultsScreenState extends State<ResultsScreen> {
                     onSelectionChanged: (s) => setState(() => _sort = s.first),
                   ),
                 ),
+                if (request.totalStayMin > 0)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text('소요 시간에 경유지 체류 ${stayLabel(request.totalStayMin)}이 들어 있습니다',
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ),
                 Expanded(child: _list(its)),
               ],
             ),

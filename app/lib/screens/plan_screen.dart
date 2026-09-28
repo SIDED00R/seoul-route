@@ -6,6 +6,7 @@ import '../models/place.dart';
 import '../models/favorite_place.dart';
 import '../models/plan_request.dart';
 import '../settings/settings_store.dart';
+import '../widgets/via_stay_picker.dart';
 import 'place_search_screen.dart';
 import 'favorite_places_screen.dart';
 import 'results_screen.dart';
@@ -49,6 +50,7 @@ class _PlanScreenState extends State<PlanScreen> {
   Place? _origin;
   Place? _destination;
   final List<Place> _via = [];
+  final List<int> _viaStay = []; // _via 와 같은 길이. 경유지마다 머무는 분
   final List<SegmentMode> _modes = [SegmentMode.any];
   bool _busy = false;
   bool _locating = false;
@@ -94,6 +96,9 @@ class _PlanScreenState extends State<PlanScreen> {
       _via
         ..clear()
         ..addAll(p.request.via);
+      _viaStay
+        ..clear()
+        ..addAll([for (var i = 0; i < p.request.via.length; i++) p.request.stayAt(i)]);
       _modes
         ..clear()
         ..addAll(
@@ -160,6 +165,8 @@ class _PlanScreenState extends State<PlanScreen> {
       destination: d,
       via: List.of(_via),
       segmentModes: List.of(_modes),
+      viaStayMin: List.of(_viaStay),
+      bikeLimitMin: widget.settings.bikeLimitMin,
     );
     try {
       final res = await _api.plan(req);
@@ -202,11 +209,13 @@ class _PlanScreenState extends State<PlanScreen> {
 
   void _addVia(Place p) => setState(() {
     _via.add(p);
+    _viaStay.add(0);
     _modes.add(SegmentMode.any);
   });
 
   void _removeVia(int i) => setState(() {
     _via.removeAt(i);
+    _viaStay.removeAt(i);
     _modes.removeAt(i + 1);
   });
 
@@ -269,6 +278,13 @@ class _PlanScreenState extends State<PlanScreen> {
               trailing: IconButton(
                 icon: const Icon(Icons.close),
                 onPressed: _busy ? null : () => _removeVia(i),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 16, right: 12),
+              child: ViaStayPicker(
+                minutes: _viaStay[i],
+                onChanged: _busy ? null : (m) => setState(() => _viaStay[i] = m),
               ),
             ),
             _segmentMode(i + 1),

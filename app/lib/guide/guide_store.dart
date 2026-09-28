@@ -15,6 +15,7 @@ class GuideSnapshot {
     required this.legIndex,
     required this.shift,
     required this.startedAt,
+    this.stayUntil,
   });
 
   final String tripId;
@@ -27,6 +28,9 @@ class GuideSnapshot {
   final Duration shift;
   final DateTime startedAt;
 
+  /// 경유지 체류가 끝나는 시각. 체류 중이 아니면 null.
+  final DateTime? stayUntil;
+
   Map<String, dynamic> toJson() => {
         'trip_id': tripId,
         'request': request.toJson(),
@@ -35,6 +39,7 @@ class GuideSnapshot {
         'leg_index': legIndex,
         'shift_sec': shift.inSeconds,
         'started_at': startedAt.toIso8601String(),
+        if (stayUntil != null) 'stay_until': stayUntil!.toIso8601String(),
       };
 
   factory GuideSnapshot.fromJson(Map<String, dynamic> j) => GuideSnapshot(
@@ -47,6 +52,7 @@ class GuideSnapshot {
         legIndex: (j['leg_index'] as num).toInt(),
         shift: Duration(seconds: (j['shift_sec'] as num).toInt()),
         startedAt: DateTime.parse(j['started_at'] as String),
+        stayUntil: DateTime.tryParse((j['stay_until'] as String?) ?? ''),
       );
 }
 

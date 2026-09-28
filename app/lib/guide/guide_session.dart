@@ -27,6 +27,7 @@ import 'step_tracker.dart';
 import 'stop_tracker.dart';
 import 'trace_uploader.dart';
 import 'tts_speaker.dart';
+import 'via_stay_instruction.dart';
 import 'voice_guide.dart';
 
 /// 안내 한 번의 상태. 위치 스트림·구간 추적·음성·알림창·궤적 업로드를 들고 있으며 화면과 떨어져 있다 —
@@ -64,6 +65,7 @@ class GuideSession extends ChangeNotifier {
       index: snap.legIndex,
       shift: snap.shift,
     );
+    _stayUntil = snap.stayUntil;
     _initTrackers();
   }
 
@@ -126,6 +128,10 @@ class GuideSession extends ChangeNotifier {
   /// 도착을 확정한 시각. 구간이 바뀌면 지운다. 값이 있는 동안 표본을 서버에 올리지 않고, 경로 이탈 재탐색을
   /// 시작하거나 적용하지 않으며, 10초 점검이 종료를 다시 보낸다.
   DateTime? _arrivedAt;
+
+  /// 경유지 체류가 끝나는 시각(도착 + 체류). 체류 중이 아니면 null. 값이 있는 동안 구간 넘김·경로 이탈 재탐색·목적지
+  /// 도착 판정을 하지 않고 체류 문구를 보여 준다. 시각이 되거나 endStay 를 부르면 다음 구간 안내로 돌아간다.
+  DateTime? _stayUntil;
   final VoiceGuide _voice = VoiceGuide(enabled: false);
   late final DateTime? _eta = DateTime.tryParse(itinerary.end);
   Timer? _ticker;
@@ -157,6 +163,10 @@ class GuideSession extends ChangeNotifier {
 
   /// 안내가 끝났다. "현재 경로" 탭은 이때 비운다.
   bool get ended => _ended;
+
+  /// 경유지에서 머무는 중이다. 안내 화면은 이때 "지금 출발" 버튼을 보여 준다.
+  bool get staying => _stayUntil != null;
+  DateTime? get stayUntil => _stayUntil;
   bool get activityOn => _activityOn;
   String get activity => _activity.current;
   TraceUploader? get uploader => _uploader;
@@ -236,6 +246,8 @@ class GuideSession extends ChangeNotifier {
       unawaited(_refreshLandmarks(firstLandmarks));
     }
     if (_closed) return;
+    // 되살린 안내의 체류가 이미 끝났으면 지난 체류 문구를 읽기 전에 끝낸다(음성은 아직 꺼져 있다).
+    _checkStayOver(now());
     _instr = _buildInstruction();
     await _startVoice();
     await _startActivity();
@@ -302,14 +314,17 @@ class GuideSession extends ChangeNotifier {
     var refreshLandmarks = false;
     _activity.settle(at);
     final here = LatLng(p.latitude, p.longitude);
-    if (tracker.update(
-      p.latitude,
-      p.longitude,
-      accuracyM: p.accuracy,
-      now: at,
-    )) {
+    _checkStayOver(at);
+    // 경유지에서 머무는 동안은 둘러보는 위치로 구간을 넘기지 않는다.
+    if (_stayUntil == null &&
+        tracker.update(
+          p.latitude,
+          p.longitude,
+          accuracyM: p.accuracy,
+          now: at,
+        )) {
       _offRoute.reset();
-      _enterLeg();
+      _enterLeg(arrived: true);
     } else {
       if (_steps.update(p.latitude, p.longitude, accuracyM: p.accuracy)) {
         refreshLandmarks = true;
@@ -345,7 +360,7 @@ class GuideSession extends ChangeNotifier {
 
   /// 마지막 구간에서 목적지에 닿았으면 사용자가 누르지 않아도 끝낸다.
   void _checkArrived(Position p) {
-    if (!tracker.isLast || _ending || _ended) return;
+    if (!tracker.isLast || _ending || _ended || _stayUntil != null) return;
     final leg = tracker.current;
     if (!_arrival.update(
       geo.distanceM(p.latitude, p.longitude, leg.toLat, leg.toLon),
@@ -380,7 +395,8 @@ class GuideSession extends ChangeNotifier {
     final at = now();
     // 위치가 아예 끊긴 지하에서도 활동 판정이 흐르게 한다 — 그러지 않으면 정지 감쇠가 멈춰 직전 활동이 화면에 박힌다.
     _activity.settle(at);
-    if (tracker.tick(at)) _enterLeg();
+    _checkStayOver(at);
+    if (_stayUntil == null && tracker.tick(at)) _enterLeg(arrived: true);
     if (tracker.current.transitLeg) {
       _remainingStops = _stops.remaining(null, null, 0, at);
     }
@@ -392,7 +408,9 @@ class GuideSession extends ChangeNotifier {
   /// 도보 구간에서 경로를 벗어났으면 그 구간을 현재 위치에서 다시 찾는다. 대중교통은 정해진 노선을 따라가고
   /// 자전거는 양끝이 대여소로 묶여 있어(어디로 달리든 대여소에 반납한다) 둘 다 경로 이탈이 성립하지 않는다.
   void _checkOffRoute(Position p, DateTime at) {
-    if (_rerouting || _ending || _arrivedAt != null || tracker.current.mode != 'WALK') return;
+    if (_rerouting || _ending || _arrivedAt != null || _stayUntil != null || tracker.current.mode != 'WALK') {
+      return;
+    }
     final away = geo
         .projectOnPolyline(p.latitude, p.longitude, tracker.currentPoints)
         .distM;
@@ -439,9 +457,17 @@ class GuideSession extends ChangeNotifier {
         _set(() => _status = '안내 중');
         return;
       }
-      final fresh = res.itineraries.isEmpty
+      var fresh = res.itineraries.isEmpty
           ? const <Leg>[]
           : res.itineraries.first.legs;
+      // 체류하는 경유지로 가던 구간이면 그 표식을 새 경로의 마지막 구간에 옮긴다(도보 재탐색 응답에는 없다).
+      // raw 에도 넣어야 안내 저장본을 되살렸을 때 남는다.
+      if (leg.stayVia > 0 && fresh.isNotEmpty) {
+        fresh = [
+          ...fresh.take(fresh.length - 1),
+          Leg.fromJson({...fresh.last.raw, 'stay_via': leg.stayVia, 'stay_sec': leg.staySec}),
+        ];
+      }
       if (fresh.isEmpty) {
         _offRoute.reset();
         _set(() => _status = '다시 찾은 경로가 없습니다 — 원래 경로로 안내합니다');
@@ -466,8 +492,11 @@ class GuideSession extends ChangeNotifier {
   }
 
   /// 구간이 바뀌었을 때(자동·버튼 공통) 단계·정차 추적을 새 구간으로 갈아 끼우고 문구를 다시 만든다.
-  void _enterLeg() {
+  /// arrived 는 앞 구간을 마치고 넘어왔다는 뜻이다(자동 넘김·"다음 구간"). 그 앞 구간 끝이 체류하는 경유지면 체류를
+  /// 시작한다. 뒤로 가거나 구간을 갈아 끼웠으면 체류를 끝낸다.
+  void _enterLeg({bool arrived = false}) {
     final leg = tracker.current;
+    _stayUntil = arrived ? _beginStay() : null;
     _arrival.reset(); // 마지막 구간을 벗어났거나 갈아 끼웠으면 도착 셈을 다시 시작한다
     _arrivedAt = null;
     _steps = _stepTrackerFor(leg);
@@ -477,6 +506,43 @@ class GuideSession extends ChangeNotifier {
     unawaited(_refreshLandmarks());
     _announce();
     _persist(); // 구간·밀린 시간이 바뀔 때만 남기면 된다(나머지는 안내 내내 그대로다)
+  }
+
+  /// 방금 들어온 구간 앞이 체류하는 경유지면 체류가 끝날 시각(지금 + 체류)을 돌려주고, 뒤 구간 예상 시각을 그 시각
+  /// 출발 기준으로 민다. 아니면 null.
+  DateTime? _beginStay() {
+    final i = tracker.index;
+    if (i == 0) return null;
+    final before = tracker.legs[i - 1];
+    if (before.stayVia <= 0 || before.staySec <= 0) return null;
+    final until = now().add(Duration(seconds: before.staySec.round()));
+    _shiftFrom(until);
+    return until;
+  }
+
+  /// 현재 구간을 t 에 출발한다고 보고 밀린 시간을 다시 잰다(계획보다 이르면 0).
+  void _shiftFrom(DateTime t) {
+    final start = DateTime.tryParse(tracker.current.start);
+    if (start == null) return;
+    final late = t.difference(start);
+    tracker.shift = late.isNegative ? Duration.zero : late;
+  }
+
+  void _checkStayOver(DateTime at) {
+    final until = _stayUntil;
+    if (until != null && !at.isBefore(until)) endStay();
+  }
+
+  /// 체류를 끝내고 경유지 다음 구간 안내로 돌아간다(체류 시각이 됐거나 사용자가 "지금 출발"을 눌렀을 때).
+  void endStay() {
+    if (_stayUntil == null || _ending || _closed) return;
+    _stayUntil = null;
+    _shiftFrom(now());
+    _stops = StopTracker(tracker.current, tracker.currentPoints, shift: tracker.shift);
+    _instr = stayOverInstruction(_buildInstruction());
+    _announce();
+    _persist();
+    _notify();
   }
 
   /// 진행 중인 안내를 디스크에 남긴다. trip 발급 전이거나 끝나는 중이면 남길 것이 없다.
@@ -493,6 +559,7 @@ class GuideSession extends ChangeNotifier {
           legIndex: tracker.index,
           shift: tracker.shift,
           startedAt: startedAt,
+          stayUntil: _stayUntil,
         ),
       ),
     );
@@ -534,7 +601,7 @@ class GuideSession extends ChangeNotifier {
     tracker.next(now: now());
     _offRoute.reset();
     _voice.forget('L${tracker.index}:');
-    _enterLeg();
+    _enterLeg(arrived: true);
     _notify();
   }
 
@@ -609,6 +676,22 @@ class GuideSession extends ChangeNotifier {
   }
 
   Instruction _buildInstruction({LatLng? here}) {
+    final next = _legInstruction(here: here);
+    final until = _stayUntil;
+    if (until == null || tracker.index == 0) return next;
+    final before = tracker.legs[tracker.index - 1];
+    return stayInstruction(
+      request: request,
+      stayVia: before.stayVia,
+      staySec: before.staySec,
+      until: until,
+      now: now(),
+      legIndex: tracker.index,
+      after: next,
+    );
+  }
+
+  Instruction _legInstruction({LatLng? here}) {
     final at = here ?? _here;
     final landmark = _currentTurnLandmark();
     return buildInstruction(
