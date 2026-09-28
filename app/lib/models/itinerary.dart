@@ -33,6 +33,8 @@ class Leg {
     this.headsign = '',
     this.steps = const [],
     this.stops = const [],
+    this.stayVia = 0,
+    this.staySec = 0,
     this.raw = const {},
   });
 
@@ -65,6 +67,8 @@ class Leg {
   final String headsign; // 탑승 차량의 행선지(대중교통)
   final List<WalkStep> steps; // 도보·자전거 안내 단계
   final List<TransitStop> stops; // 중간 정차(탑승·하차 제외)
+  final int stayVia; // 이 leg 끝이 체류하는 경유지면 그 번호(1부터), 아니면 0
+  final double staySec; // 그 경유지 체류(초)
 
   /// 이 leg 를 만든 서버 응답 그대로. 진행 중인 안내를 디스크에 남겼다가 되살릴 때 쓴다(guide/guide_store.dart).
   /// 필드를 하나씩 다시 쓰지 않으므로 fromJson 과 어긋날 수 없다. 코드로 만든 leg(테스트)는 비어 있다.
@@ -109,6 +113,8 @@ class Leg {
         stops: ((j['stops'] as List<dynamic>?) ?? const [])
             .map((e) => TransitStop.fromJson(e as Map<String, dynamic>))
             .toList(),
+        stayVia: (j['stay_via'] as num?)?.toInt() ?? 0,
+        staySec: (j['stay_sec'] as num?)?.toDouble() ?? 0,
       );
 
   /// "횡단보도 3곳 · 신호 대기 약 2분". 신호 횡단보도가 없으면 null.

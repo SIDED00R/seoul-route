@@ -176,6 +176,15 @@ class _GuideScreenState extends State<GuideScreen> {
             now: s.instr.now,
             next: s.instr.next,
           ),
+          if (s.staying)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              child: FilledButton.tonalIcon(
+                onPressed: s.endStay,
+                icon: const Icon(Icons.directions_walk),
+                label: const Text('지금 출발'),
+              ),
+            ),
           Expanded(
             child: Stack(children: [
               FlutterMap(

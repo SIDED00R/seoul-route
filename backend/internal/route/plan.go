@@ -39,6 +39,8 @@ type Point struct {
 	Lat  float64 `json:"lat"`
 	Lon  float64 `json:"lon"`
 	Name string  `json:"name,omitempty"`
+	// StayMin 은 경유지에서 머무는 분(0 = 바로 통과). 경유지에만 쓰고 출발지·도착지 값은 무시한다.
+	StayMin int `json:"stay_min,omitempty"`
 }
 
 type PlanRequest struct {
@@ -47,8 +49,10 @@ type PlanRequest struct {
 	Via         []Point       `json:"via"`
 	Modes       []SegmentMode `json:"segment_modes"`
 	Depart      *time.Time    `json:"depart"`
-	WalkSpeed   float64       `json:"-"`
-	BikeSpeed   float64       `json:"-"`
+	// BikeLimitMin 은 따릉이 이용권의 대여 1회 한도(60 = 1시간권, 120 = 2시간권, 0 = 제한 없음).
+	BikeLimitMin int     `json:"bike_limit_min"`
+	WalkSpeed    float64 `json:"-"`
+	BikeSpeed    float64 `json:"-"`
 }
 
 type Planner struct {
@@ -106,6 +110,8 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) ([]otp.Itinerary, e
 		its, err = p.segmented(ctx, req)
 	case len(req.Via) == 0:
 		its, err = p.single(ctx, req)
+	case hasStay(req.Via):
+		its, err = p.segmented(ctx, req)
 	default:
 		its, err = p.viaBoth(ctx, req)
 	}

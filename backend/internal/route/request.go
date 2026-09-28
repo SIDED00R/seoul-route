@@ -16,6 +16,16 @@ func validate(req *PlanRequest) error {
 	if len(req.Via) > 5 {
 		return fmt.Errorf("%w: 경유지는 5개까지", ErrBadRequest)
 	}
+	for _, v := range req.Via {
+		if v.StayMin < 0 || v.StayMin > MaxStayMin {
+			return fmt.Errorf("%w: 경유지 체류는 0~%d분", ErrBadRequest, MaxStayMin)
+		}
+	}
+	switch req.BikeLimitMin {
+	case 0, 60, 120:
+	default:
+		return fmt.Errorf("%w: bike_limit_min 은 0·60·120", ErrBadRequest)
+	}
 	wantModes := len(req.Via) + 1
 	if len(req.Modes) == 0 {
 		req.Modes = make([]SegmentMode, wantModes)

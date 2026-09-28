@@ -41,6 +41,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _voiceGuide = widget.initial.voiceGuide;
   late bool _overlayGuide = widget.initial.overlayGuide;
   late double _overlayOpacity = widget.initial.overlayOpacity;
+  late int _bikeLimitMin = widget.initial.bikeLimitMin;
 
   @override
   void initState() {
@@ -57,6 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     voiceGuide: _voiceGuide,
     overlayGuide: _overlayGuide,
     overlayOpacity: _overlayOpacity,
+    bikeLimitMin: _bikeLimitMin,
   );
 
   /// 켜기·끄기 모두 "저장" 때 진행 중인 안내에 반영된다(_save). 여기서는 권한만 확인한다.
@@ -236,6 +238,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               // 안내 중이면 떠 있는 창에 바로 반영된다(저장은 "저장" 버튼).
               onChangeEnd: (v) => GuideOverlayPlatform.setOpacity(Settings.overlayAlphaOf(v)),
             ),
+          ),
+          // 따릉이 이용권. 대여 1회가 이 시간을 넘을 경로는 서버가 중간 대여소에서 반납 후 다시 빌리게 짠다.
+          const ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text('따릉이 이용권'),
+            subtitle: Text('대여 1회가 이용권 시간을 넘으면 중간 대여소에서 반납하고 다시 빌리는 경로로 찾습니다'),
+          ),
+          SegmentedButton<int>(
+            segments: [
+              for (final m in Settings.bikeLimitChoices)
+                ButtonSegment(value: m, label: Text('${m ~/ 60}시간권')),
+            ],
+            selected: {_bikeLimitMin},
+            showSelectedIcon: false,
+            onSelectionChanged: _busy ? null : (s) => setState(() => _bikeLimitMin = s.first),
           ),
           const SizedBox(height: 8),
           Row(

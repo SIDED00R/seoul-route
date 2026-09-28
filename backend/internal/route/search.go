@@ -110,6 +110,12 @@ func (p *Planner) single(ctx context.Context, req PlanRequest) ([]otp.Itinerary,
 		}
 		merged = append(merged, results[i]...)
 	}
+	if len(req.Via) == 0 {
+		merged = p.fitRentals(ctx, req, req.Origin, req.Destination, req.Depart, merged)
+	} else {
+		// OTP via 후보는 경유지 사이에 구간을 나눌 수 없어 한도를 넘는 대여는 빼기만 한다(구간별 탐색이 나눈 후보를 낸다).
+		merged = p.dropLongRentals(req, merged)
+	}
 	if len(merged) > 0 {
 		return merged, nil
 	}
@@ -194,13 +200,15 @@ func (p *Planner) extend(ctx context.Context, req PlanRequest, points []Point, s
 			request.Depart = entryDepart(req.Depart, p.now())
 		}
 	} else {
-		request.Depart = &candidate.end
+		depart := candidate.end.Add(stayOf(points[segment]))
+		request.Depart = &depart
 	}
 
 	itineraries, err := p.OTP.Plan(ctx, request)
 	if err != nil {
 		return nil, err
 	}
+	itineraries = p.fitRentals(ctx, req, points[segment], points[segment+1], request.Depart, itineraries)
 	var out []partial
 	for _, itinerary := range itineraries {
 		if !satisfies(req.Modes[segment], itinerary) {
@@ -221,7 +229,12 @@ func (p *Planner) extend(ctx context.Context, req PlanRequest, points []Point, s
 		if next.start == "" {
 			next.start = itinerary.Start
 		}
-		if len(candidate.legs) > 0 && (lastVehicle(candidate.legs) != "WALK" || firstVehicle(itinerary.Legs) != "WALK") {
+		if stay := points[segment].StayMin; segment > 0 && stay > 0 && len(candidate.legs) > 0 {
+			arrive := &next.legs[len(candidate.legs)-1]
+			arrive.StayVia, arrive.StaySec = segment, float64(stay*60)
+		}
+		if len(candidate.legs) > 0 && points[segment].StayMin == 0 &&
+			(lastVehicle(candidate.legs) != "WALK" || firstVehicle(itinerary.Legs) != "WALK") {
 			next.transfers++
 		}
 		out = append(out, next)

@@ -12,6 +12,7 @@ class Settings {
     this.voiceGuide = true,
     this.overlayGuide = false,
     this.overlayOpacity = defaultOverlayOpacity,
+    this.bikeLimitMin = defaultBikeLimitMin,
   });
 
   final String baseUrl;
@@ -21,6 +22,11 @@ class Settings {
   // 미니 지도 창의 불투명도(0 투명 ~ 1 불투명). Android 12+ 는 다른 앱을 가리는 창이 0.8 을 넘으면 뒤 앱 터치를
   // 막으므로 네이티브가 기기 상한(maximumObscuringOpacityForTouch)으로 한 번 더 자른다.
   final double overlayOpacity;
+  // 따릉이 이용권의 대여 1회 한도(분). 60 = 1시간권, 120 = 2시간권. 경로 요청 bike_limit_min 으로 보낸다.
+  final int bikeLimitMin;
+
+  static const defaultBikeLimitMin = 60;
+  static const bikeLimitChoices = [60, 120];
 
   // 화면은 5~100% 로 보여 주고 내부 알파는 0.04~0.8 이다(100% = 0.8 = Android 터치 차단 상한). 기본 50% = 0.4.
   static const defaultOverlayOpacity = 0.4;
@@ -52,6 +58,7 @@ class SettingsStore {
   static const _kVoiceGuide = 'voice_guide';
   static const _kOverlayGuide = 'overlay_guide';
   static const _kOverlayOpacity = 'overlay_opacity';
+  static const _kBikeLimitMin = 'bike_limit_min';
   static const _kProdTokenPurged = 'prod_token_purged'; // prod 첫 실행 토큰 폐기를 한 번만 하기 위한 표시
   final TokenStorage tokenStorage;
 
@@ -81,8 +88,12 @@ class SettingsStore {
       voiceGuide: p.getBool(_kVoiceGuide) ?? true,
       overlayGuide: p.getBool(_kOverlayGuide) ?? false,
       overlayOpacity: _clampOpacity(p.getDouble(_kOverlayOpacity)),
+      bikeLimitMin: _bikeLimit(p.getInt(_kBikeLimitMin)),
     );
   }
+
+  static int _bikeLimit(int? v) =>
+      Settings.bikeLimitChoices.contains(v) ? v! : Settings.defaultBikeLimitMin;
 
   static double _clampOpacity(double? v) => (v ?? Settings.defaultOverlayOpacity)
       .clamp(Settings.minOverlayOpacity, Settings.maxOverlayOpacity);
@@ -135,6 +146,7 @@ class SettingsStore {
     await p.setBool(_kVoiceGuide, s.voiceGuide);
     await p.setBool(_kOverlayGuide, s.overlayGuide);
     await p.setDouble(_kOverlayOpacity, _clampOpacity(s.overlayOpacity));
+    await p.setInt(_kBikeLimitMin, _bikeLimit(s.bikeLimitMin));
     final token = s.token.trim();
     if (token.isEmpty) {
       await tokenStorage.delete();

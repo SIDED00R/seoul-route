@@ -17,7 +17,8 @@ class RecentRoute {
       );
     }
 
-    final via = ((req['via'] as List<dynamic>?) ?? const []).map(place).toList();
+    final rawVia = (req['via'] as List<dynamic>?) ?? const [];
+    final via = rawVia.map(place).toList();
     final modes = ((req['segment_modes'] as List<dynamic>?) ?? const [])
         .map((m) => SegmentMode.values.firstWhere((v) => v.value == m, orElse: () => SegmentMode.any))
         .toList();
@@ -28,6 +29,7 @@ class RecentRoute {
         via: via,
         // 서버는 전 구간 any 면 segment_modes 를 싣지 않는다 — 그때는 구간 수에 맞춰 any 로 채운다.
         segmentModes: modes.isEmpty ? List.filled(via.length + 1, SegmentMode.any) : modes,
+        viaStayMin: [for (final v in rawVia) ((v as Map<String, dynamic>?)?['stay_min'] as num?)?.toInt() ?? 0],
       ),
       searchedAt: DateTime.tryParse((j['searched_at'] as String?) ?? ''),
     );

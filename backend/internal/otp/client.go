@@ -92,6 +92,10 @@ type Leg struct {
 	Stops     []Stop `json:"stops,omitempty"` // 대중교통 leg 의 중간 정차(탑승·하차 제외)
 	// 지하철 하차역에서 설비(계단·에스컬레이터·엘리베이터)가 있는 칸-문. 자료가 있는 역(1~8호선)만 채운다.
 	FastExit []fastexit.Facility `json:"fast_exit,omitempty"`
+	// 이 leg 끝이 체류하는 경유지면 그 경유지 번호(1부터)와 체류 초. 구간별 탐색이 경유지 이음에서 붙인다
+	// (route/via_stay.go). 앱 안내가 이 leg 를 마치면 체류 상태로 들어간다.
+	StayVia int     `json:"stay_via,omitempty"`
+	StaySec float64 `json:"stay_sec,omitempty"`
 }
 
 // Step 은 도보·자전거 leg 의 안내 단계. Dir 은 이 단계 시작점에서의 회전(OTP relativeDirection),
