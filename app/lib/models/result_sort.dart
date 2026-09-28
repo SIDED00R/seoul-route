@@ -1,10 +1,10 @@
 import 'itinerary.dart';
 
-/// 경로 목록 정렬 기준. 추천순은 서버 순서(출발 대기 + 소요 + 환승 1회당 240초 + 따릉이 대여가 있으면 300초 점수,
-/// backend route/ranking.go), 최소시간순은 화면에 보이는 분([Itinerary.minutes]) 오름차순.
+/// 경로 목록 정렬 기준. 최소시간순은 화면에 보이는 분([Itinerary.minutes]) 오름차순, 추천순은 서버 순서(출발 대기 + 소요
+/// + 환승 1회당 240초 + 따릉이 대여가 있으면 300초 점수, backend route/ranking.go). 전환 버튼은 이 순서로 놓인다.
 enum ResultSort {
-  recommended('추천순'),
-  fastest('최소시간순');
+  fastest('최소시간순'),
+  recommended('추천순');
 
   const ResultSort(this.label);
   final String label;
