@@ -97,13 +97,15 @@ Instruction buildInstruction({
     final unit = leg.mode == 'BUS' ? '정류장' : '역';
     final ride = '${leg.label}${_headsignText(leg)}';
     final total = leg.stops.length + 1; // 하차역 포함 전체 정거장 수
+    final fast = fastExitPhrase(leg, transferAfter: _subwayTransferAfter(ls, legIndex));
     if (remainingStops <= 1) {
-      // 한 정거장짜리 구간은 탑승 안내 없이 바로 여기로 오므로 무엇을 타는지도 함께 읽는다.
+      // 한 정거장짜리 구간은 탑승 안내 없이 바로 여기로 오므로 무엇을 타는지(와 빠른 하차 칸-문)도 함께 읽는다.
       final head = total <= 1 ? '${withObjectParticle(ride)} 타고 ' : '';
+      final board = total <= 1 && fast.isNotEmpty ? '$fast. ' : '';
       return Instruction(
         now: '다음 $unit에서 내리세요 · $to',
         next: next,
-        utterance: '$head다음 $unit에서 내리세요. $next',
+        utterance: '$head다음 $unit에서 내리세요. $board$next',
         cueKey: 'L$legIndex:alight',
       );
     }
@@ -112,7 +114,7 @@ Instruction buildInstruction({
       now: '$remainingStops정거장 뒤 $to에서 내리기$via',
       next: next,
       // 탑승 안내는 구간에 들어올 때 한 번만 읽는다. 문장의 정거장 수는 구간 전체 값이라 역을 지나도 바뀌지 않는다.
-      utterance: '${withObjectParticle(ride)} 타고 $total정거장 뒤 $to에서 내리세요',
+      utterance: '${withObjectParticle(ride)} 타고 $total정거장 뒤 $to에서 내리세요${fast.isEmpty ? '' : '. $fast'}',
       cueKey: 'L$legIndex:board',
     );
   }
@@ -185,16 +187,54 @@ String _headsignText(Leg leg) =>
 /// 목적격 조사를 붙인다("2호선을"·"버스 402를"). 받침이 있으면 을, 없으면 를. 숫자는 읽는 소리로 가린다.
 String withObjectParticle(String word) {
   if (word.isEmpty) return word;
+  return '$word${_hasFinalConsonant(word) ? '을' : '를'}';
+}
+
+/// 마지막 글자를 읽을 때 받침이 있는지. 숫자는 읽는 소리로 가린다.
+bool _hasFinalConsonant(String word) {
   final c = word.codeUnitAt(word.length - 1);
-  bool hasFinal;
-  if (c >= 0xAC00 && c <= 0xD7A3) {
-    hasFinal = (c - 0xAC00) % 28 != 0;
-  } else if (c >= 0x30 && c <= 0x39) {
-    hasFinal = '013678'.contains(String.fromCharCode(c)); // 영·일·삼·육·칠·팔
-  } else {
-    hasFinal = false;
+  if (c >= 0xAC00 && c <= 0xD7A3) return (c - 0xAC00) % 28 != 0;
+  if (c >= 0x30 && c <= 0x39) return '013678'.contains(String.fromCharCode(c)); // 영·일·삼·육·칠·팔
+  return false;
+}
+
+/// 탑승 안내에 붙일 빠른 하차 문장("에스컬레이터와 가까운 3번 칸 3번 문이나 8번 칸 1번 문 쪽에서 타세요").
+/// 내린 뒤 지하철로 환승하면 환승통로 설비를, 아니면 출구 쪽 설비를 고르고 그 종류가 없으면 첫 설비를 쓴다.
+/// 칸-문은 앞에서 두 개까지 읽는다. 자료가 없으면 빈 문자열.
+String fastExitPhrase(Leg leg, {required bool transferAfter}) {
+  if (leg.fastExit.isEmpty) return '';
+  final f = leg.fastExit.firstWhere(
+    (f) => f.name.startsWith('환승통로') == transferAfter,
+    orElse: () => leg.fastExit.first,
+  );
+  if (f.doors.isEmpty || f.name.isEmpty) return '';
+  final doors = f.doors.take(2).map(_doorText).toList();
+  final doorsText = doors.length == 1
+      ? doors[0]
+      : '${doors[0]}${_hasFinalConsonant(doors[0]) ? '이나' : '나'} ${doors[1]}';
+  return '${f.name}${_hasFinalConsonant(f.name) ? '과' : '와'} 가까운 $doorsText 쪽에서 타세요';
+}
+
+/// 백엔드 칸-문 표기를 읽는 말로 바꾼다. "3-3" → "3번 칸 3번 문", "3-2,3-3 사이" → "3번 칸 2번 문과 3번 칸 3번 문 사이".
+String _doorText(String door) {
+  if (door.endsWith('사이')) {
+    final ends = door.substring(0, door.length - 2).trim().split(',').map((e) => e.trim()).toList();
+    if (ends.length == 2 && ends.every((e) => e.split('-').length == 2)) {
+      return '${_doorText(ends[0])}과 ${_doorText(ends[1])} 사이';
+    }
   }
-  return '$word${hasFinal ? '을' : '를'}';
+  final p = door.split('-');
+  return p.length == 2 ? '${p[0]}번 칸 ${p[1]}번 문' : door;
+}
+
+/// legIndex 대중교통 구간에서 내린 뒤 지하철·철도로 갈아타는지(바로 이어지거나 도보 하나를 사이에 두고).
+bool _subwayTransferAfter(List<Leg> legs, int legIndex) {
+  for (var k = legIndex + 1; k < legs.length && k <= legIndex + 2; k++) {
+    final l = legs[k];
+    if (l.transitLeg) return l.mode == 'SUBWAY' || l.mode == 'RAIL';
+    if (l.mode != 'WALK') return false;
+  }
+  return false;
 }
 
 /// 이 구간 다음에 할 일. 환승·하차 후 출구·대여·반납·도착.

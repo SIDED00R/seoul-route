@@ -212,6 +212,10 @@ const _request = PlanRequest(
   destination: Place(name: '도착지', address: '', lat: 37.508, lon: 127.0),
 );
 
+// 2호선 구간(_legs[1])의 탑승 문장. 하차역 빠른 하차 자료(계단 4-2, 7-1)가 붙는다.
+const _boardLine2 = '2호선 성수 방면을 타고 3정거장 뒤 역삼에서 내리세요. '
+    '계단과 가까운 4번 칸 2번 문이나 7번 칸 1번 문 쪽에서 타세요';
+
 Future<void> _settle(WidgetTester tester) async {
   for (var i = 0; i < 10; i++) {
     await tester.pump();
@@ -334,7 +338,7 @@ void main() {
     await tester.tap(find.text('다음 구간'));
     await _settle(tester);
     expect(find.textContaining('구간 2/3'), findsOneWidget);
-    expect(spoken.last, '2호선 성수 방면을 타고 3정거장 뒤 역삼에서 내리세요');
+    expect(spoken.last, _boardLine2);
     // 지하라 위치가 튀는 상황: 정확도가 나쁘면 시간표로 센다(구간 출발이 아직 미래라 정차 2곳이 남는다).
     await _push(tester, geo, pos(37.502, 127.0, acc: 90));
     expect(find.textContaining('정거장 뒤 역삼에서 내리기'), findsOneWidget);
@@ -379,7 +383,7 @@ void main() {
     );
     await _settle(tester);
     expect(find.textContaining('3정거장 뒤 역삼에서 내리기'), findsOneWidget);
-    expect(spoken, ['2호선 성수 방면을 타고 3정거장 뒤 역삼에서 내리세요']);
+    expect(spoken, [_boardLine2]);
     await close(tester);
   });
 
@@ -388,7 +392,7 @@ void main() {
     await tester.tap(find.text('다음 구간'));
     await _settle(tester);
     final boarded = spoken.length;
-    expect(spoken.last, '2호선 성수 방면을 타고 3정거장 뒤 역삼에서 내리세요');
+    expect(spoken.last, _boardLine2);
     await _push(tester, geo, pos(37.5025, 127.0)); // 출발 직후
     await _push(tester, geo, pos(37.5035, 127.0)); // 교대를 지남 → 남은 2정거장
     expect(find.textContaining('2정거장 뒤 역삼에서 내리기'), findsOneWidget);
