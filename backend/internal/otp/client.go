@@ -468,6 +468,7 @@ func (n node) itinerary() Itinerary {
 			}
 			leg.Steps = append(leg.Steps, step)
 		}
+		trimStationWalk(&leg)
 		legStart, startErr := time.Parse(time.RFC3339, leg.Start)
 		for _, p := range l.IntermediatePlaces {
 			stop := Stop{Name: p.Name, Lat: p.Lat, Lon: p.Lon}
