@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/SIDED00R/seoul-route/backend/internal/shops"
 )
 
 // 검색 결과는 서울 bbox 로 한정해 요청하고, 주소는 도로명 > 지번 순으로 고른다.
@@ -145,6 +148,53 @@ func TestPlacesSearchPassesLocation(t *testing.T) {
 	places, _ = searchNames(t, s, "/places/search?q="+url.QueryEscape("가나커피"))
 	if k.call("main").Get("x") != "" || len(places) != 1 || places[0].DistanceM != 0 {
 		t.Errorf("위치 없음: main=%v places=%+v", k.call("main"), places)
+	}
+}
+
+// 카카오가 검색어를 다른 단어로 쪼개 읽으면(이름에 그대로 든 곳이 없으면) 상가 부분 일치를 앞에 두고 거리를 붙인다.
+// 카카오 이름에 그대로 들어 있으면 상가 목록을 섞지 않는다. 상가 목록이 없으면 카카오 결과만.
+func TestPlacesSearchShops(t *testing.T) {
+	list := shops.New([]shops.Shop{
+		{ID: "1", Name: "무교동북어국집", Category: "백반/한정식", Address: "서울 중구 을지로1길 38", Lat: 37.5, Lon: 127.001},
+		{ID: "2", Name: "원조무교동북어", Lat: 37.5, Lon: 127.0},
+	})
+	split := `{"meta":{"same_name":{"keyword":"무교동북"}},"documents":[` +
+		`{"id":"m1","place_name":"동북보험대리점","x":"126.9790","y":"37.5677","distance":"9000"}]}`
+	literal := `{"meta":{"same_name":{"keyword":"무교동북"}},"documents":[` +
+		`{"id":"m1","place_name":"무교동북카페","x":"126.9790","y":"37.5677"}]}`
+	cases := []struct {
+		name, kakao string
+		shops       *shops.Index
+		want        string
+	}{
+		{"쪼개 읽었으면 상가 앞부분 일치 → 부분 일치 → 카카오", split, list,
+			"무교동북어국집(88m, 백반/한정식) / 원조무교동북어(0m, ) / 동북보험대리점(9000m, )"},
+		{"카카오 이름에 그대로 있으면 카카오만", literal, list, "무교동북카페(0m, )"},
+		{"상가 목록이 없으면 카카오만", split, nil, "동북보험대리점(9000m, )"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			k := &kakaoRouter{main: c.kakao, stations: `{"documents":[]}`}
+			s := k.server(t)
+			s.Shops = c.shops
+			places, code := searchNames(t, s, "/places/search?q="+url.QueryEscape("무교동북")+"&lat=37.5&lon=127.0")
+			var got []string
+			for _, p := range places {
+				got = append(got, fmt.Sprintf("%s(%dm, %s)", p.Name, p.DistanceM, p.Category))
+			}
+			if code != http.StatusOK || strings.Join(got, " / ") != c.want {
+				t.Errorf("code=%d\ngot  %s\nwant %s", code, strings.Join(got, " / "), c.want)
+			}
+		})
+	}
+	// 상가 좌표·주소가 그대로 나간다
+	k := &kakaoRouter{main: split, stations: `{"documents":[]}`}
+	s := k.server(t)
+	s.Shops = list
+	places, _ := searchNames(t, s, "/places/search?q="+url.QueryEscape("무교동북"))
+	if len(places) == 0 || places[0].Lat != 37.5 || places[0].Lon != 127.001 || places[0].Address != "서울 중구 을지로1길 38" ||
+		places[0].DistanceM != 0 {
+		t.Errorf("상가 결과: %+v", places)
 	}
 }
 

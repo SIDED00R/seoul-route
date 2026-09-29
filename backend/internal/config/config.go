@@ -27,6 +27,7 @@ type Config struct {
 	CrossingsCSV        string // 신호 횡단보도 좌표(otp/extract_crossings.py). 기본 <레포>/otp/data/crossings.csv, 없으면 대기 미반영
 	FastExitJSON        string // 빠른하차 자료(cmd/fastexit). 기본 <레포>/otp/data/fast-exit.json, 없으면 하차 칸 표시 없음
 	EscalatorJSON       string // 에스컬레이터 운행방향(cmd/fastexit). 기본 <레포>/otp/data/escalator.json, 없으면 계단만
+	ShopsCSV            string // 서울 상가(otp/fetch_shop_places.py). 기본 <레포>/otp/data/shop-places-seoul.csv, 없으면 부분 일치 없음
 	ODsayKey            string // ODsay Lab 키. cmd/odcompare(정확도 대조)에서만 쓴다. 서버는 안 쓴다
 }
 
@@ -63,6 +64,7 @@ func Load() (Config, error) {
 		CrossingsCSV:        get("CROSSINGS_CSV", filepath.Join(filepath.Dir(defaultGTFS), "crossings.csv")),
 		FastExitJSON:        get("FAST_EXIT_JSON", filepath.Join(filepath.Dir(defaultGTFS), "fast-exit.json")),
 		EscalatorJSON:       get("ESCALATOR_JSON", filepath.Join(filepath.Dir(defaultGTFS), "escalator.json")),
+		ShopsCSV:            get("SHOPS_CSV", filepath.Join(filepath.Dir(defaultGTFS), "shop-places-seoul.csv")),
 		ODsayKey:            get("ODSAY_API_KEY", ""),
 	}
 	c.PublicURL = strings.TrimRight(get("PUBLIC_URL", "http://localhost:"+c.Port), "/")

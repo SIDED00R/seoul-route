@@ -24,6 +24,7 @@ import (
 	"github.com/SIDED00R/seoul-route/backend/internal/route"
 	"github.com/SIDED00R/seoul-route/backend/internal/fastexit"
 	"github.com/SIDED00R/seoul-route/backend/internal/routestyle"
+	"github.com/SIDED00R/seoul-route/backend/internal/shops"
 	"github.com/SIDED00R/seoul-route/backend/internal/speed"
 )
 
@@ -161,6 +162,13 @@ func main() {
 	}
 	if cfg.KakaoRESTKey == "" {
 		log.Warn("places search disabled", "reason", "KAKAO_REST_API_KEY 없음")
+	}
+	// 장소 검색의 부분 일치(otp/fetch_shop_places.py 산출). 없으면 카카오 결과만 쓴다.
+	if sx, err := shops.Load(cfg.ShopsCSV); err != nil {
+		log.Warn("shop substring search disabled", "path", cfg.ShopsCSV, "err", err)
+	} else {
+		srv.Shops = sx
+		log.Info("shops loaded", "n", sx.Len())
 	}
 	if cfg.VWorldKey == "" {
 		log.Warn("map tiles disabled", "reason", "VWORLD_API_KEY 없음")

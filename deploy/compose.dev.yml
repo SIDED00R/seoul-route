@@ -57,6 +57,7 @@ services:
       CROSSINGS_CSV: /data/crossings.csv
       FAST_EXIT_JSON: /data/fast-exit.json
       ESCALATOR_JSON: /data/escalator.json
+      SHOPS_CSV: /data/shop-places-seoul.csv
       PUBLIC_URL: http://api:8081
       PORT: "8081"
     volumes:
