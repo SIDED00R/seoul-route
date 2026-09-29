@@ -11,9 +11,9 @@ import (
 )
 
 // handlePlacesReverse 는 좌표를 이름·주소로 바꿔 준다. 앱의 "현재 위치" 출발지 표시에 쓴다.
-// 이름은 사용자 즐겨찾기(favoriteNear) > 카카오 건물 이름(같은 단지면 VWorld 건물의 동으로 바꿔 끼움, buildingAt)
-// > VWorld 건물 이름 > 주소 순이고, 주소는 카카오 좌표→주소다. 카카오 건물 이름은 좌표가 건물 윤곽 밖(건물 사이)이면
-// 지번 필지의 대표 건물이라, 아파트 단지에서는 옆 동이 아닌 대표 동이 나온다.
+// 이름은 사용자 즐겨찾기(favoriteNear) > 카카오 건물 이름(같은 단지의 가장 가까운 VWorld 동으로 바꿔 끼움, sameComplexDong)
+// > 가장 가까운 VWorld 건물 이름 > 주소 순이고, 주소는 카카오 좌표→주소다. 카카오 건물 이름은 좌표가 건물 윤곽 밖(건물
+// 사이·단지 가장자리)이면 지번 필지의 대표 건물이라, 아파트 단지에서는 옆 동이 아닌 대표 동이 나온다.
 // 좌표는 요청 경로가 아니라 쿼리로 받으므로 접근 로그에 남지 않는다.
 func (s *Server) handlePlacesReverse(w http.ResponseWriter, r *http.Request) {
 	if s.KakaoKey == "" {
@@ -68,13 +68,14 @@ func (s *Server) handlePlacesReverse(w http.ResponseWriter, r *http.Request) {
 	}
 	if fav != "" {
 		name = fav
-	} else if bld, detail := s.buildingAt(r.Context(), lat, lon); bld != "" {
-		switch {
-		case name == "":
-			name = strings.TrimSpace(bld + " " + detail)
-		case detail != "" && strings.HasPrefix(name, bld):
-			// 카카오 이름이 같은 단지의 대표 동("가나아파트 105동")이면 좌표가 든 동으로 바꾼다.
-			name = bld + " " + detail
+	} else if blds := s.buildingsNear(r.Context(), lat, lon); len(blds) > 0 {
+		if name == "" {
+			// 가장 가까운 건물에 건물명이 없으면(상세 건물명만 있는 "1동" 포함) 아래에서 주소를 쓴다.
+			if blds[0].name != "" {
+				name = strings.TrimSpace(blds[0].name + " " + blds[0].detail)
+			}
+		} else if b, ok := sameComplexDong(name, blds); ok {
+			name = b.name + " " + b.detail
 		}
 		// 그 밖에는 카카오 이름을 둔다(같은 건물이 카카오 "코엑스", VWorld "ASEM 및 한국종합무역센타단지 컨벤션센터").
 	}
@@ -83,4 +84,15 @@ func (s *Server) handlePlacesReverse(w http.ResponseWriter, r *http.Request) {
 		name = address
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"name": name, "address": address})
+}
+
+// sameComplexDong 은 가까운 순 건물 중 카카오 이름("가나아파트 105동")이 그 건물명으로 시작하고(같은 단지) 상세
+// 건물명이 있는 첫 건물이다. 가장 가까운 건물이 단지 밖 이름 없는 집이어도 반경 안 같은 단지 동을 고른다.
+func sameComplexDong(kakaoName string, near []nearBuilding) (nearBuilding, bool) {
+	for _, b := range near {
+		if b.name != "" && b.detail != "" && strings.HasPrefix(kakaoName, b.name) {
+			return b, true
+		}
+	}
+	return nearBuilding{}, false
 }
