@@ -2,6 +2,10 @@ import 'fast_exit.dart';
 import 'leg_detail.dart';
 
 // 백엔드 /routes/plan 응답 모델. 필드명은 backend/internal/otp/client.go 의 JSON 태그와 같다.
+
+/// 서버 RFC3339 시각("2026-09-14T14:05:00+09:00")의 "14:05". 서버가 서울 시각으로 내려 주므로 기기 시간대와 무관하다.
+String _hhmm(String rfc) => rfc.length >= 16 ? rfc.substring(11, 16) : rfc;
+
 class Leg {
   const Leg({
     required this.mode,
@@ -139,12 +143,22 @@ class Leg {
     if (realtimeArrivalsSec.isNotEmpty) {
       parts.add('실시간 다음 차 ${realtimeArrivalsSec.map((s) => '${(s / 60).round()}분').join(', ')} 후');
     }
-    String hhmm(String rfc) => rfc.length >= 16 ? rfc.substring(11, 16) : rfc;
-    if (prevDepartures.isNotEmpty) parts.add('앞차 ${prevDepartures.map(hhmm).join(', ')}');
-    if (nextDepartures.isNotEmpty) parts.add('다음 ${nextDepartures.map(hhmm).join(', ')}');
+    if (prevDepartures.isNotEmpty) parts.add('앞차 ${prevDepartures.map(_hhmm).join(', ')}');
+    if (nextDepartures.isNotEmpty) parts.add('다음 ${nextDepartures.map(_hhmm).join(', ')}');
     if (headwaySec > 0) parts.add('배차 약 ${(headwaySec / 60).round()}분');
     return parts.isEmpty ? null : parts.join(' · ');
   }
+
+  /// 대중교통 구간의 "성수 방면 · 5정거장"(정거장 수는 하차역 포함). 행선지가 없으면 정거장 수만, 대중교통이 아니면 null.
+  String? get rideLabel {
+    if (!transitLeg) return null;
+    final n = stops.length + 1;
+    return headsign.isEmpty ? '$n정거장' : '$headsign 방면 · $n정거장';
+  }
+
+  /// "14:05" 출발·"14:17" 도착. 시각이 없으면 빈 값.
+  String get startClock => start.isEmpty ? '' : _hhmm(start);
+  String get endClock => end.isEmpty ? '' : _hhmm(end);
 
   /// 화면에 보여줄 수단 이름. 따릉이는 BICYCLE 에 rentedBike 가 붙는다.
   String get label {
@@ -220,6 +234,9 @@ class Itinerary {
 
   /// 횡단보도 대기로 원래 탑승을 놓쳐 다시 탐색한 여정이면 "재탐색" 배지 문구, 아니면 null.
   String? get replannedLabel => replanned ? '재탐색' : null;
+
+  /// "14:05 출발 → 14:40 도착". 시각이 없으면 null.
+  String? get timeRangeLabel => start.isEmpty || end.isEmpty ? null : '${_hhmm(start)} 출발 → ${_hhmm(end)} 도착';
 
   /// 지금부터 도착까지(출발 대기 포함). 카카오맵의 "총 소요"와 같은 기준.
   int get minutes => ((departInSec + durationSec) / 60).round();

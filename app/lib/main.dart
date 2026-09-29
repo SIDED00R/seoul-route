@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'guide/guide_overlay.dart';
 import 'screens/home_screen.dart';
@@ -24,6 +25,10 @@ class SeoulRouteApp extends StatelessWidget {
     return MaterialApp(
       title: '서울 길찾기',
       theme: ThemeData(colorSchemeSeed: Colors.teal, useMaterial3: true),
+      // 날짜·시각 선택 창과 기본 버튼 글자를 한국어로.
+      locale: const Locale('ko'),
+      supportedLocales: const [Locale('ko')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       home: HomeScreen(settings: settings),
     );
   }

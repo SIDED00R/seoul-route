@@ -132,8 +132,10 @@ class DetailScreen extends StatelessWidget {
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${_name(leg.fromName, leg.fromLat, leg.fromLon)} → '
-                          '${_name(leg.toName, leg.toLat, leg.toLon)}'),
+                      Text('${_name(leg.fromName, leg.fromLat, leg.fromLon)} ${leg.startClock} → '
+                          '${_name(leg.toName, leg.toLat, leg.toLon)} ${leg.endClock}'),
+                      // 대중교통: 방면·정거장 수
+                      if (leg.rideLabel != null) Text(leg.rideLabel!),
                       // 따릉이: 빌릴 대여소에 지금 남아 있는 자전거
                       if (leg.bikesLabel != null)
                         Text(leg.bikesLabel!, style: TextStyle(color: Colors.green.shade800)),
@@ -148,7 +150,8 @@ class DetailScreen extends StatelessWidget {
                         Text(leg.crossingLabel!, style: TextStyle(color: Colors.orange.shade800)),
                     ],
                   ),
-                  isThreeLine: leg.scheduleLabel != null ||
+                  isThreeLine: leg.rideLabel != null ||
+                      leg.scheduleLabel != null ||
                       leg.crossingLabel != null ||
                       leg.bikesLabel != null ||
                       leg.fastExitLabel != null,

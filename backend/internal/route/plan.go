@@ -4,6 +4,7 @@ package route
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -49,6 +50,7 @@ type PlanRequest struct {
 	Via         []Point       `json:"via"`
 	Modes       []SegmentMode `json:"segment_modes"`
 	Depart      *time.Time    `json:"depart"`
+	Arrive      *time.Time    `json:"arrive"` // 이 시각까지 도착. 규칙은 arrive_by.go
 	// BikeLimitMin 은 따릉이 이용권의 대여 1회 한도(60 = 1시간권, 120 = 2시간권, 0 = 제한 없음).
 	BikeLimitMin int     `json:"bike_limit_min"`
 	WalkSpeed    float64 `json:"-"`
@@ -86,6 +88,9 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) ([]otp.Itinerary, e
 	if err := validate(&req); err != nil {
 		return nil, err
 	}
+	if err := validateArrive(req, p.now()); err != nil {
+		return nil, err
+	}
 	if req.WalkSpeed <= 0 {
 		req.WalkSpeed = DefaultWalk
 	}
@@ -119,15 +124,26 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) ([]otp.Itinerary, e
 		return nil, err
 	}
 
-	its = dedupe(its)
+	if req.Arrive == nil { // 도착 시각 요청은 대기를 더하고 지정 시각으로 거른 뒤에 합친다
+		its = dedupe(its, false)
+	}
 	now := p.now()
 	destAnchored := anchorsSegment(req.Modes[len(req.Modes)-1]) && p.anchor(req.Destination) != ""
 	applyStationSlack(its, anchorsSegment(req.Modes[0]) && p.anchor(req.Origin) != "", destAnchored)
-	setDepartIn(its, req.Depart, now)
+	timed := req.Depart
+	if req.Arrive != nil {
+		timed = req.Arrive
+	}
+	setDepartIn(its, timed, now)
 	if p.Crossings != nil {
 		its = p.applyCrossings(ctx, its, req, p.CrossingSec, destAnchored)
 	}
-	if p.Realtime != nil && req.Depart == nil {
+	if req.Arrive != nil {
+		if its = dedupe(byArrival(its, *req.Arrive), true); len(its) == 0 {
+			return nil, fmt.Errorf("%w: 그 시각까지 도착하는 경로가 없습니다", otp.ErrNoRoute)
+		}
+	}
+	if p.Realtime != nil && timed == nil {
 		sortByScore(its)
 		its = p.Realtime.Adjust(ctx, its)
 		setDepartIn(its, nil, now)

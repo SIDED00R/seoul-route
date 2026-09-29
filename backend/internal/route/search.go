@@ -80,7 +80,8 @@ func (p *Planner) single(ctx context.Context, req PlanRequest) ([]otp.Itinerary,
 		First:       DefaultFirst,
 	}
 	base.OriginStop, base.DestStop = p.anchor(req.Origin), p.anchor(req.Destination)
-	if base.OriginStop != "" {
+	base.Arrive = arriveFor(req, base.DestStop)
+	if base.OriginStop != "" && req.Arrive == nil {
 		base.Depart = entryDepart(req.Depart, p.now())
 	}
 	for _, via := range req.Via {
@@ -110,11 +111,14 @@ func (p *Planner) single(ctx context.Context, req PlanRequest) ([]otp.Itinerary,
 		}
 		merged = append(merged, results[i]...)
 	}
-	if len(req.Via) == 0 {
-		merged = p.fitRentals(ctx, req, req.Origin, req.Destination, req.Depart, merged)
-	} else {
+	switch {
+	case len(req.Via) > 0:
 		// OTP via 후보는 경유지 사이에 구간을 나눌 수 없어 한도를 넘는 대여는 빼기만 한다(구간별 탐색이 나눈 후보를 낸다).
 		merged = p.dropLongRentals(req, merged)
+	case req.Arrive != nil:
+		merged = p.dropLongRentals(req, merged) // 나누기는 출발 시각에서 앞으로 다시 탐색한다(arrive_by.go)
+	default:
+		merged = p.fitRentals(ctx, req, req.Origin, req.Destination, req.Depart, merged)
 	}
 	if len(merged) > 0 {
 		return merged, nil

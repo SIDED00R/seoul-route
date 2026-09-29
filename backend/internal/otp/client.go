@@ -50,6 +50,7 @@ type Request struct {
 	WalkSpeed            float64    // m/s, 0 이면 OTP 기본
 	BikeSpeed            float64    // m/s
 	Depart               *time.Time // nil = 지금 출발(OTP 가 대여소 실시간 잔여대수를 반영하는 유일한 경우)
+	Arrive               *time.Time // 이 시각까지 도착(latestArrival). 있으면 Depart 는 쓰지 않는다
 	First                int
 }
 
@@ -199,7 +200,10 @@ func (c *Client) Plan(ctx context.Context, r Request) ([]Itinerary, error) {
 		prefs["walk"] = map[string]any{"speed": r.WalkSpeed}
 	}
 	vars["preferences"] = map[string]any{"street": prefs}
-	if r.Depart != nil {
+	switch {
+	case r.Arrive != nil:
+		vars["dateTime"] = map[string]any{"latestArrival": r.Arrive.Format(time.RFC3339)}
+	case r.Depart != nil:
 		vars["dateTime"] = map[string]any{"earliestDeparture": r.Depart.Format(time.RFC3339)}
 	}
 	var out response

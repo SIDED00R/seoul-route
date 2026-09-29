@@ -85,6 +85,8 @@ class _ResultsScreenState extends State<ResultsScreen> {
             spacing: 4,
             runSpacing: 4,
             children: [
+              // 출발·도착 시각은 칩 위 한 줄을 다 쓴다.
+              if (it.timeRangeLabel != null) SizedBox(width: double.infinity, child: Text(it.timeRangeLabel!)),
               // 출발 대기·실시간 배지는 수단 칩 앞에 둔다(제목 줄이 꺾이지 않게).
               for (final label in [it.departLabel, it.realtimeLabel, it.crossingLabel, it.replannedLabel])
                 if (label != null)

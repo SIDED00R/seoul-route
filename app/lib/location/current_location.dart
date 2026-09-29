@@ -17,13 +17,13 @@ class LocationException implements Exception {
 
 /// 폰의 현재 위치를 출발지로 쓸 Place 로 만든다. 이름은 "현재 위치 · <건물 이름>"(서버 역 앵커링은 첫 낱말이
 /// "…역" 일 때만 걸리므로 건물 이름이 역이어도 좌표 출발이 유지된다), 주소 자리에는 좌표 대신 도로명 주소와
-/// 정확도를 둔다(화면·스크린샷에 집 좌표를 드러내지 않는다).
-Future<Place> currentPlace(ApiClient api) async {
+/// 정확도를 둔다(화면·스크린샷에 집 좌표를 드러내지 않는다). ask 가 false 면 권한이 없을 때 묻지 않고 실패한다.
+Future<Place> currentPlace(ApiClient api, {bool ask = true}) async {
   if (!await Geolocator.isLocationServiceEnabled()) {
     throw const LocationException('기기 위치 서비스가 꺼져 있습니다.');
   }
   var perm = await Geolocator.checkPermission();
-  if (perm == LocationPermission.denied) perm = await Geolocator.requestPermission();
+  if (perm == LocationPermission.denied && ask) perm = await Geolocator.requestPermission();
   if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) {
     throw const LocationException('위치 권한이 없습니다. 설정에서 허용한 뒤 다시 누르세요.');
   }
@@ -47,3 +47,6 @@ Future<Place> currentPlace(ApiClient api) async {
     throw const LocationException('15초 안에 위치를 받지 못했습니다. 잠시 뒤 다시 누르세요.');
   }
 }
+
+/// 권한을 묻지 않는 currentPlace. 길찾기 탭을 열 때 출발지를 채우는 데 쓴다.
+Future<Place> quietCurrentPlace(ApiClient api) => currentPlace(api, ask: false);

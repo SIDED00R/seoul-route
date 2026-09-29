@@ -246,7 +246,7 @@ void main() {
   // 홈은 세 탭이고, 최근 경로를 고르면 길찾기 탭으로 넘어가 출발·도착이 채워진다.
   testWidgets('홈 탭: 최근 경로를 고르면 길찾기 탭에 채워진다', (tester) async {
     await tester.pumpWidget(const MaterialApp(
-      home: HomeScreen(settings: Settings(baseUrl: 'http://x', token: 't'), initialTab: 0),
+      home: HomeScreen(settings: Settings(baseUrl: 'http://x', token: 't'), initialTab: 0, locateOnOpen: null),
     ));
     await tester.pumpAndSettle();
     expect(find.text('최근 경로'), findsOneWidget);

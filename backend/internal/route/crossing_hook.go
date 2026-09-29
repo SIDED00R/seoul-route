@@ -84,8 +84,19 @@ func (p *Planner) applyCrossings(ctx context.Context, its []otp.Itinerary, req P
 	destAnchored bool) []otp.Itinerary {
 	replanAt := make([]int, len(its))
 	replanWait := make([]float64, len(its))
+	end0 := make([]string, len(its))
 	for i := range its {
+		end0[i] = its[i].End
 		replanAt[i], replanWait[i] = addCrossingWaits(&its[i], p.Crossings, waitPer)
+	}
+	if req.Arrive != nil { // 재탐색 대신 일찍 출발한다(arrive_by.go)
+		out := its[:0]
+		for i := range its {
+			if arriveCrossings(&its[i], replanAt[i], replanWait[i], end0[i]) {
+				out = append(out, its[i])
+			}
+		}
+		return out
 	}
 	if len(req.Via) > 0 {
 		return its
