@@ -6,6 +6,7 @@ class Place {
     required this.lat,
     required this.lon,
     this.category = '',
+    this.distanceM,
   });
 
   final String name;
@@ -14,11 +15,15 @@ class Place {
   final double lat;
   final double lon;
 
+  /// 검색 요청에 보낸 위치에서 직선거리(m). 위치 없이 검색했으면 null.
+  final int? distanceM;
+
   factory Place.fromJson(Map<String, dynamic> j) => Place(
         name: j['name'] as String,
         address: (j['address'] as String?) ?? '',
         category: (j['category'] as String?) ?? '',
         lat: (j['lat'] as num).toDouble(),
         lon: (j['lon'] as num).toDouble(),
+        distanceM: (j['distance_m'] as num?)?.toInt(),
       );
 }
