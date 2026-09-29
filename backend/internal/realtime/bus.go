@@ -21,6 +21,7 @@ const CacheTTL = 30 * time.Second
 // BusArrival 은 한 정류장의 다음 차 도착 예정(초). 값이 없으면 nil.
 type BusArrival struct {
 	ExpsSec []int // 첫 차, 둘째 차 순. "출발대기"·"운행종료" 는 제외. 캐시 경과시간을 뺀 값이라 음수(이미 지나감)일 수 있다
+	Ended   bool  // 첫 차 자리가 "운행종료": 이 정류장에 오늘 더 올 차가 없다
 }
 
 // BusClient 는 서울 버스 도착정보 getArrInfoByRouteAll(노선 전체 정류장) 클라이언트.
@@ -63,7 +64,7 @@ func (c *BusClient) Arrival(ctx context.Context, routeID, stID string) (BusArriv
 	}
 	// 캐시의 ETA 는 조회 시각 기준 상대값이다. 지금 기준으로 쓰려면 경과시간을 뺀다(사본에 — 캐시는 그대로).
 	age := int(time.Since(e.at).Seconds())
-	out := BusArrival{ExpsSec: make([]int, len(a.ExpsSec))}
+	out := BusArrival{ExpsSec: make([]int, len(a.ExpsSec)), Ended: a.Ended}
 	for i, s := range a.ExpsSec {
 		out.ExpsSec[i] = s - age
 	}
@@ -110,7 +111,7 @@ func (c *BusClient) fetch(ctx context.Context, routeID string) (map[string]BusAr
 	}
 	stops := make(map[string]BusArrival, len(out.MsgBody.ItemList))
 	for _, it := range out.MsgBody.ItemList {
-		var a BusArrival
+		a := BusArrival{Ended: strings.Contains(it.Arrmsg1, "운행종료")}
 		for _, pair := range [][2]string{{it.Arrmsg1, it.Exps1}, {it.Arrmsg2, it.Exps2}} {
 			if s, ok := busETA(pair[0], pair[1]); ok {
 				a.ExpsSec = append(a.ExpsSec, s)

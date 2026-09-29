@@ -10,7 +10,9 @@ import (
 	"github.com/SIDED00R/seoul-route/backend/internal/otp"
 )
 
-// MaxItineraries: 검색당 실시간 조회를 거는 상위 후보 수. 노선·역 캐시가 있어 실제 콜은 이보다 적다.
+// MaxItineraries: 검색당 실시간 보정(탑승·도착 시각 이동)을 거는 상위 후보 수. 그 밖의 후보도 첫 탑승 버스가
+// endedDrops 조건(막차대, 심야버스 제외)이면 운행종료를 보려고 노선 도착정보를 조회하므로(firstBusEnded, 노선 캐시 공유)
+// 검색당 콜 수의 상한은 아니다.
 const MaxItineraries = 8
 
 // Corrector 는 itinerary 의 첫 대중교통 탑승 대기를 실시간 도착으로 바꾼다. Bus/Subway 가 nil 이면 그 수단은 건너뛴다.
@@ -21,24 +23,31 @@ type Corrector struct {
 	Now    func() time.Time // 테스트용. nil 이면 time.Now
 }
 
-// Adjust 는 "지금 출발" 후보들의 첫 탑승을 보정한 사본을 돌려준다. 실패한 후보는 시간표 값 그대로.
+// Adjust 는 "지금 출발" 후보들의 상위 MaxItineraries 개의 첫 탑승을 보정한 사본을 돌려준다. 실패한 후보는 시간표 값
+// 그대로. 모든 후보 중 첫 탑승 버스가 그 정류장에서 실시간 "운행종료" 인 후보는 뺀다(막차대·심야버스 조건 endedDrops).
 func (c *Corrector) Adjust(ctx context.Context, its []otp.Itinerary) []otp.Itinerary {
 	now := time.Now()
 	if c.Now != nil {
 		now = c.Now()
 	}
-	out := append([]otp.Itinerary(nil), its...)
-	for i := range out {
-		if i >= MaxItineraries {
-			break
+	out := make([]otp.Itinerary, 0, len(its))
+	for i, it := range its {
+		var ended bool
+		if i < MaxItineraries {
+			it, _, ended = c.adjustOne(ctx, now, it) // 보정 실패라도 실시간 다음 차 목록은 실릴 수 있다
+		} else {
+			ended = c.firstBusEnded(ctx, it)
 		}
-		it, _ := c.adjustOne(ctx, now, out[i]) // 보정 실패라도 실시간 다음 차 목록은 실릴 수 있다
-		out[i] = it
+		if ended {
+			continue
+		}
+		out = append(out, it)
 	}
 	return out
 }
 
-func (c *Corrector) adjustOne(ctx context.Context, now time.Time, it otp.Itinerary) (otp.Itinerary, bool) {
+// adjustOne 은 첫 탑승을 보정한 사본과 보정 여부, 첫 탑승 버스가 endedDrops 조건에서 "운행종료" 인지를 돌려준다.
+func (c *Corrector) adjustOne(ctx context.Context, now time.Time, it otp.Itinerary) (otp.Itinerary, bool, bool) {
 	k := -1
 	for i, l := range it.Legs {
 		if l.TransitLeg {
@@ -47,13 +56,13 @@ func (c *Corrector) adjustOne(ctx context.Context, now time.Time, it otp.Itinera
 		}
 	}
 	if k < 0 {
-		return it, false
+		return it, false, false
 	}
 	leg := it.Legs[k]
 	it.Legs = append([]otp.Leg(nil), it.Legs...) // 입력 슬라이스를 건드리지 않도록 복사한 뒤 수정한다
 	sched, err := time.Parse(time.RFC3339, leg.Start)
 	if err != nil {
-		return it, false
+		return it, false, false
 	}
 	var access float64 // 탑승 정류장까지 걸리는 시간(초): 접근 leg 합. 시간표상 대기는 넣지 않는다(그 사이 오는 차는 탄다)
 	for _, l := range it.Legs[:k] {
@@ -69,11 +78,14 @@ func (c *Corrector) adjustOne(ctx context.Context, now time.Time, it otp.Itinera
 	var eta []int
 	switch {
 	case leg.Mode == "BUS" && c.Bus != nil:
-		eta = c.busETA(ctx, leg)
+		var ended bool
+		if eta, ended = c.busETA(ctx, leg); ended && endedDrops(leg, sched) {
+			return it, false, true
+		}
 	case (leg.Mode == "SUBWAY" || leg.Mode == "RAIL") && c.Subway != nil:
 		eta = c.subwayETA(ctx, leg)
 	default:
-		return it, false
+		return it, false, false
 	}
 	// 상류 API의 응답 순서는 보장되지 않는다. 가장 빨리 탈 수 있는 차를 고르고 앱의 다음 차 목록도 시간순으로 보낸다.
 	sort.Ints(eta)
@@ -92,7 +104,7 @@ func (c *Corrector) adjustOne(ctx context.Context, now time.Time, it otp.Itinera
 		}
 	}
 	if board.IsZero() {
-		return it, false
+		return it, false, false
 	}
 	delta := board.Sub(sched)
 	// 첫 탑승 leg 부터 다음 대중교통 탑승 직전 leg 까지는 delta 만큼 옮기고, 탑승 전 leg 와 출발도 같이 옮기되
@@ -103,7 +115,7 @@ func (c *Corrector) adjustOne(ctx context.Context, now time.Time, it otp.Itinera
 	later, tail := laterShifts(it.Legs, k, delta)
 	start, err := time.Parse(time.RFC3339, it.Start)
 	if err != nil {
-		return it, false
+		return it, false, false
 	}
 	extra := 0.0
 	if e0, err0 := time.Parse(time.RFC3339, it.End); err0 == nil {
@@ -133,25 +145,26 @@ func (c *Corrector) adjustOne(ctx context.Context, now time.Time, it otp.Itinera
 	}
 	it.Realtime = true
 	it.RealtimeDelta = tail.Seconds()
-	return it, true
+	return it, true, false
 }
 
-// busETA: RouteID "seoul:B_100100063" → busRouteId, FromStopID "seoul:BS_123000354" → stId.
-func (c *Corrector) busETA(ctx context.Context, leg otp.Leg) []int {
+// busETA: RouteID "seoul:B_100100063" → busRouteId, FromStopID "seoul:BS_123000354" → stId. 두 번째 값은 그 정류장이
+// "운행종료" 인지(조회 실패·정보 없음이면 false).
+func (c *Corrector) busETA(ctx context.Context, leg otp.Leg) ([]int, bool) {
 	rid, ok1 := strings.CutPrefix(afterColon(leg.RouteID), "B_")
 	sid, ok2 := strings.CutPrefix(afterColon(leg.FromStopID), "BS_")
 	if !ok1 || !ok2 {
-		return nil
+		return nil, false
 	}
 	a, found, err := c.Bus.Arrival(ctx, rid, sid)
 	if err != nil {
 		c.warn("bus arrival", err)
-		return nil
+		return nil, false
 	}
 	if !found {
-		return nil
+		return nil, false
 	}
-	return a.ExpsSec
+	return a.ExpsSec, a.Ended
 }
 
 // subwayETA: 역 기준명("서울(4호선)" → "서울")의 열차 중 같은 노선(subwayId)·같은 방면(다음 정차역)인 것.

@@ -77,6 +77,75 @@ func TestBusFirstBoardingUsesRealtime(t *testing.T) {
 	}
 }
 
+// 첫 탑승 버스가 그 정류장에서 "운행종료" 인 후보는 뺀다. 출발대기(아직 첫차 전)는 남긴다. 순서는 그대로.
+func TestEndedBusDropsItinerary(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"msgHeader":{"headerCd":"0","headerMsg":"ok"},"msgBody":{"itemList":[
+		 {"stId":"1","arrmsg1":"운행종료","exps1":"0","arrmsg2":"운행종료","exps2":"0"},
+		 {"stId":"2","arrmsg1":"출발대기","exps1":"0","arrmsg2":"출발대기","exps2":"0"}]}}`))
+	}))
+	defer srv.Close()
+	c := &Corrector{Bus: &BusClient{Key: "k", HTTP: srv.Client(), Base: srv.URL}, Now: func() time.Time { return now }}
+	ended := otp.Leg{Mode: "BUS", Route: "402", RouteID: "seoul:B_100100063", FromStopID: "seoul:BS_1"}
+	waiting := ended
+	waiting.FromStopID, waiting.Route = "seoul:BS_2", "402-대기"
+	walkOnly := otp.Itinerary{Start: at(0), End: at(600), Duration: 600, Legs: []otp.Leg{{Mode: "WALK", Duration: 600}}}
+	out := c.Adjust(context.Background(), []otp.Itinerary{itinerary(300, ended), itinerary(300, waiting), walkOnly})
+	if len(out) != 2 || out[0].Legs[1].Route != "402-대기" || out[1].Duration != 600 {
+		t.Fatalf("운행종료 후보만 빠져야: %+v", out)
+	}
+}
+
+// 운행종료로 빼는 것은 막차대(12:00~03:00) 탑승의 일반 버스뿐이다: 03:30 검색의 04:06 첫차 후보와 심야버스(N) 후보는
+// 운행종료여도 남는다. 보정 상한(MaxItineraries) 밖 후보에도 같은 규칙을 쓰고, 운행 중인 후보는 보정 없이 남는다.
+func TestEndedBusRules(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"msgHeader":{"headerCd":"0","headerMsg":"ok"},"msgBody":{"itemList":[
+		 {"stId":"1","arrmsg1":"운행종료","exps1":"0","arrmsg2":"운행종료","exps2":"0"},
+		 {"stId":"2","arrmsg1":"10분후[3번째 전]","exps1":"600","arrmsg2":"","exps2":""}]}}`))
+	}))
+	defer srv.Close()
+	ctx := context.Background()
+	c := &Corrector{Bus: &BusClient{Key: "k", HTTP: srv.Client(), Base: srv.URL}}
+	bus := func(route, stop string) otp.Leg {
+		return otp.Leg{Mode: "BUS", Route: route, RouteID: "seoul:B_100100063", FromStopID: "seoul:BS_" + stop}
+	}
+	walkOnly := otp.Itinerary{Start: at(0), End: at(600), Duration: 600, Legs: []otp.Leg{{Mode: "WALK", Duration: 600}}}
+	beyond := func(its ...otp.Itinerary) []otp.Itinerary { // 앞을 도보 후보로 채워 its 를 보정 상한 밖에 둔다
+		var out []otp.Itinerary
+		for range MaxItineraries {
+			out = append(out, walkOnly)
+		}
+		return append(out, its...)
+	}
+
+	dawn := time.Date(2026, 9, 15, 3, 30, 0, 0, now.Location())
+	first := bus("402", "1")
+	first.Start, first.End, first.TransitLeg = dawn.Add(36*time.Minute).Format(time.RFC3339),
+		dawn.Add(56*time.Minute).Format(time.RFC3339), true
+	early := otp.Itinerary{Start: dawn.Format(time.RFC3339), End: first.End, Duration: 3360, Legs: []otp.Leg{first}}
+	for _, tc := range []struct {
+		name string
+		at   time.Time
+		it   otp.Itinerary
+	}{{"막차대 밖 첫차", dawn, early}, {"심야버스", now, itinerary(300, bus("N26", "1"))}} {
+		c.Now = func() time.Time { return tc.at }
+		if out := c.Adjust(ctx, []otp.Itinerary{tc.it}); len(out) != 1 {
+			t.Errorf("%s: 상한 안에서 빠졌다", tc.name)
+		}
+		if out := c.Adjust(ctx, beyond(tc.it)); len(out) != MaxItineraries+1 {
+			t.Errorf("%s: 상한 밖에서 빠졌다", tc.name)
+		}
+	}
+
+	c.Now = func() time.Time { return now }
+	out := c.Adjust(ctx, beyond(itinerary(300, bus("402", "2")), itinerary(300, bus("402", "1"))))
+	last := out[len(out)-1]
+	if len(out) != MaxItineraries+1 || last.Legs[1].FromStopID != "seoul:BS_2" || last.Realtime {
+		t.Fatalf("상한 밖: 운행종료만 빠지고 나머지는 보정 없이 남아야: %+v", out[MaxItineraries:])
+	}
+}
+
 func TestSubwayFirstBoardingMatchesLineAndDirection(t *testing.T) {
 	var calls int32
 	srv := fakeSubway(t, &calls)

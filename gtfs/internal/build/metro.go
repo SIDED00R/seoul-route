@@ -11,7 +11,7 @@ import (
 //   - 파일럿 trip 중 route_id 가 RR_ACC1_S-1-01-… ~ 09-… 인 것은 버린다(나머지 노선은 파일럿 그대로, service ALL).
 //     역·부모역·transfers 는 파일럿 것을 계속 쓴다.
 //   - route: 호선당 하나(M_<호선>), 급행은 M_<호선>_X. service: DAY→WEEKDAY(월~금), SAT→SAT, END→SUN(일). 공휴일은
-//     calendar_dates 없이 요일 그대로 본다(알려진 한계). direction_id: UP·IN 0, DOWN·OUT 1. headsign 은 도착역.
+//     calendar_dates 로 SUN 을 쓴다(holidays.go). direction_id: UP·IN 0, DOWN·OUT 1. headsign 은 도착역.
 //   - 시각표 역 코드가 파일럿 stops 에 없으면 "<역사명>(<호선>호선)" 이름으로 찾고, 그래도 없으면 그 정차만 뺀다
 //     (SkippedStops). 남는 정차가 2개 미만이면 trip 을 뺀다.
 //   - 시각이 역행하는 열차(도착이 앞 정차 출발보다 이르거나 출발이 도착보다 이른 정차가 있는 열차)는 통째로 뺀다
