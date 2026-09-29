@@ -16,10 +16,27 @@ class MainActivity : FlutterActivity() {
     private var pendingNotification: MethodChannel.Result? = null
     private var pendingOverlayPermission: MethodChannel.Result? = null
     private lateinit var guideOverlay: GuideOverlayController
+    private lateinit var audioFocus: GuideAudioFocus
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         guideOverlay = GuideOverlayController(applicationContext)
+        audioFocus = GuideAudioFocus(applicationContext)
+        // 안내 음성 동안 다른 앱 소리 줄이기(lib/guide/audio_focus.dart).
+        val audioFocusChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, AUDIO_FOCUS_CHANNEL)
+        audioFocusChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "duck" -> {
+                    audioFocus.duck()
+                    result.success(null)
+                }
+                "release" -> {
+                    audioFocus.release()
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
         // 안내 진행 알림(lib/guide/status_notification.dart). 화면이 닫힐 때 앱이 cancel 을 부른다.
         val status = GuideStatusNotification(applicationContext)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, STATUS_CHANNEL).setMethodCallHandler { call, result ->
@@ -145,6 +162,7 @@ class MainActivity : FlutterActivity() {
         // 같이 죽어 창을 갱신할 주체가 없고, 재생성된 Activity 가 새 창을 띄우면 두 겹이 된다(진하기가 높으면 합산
         // 불투명도가 터치 상한을 넘겨 뒤 앱 터치도 막힌다 — GuideOverlayController 클래스 주석의 합산 규칙).
         if (::guideOverlay.isInitialized) guideOverlay.stop()
+        if (::audioFocus.isInitialized) audioFocus.release()
         super.onDestroy()
     }
 
@@ -153,6 +171,7 @@ class MainActivity : FlutterActivity() {
         private const val STATUS_CHANNEL = "seoul_route/guide_status"
         private const val TASK_CHANNEL = "seoul_route/app_task"
         private const val OVERLAY_CHANNEL = "seoul_route/guide_overlay"
+        private const val AUDIO_FOCUS_CHANNEL = "seoul_route/audio_focus"
         private const val REQUEST_CODE = 7301
         private const val OVERLAY_REQUEST_CODE = 7303
     }
