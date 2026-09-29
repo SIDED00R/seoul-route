@@ -87,6 +87,9 @@ type Report struct {
 	NRailShapes               int // 도시철도 shape 수(노선·정차 순서당 하나)
 	NRailStraightHops         int // 선로를 못 찾아 직선으로 이은 역 간 구간(노선·역 쌍 단위)
 	NRailNoShapeTrips         int // shape 없이 둔 도시철도 trip
+	NLoopLinks                int // 2호선 성수에서 이어 붙인 trip 쌍(block_id)
+	NLoopBlocks               int // 그 block_id 수
+	NLoopUnpaired             int // 본선으로 성수에 도착했지만 이어지는 출발이 없는 2호선 trip
 }
 
 // Build 는 out 에 GTFS zip 을 쓴다. subway 는 nil 이면 버스만 쓴다. entrances 는 OSM 지하철 출입구(없으면 nil).
@@ -164,6 +167,7 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 	}
 	sort.Slice(stopRows, func(i, j int) bool { return stopRows[i][0] < stopRows[j][0] })
 
+	var blocks map[string]string // trip_id → block_id(2호선 성수 이어 타기, loop_blocks.go)
 	if subway != nil {
 		replaced := map[string]bool{}             // 시각표로 대체되는 파일럿 trip
 		kricLine := func(routeID string) string { // 레일포털 시각표로 대체되는 노선이면 그 코드
@@ -256,6 +260,13 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 			routes = append(routes, mr...)
 			trips = append(trips, mt...)
 			stopTimes = append(stopTimes, mst...)
+			stopName := map[string]string{}
+			for _, s := range subway.Stops {
+				stopName[s["stop_id"]] = s["stop_name"]
+			}
+			var ls loopStats
+			blocks, ls = line2LoopBlocks(mt, mst, stopName)
+			rep.NLoopLinks, rep.NLoopBlocks, rep.NLoopUnpaired = ls.Links, ls.Blocks, ls.Unpaired
 			rep.NMetroTrips, rep.NMetroSkippedStops, rep.NMetroSkippedTrips = ms.Trips, ms.SkippedStops, ms.SkippedTrips
 			rep.NMetroNameMatched, rep.NMetroNonMonotonic = ms.NameMatched, ms.NonMonotonic
 			rep.NMetroPassing, rep.NMetroNoTime = metro.NPassing, metro.NNoTime
@@ -308,8 +319,12 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 	w.table("routes.txt",
 		[]string{"route_id", "agency_id", "route_short_name", "route_long_name", "route_type", "route_color",
 			"route_text_color"}, routes)
-	w.table("trips.txt", []string{"route_id", "service_id", "trip_id", "trip_headsign", "direction_id", "shape_id"},
-		trips)
+	padRows(trips, tripShapeCol+2)
+	for _, t := range trips {
+		t[tripShapeCol+1] = blocks[t[tripIDCol]]
+	}
+	w.table("trips.txt",
+		[]string{"route_id", "service_id", "trip_id", "trip_headsign", "direction_id", "shape_id", "block_id"}, trips)
 	padRows(stopTimes, 8) // 승하차 열(pickup_type·drop_off_type)은 버스만 채운다
 	w.table("stop_times.txt",
 		[]string{"trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence", "shape_dist_traveled",

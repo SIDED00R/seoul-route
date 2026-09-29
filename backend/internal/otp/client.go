@@ -159,7 +159,7 @@ query Plan($origin: PlanLabeledLocationInput!, $destination: PlanLabeledLocation
     routingErrors { code description }
     edges { node {
       start end duration numberOfTransfers walkDistance
-      legs { mode duration distance rentedBike transitLeg
+      legs { mode duration distance rentedBike transitLeg interlineWithPreviousLeg
              start { scheduledTime } end { scheduledTime }
              from { name lat lon stop { gtfsId parentStation { gtfsId } } }
              to { name lat lon stop { gtfsId parentStation { gtfsId } } } route { shortName gtfsId }
@@ -332,6 +332,8 @@ type node struct {
 		Distance   float64
 		RentedBike bool
 		TransitLeg bool
+		// InterlineWithPreviousLeg: 앞 구간과 같은 열차를 내리지 않고 이어 탄 구간(GTFS block_id). itinerary() 가 합친다.
+		InterlineWithPreviousLeg bool
 		Start, End struct{ ScheduledTime string }
 		From       struct {
 			Name     string
@@ -429,6 +431,7 @@ func nearbyDepartures(legs []legTime, ref string, refDuration float64) []string 
 func (n node) itinerary() Itinerary {
 	it := Itinerary{Start: n.Start, End: n.End, Duration: n.Duration, Transfers: n.NumberOfTransfers,
 		WalkM: n.WalkDistance}
+	prevTo := "" // 앞 구간 하차 정류장 gtfsId(이어 탄 구간을 합칠 때 중간 정차로 넣는다)
 	for _, l := range n.Legs {
 		leg := Leg{Mode: l.Mode, Start: l.Start.ScheduledTime, End: l.End.ScheduledTime, Duration: l.Duration,
 			Distance: l.Distance, FromName: l.From.Name, FromLat: l.From.Lat, FromLon: l.From.Lon,
@@ -478,7 +481,15 @@ func (n node) itinerary() Itinerary {
 			}
 			leg.Stops = append(leg.Stops, stop)
 		}
-		it.Legs = append(it.Legs, leg)
+		if last := len(it.Legs) - 1; l.InterlineWithPreviousLeg && last >= 0 && it.Legs[last].TransitLeg && leg.TransitLeg {
+			it.Legs[last] = joinInterlined(it.Legs[last], leg, prevTo)
+		} else {
+			it.Legs = append(it.Legs, leg)
+		}
+		prevTo = ""
+		if l.To.Stop != nil {
+			prevTo = l.To.Stop.GtfsID
+		}
 	}
 	return it
 }
