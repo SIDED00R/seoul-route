@@ -129,6 +129,8 @@ bash deploy/smoke.sh http://localhost:8081            # 스모크만 다시 돌�
 
 스모크는 보호 경로가 404이면 실패합니다(그 빌드에 API가 없다는 뜻). `version`이 체크아웃 커밋과 다르면 다른 트리에서 빌드한 이미지입니다.
 
+운영 DB는 `.\deploy\backup-db.ps1`이 `%USERPROFILE%\seoul-route-db-backup`에 최근 14개를 남깁니다(작업 스케줄러: 로그인 5분 뒤·매일 21:00, `-Register`로 등록). `release.ps1 prod`도 배포 직전에 한 번 뜹니다. 복구 절차는 [DB 백업·복구](docs/db-backup.md)에 있습니다.
+
 `.env.dev`는 `.env.example`을 한 번 더 복사해 만들고, 그래프와 `otp/data/`는 두 스택이 같은 `otp/`를 읽기 전용으로 공유합니다(`OTP_DIR`로 다른 경로 지정 가능). 개발 DB의 `seoul_route_test`는 백엔드 통합 테스트(`TEST_DATABASE_URL=postgres://seoul:seoul@localhost:5433/seoul_route_test?sslmode=disable`)에 씁니다. Compose 실행 전 `otp/graph.obj`와 `otp/data/` 생성물이 필요합니다. 모든 포트는 loopback에만 바인딩됩니다.
 
 앱 실행 방법과 Google OAuth 설정은 [앱 README](app/README.md)를 따릅니다.

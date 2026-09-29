@@ -4,7 +4,8 @@
 # 이미지에 git 커밋(GIT_SHA)을 박아 /health 의 version 으로 내려주므로, 다른 트리에서 빌드한 이미지는 스모크가 잡는다.
 # 수정된 추적 파일이 있으면 중단한다(커밋 안 된 코드로 배포하면 version 이 거짓말이 된다).
 param(
-    [Parameter(Mandatory = $true)][ValidateSet('prod', 'dev')][string]$Env
+    [Parameter(Mandatory = $true)][ValidateSet('prod', 'dev')][string]$Env,
+    [switch]$SkipBackup # prod 배포 직전 DB 백업(backup-db.ps1)을 건너뛴다. Postgres 가 아직 없을 때만
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -45,6 +46,14 @@ if ($Env -eq 'prod') {
 if (-not (Test-Path $envFile)) { Write-Host "중단: $envFile 없음" -ForegroundColor Red; exit 1 }
 
 Write-Host "== $Env 배포: $branch @ $env:GIT_SHA → $url"
+# 마이그레이션은 api 기동 때 자동 적용되고 되돌리는 기능이 없으므로 운영은 배포 직전에 백업을 뜬다.
+if ($Env -eq 'prod' -and -not $SkipBackup) {
+    & "$PSScriptRoot\backup-db.ps1"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "중단: 배포 전 DB 백업 실패(Postgres 가 아직 없으면 -SkipBackup)" -ForegroundColor Red
+        exit 1
+    }
+}
 docker compose --env-file $envFile -f $compose up -d --build api
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
