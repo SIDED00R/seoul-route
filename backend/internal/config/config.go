@@ -20,7 +20,7 @@ type Config struct {
 	SeoulOpenAPIKey     string // 비어 있으면 따릉이 GBFS 어댑터를 띄우지 않는다
 	PublicURL           string // OTP 가 GBFS 를 읽어갈 이 서버의 주소
 	KakaoRESTKey        string // 비어 있으면 /places/search 가 503. 키는 서버에만 두고 앱에는 내려보내지 않는다
-	VWorldKey           string // 비어 있으면 /tiles/* 가 503
+	VWorldKey           string // 비어 있으면 /tiles/* 가 503, /places/reverse 는 VWorld 건물 이름 없이 답한다
 	BusArrivalKey       string // 공공데이터포털 키(DATA_GO_KR_KEY). 비면 버스 첫 탑승 실시간 보정 없음
 	SubwayRealtimeKey   string // 열린데이터광장 지하철 실시간 키. 비면 지하철 첫 탑승 실시간 보정 없음
 	GTFSZip             string // 생성 GTFS zip(배차간격 표시용). 기본 <레포>/otp/data/seoul-gtfs.zip, 없으면 배차 표시 없음
