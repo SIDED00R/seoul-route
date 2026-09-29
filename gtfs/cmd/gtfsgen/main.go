@@ -212,6 +212,8 @@ func printReport(rep *build.Report, out string) {
 		rep.NRailShapes, rep.NRailStraightHops, rep.NRailNoShapeTrips, out)
 	fmt.Printf("버스 승하차 불가 정차 %d(가상·미정차, 방향마다 셈) | 정류장별 실제 첫차·막차로 운행 시간대를 좁힌 방향 %d\n",
 		rep.NBusNoBoardingStops, rep.NBusNarrowedDirections)
+	fmt.Printf("2호선 성수 이어 타기 trip 쌍 %d(block %d) | 이어지는 출발이 없는 성수 도착 %d\n",
+		rep.NLoopLinks, rep.NLoopBlocks, rep.NLoopUnpaired)
 }
 
 func envKey(path, name string) (string, error) {
