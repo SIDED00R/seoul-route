@@ -16,6 +16,13 @@ import (
 // VWorldBaseURL 은 VWorld API 주소. 테스트에서 Server.VWorldBase 로 바꿔 끼운다.
 const VWorldBaseURL = "https://api.vworld.kr"
 
+func (s *Server) vworldBase() string {
+	if s.VWorldBase != "" {
+		return s.VWorldBase
+	}
+	return VWorldBaseURL
+}
+
 // tileAttempts: 상류 요청 상한(처음 1회 + 재시도 1회). 타일 GET 은 같은 요청을 다시 보내도 결과가 같다.
 const tileAttempts = 2
 
@@ -51,11 +58,7 @@ func (s *Server) handleTile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "타일 좌표 오류")
 		return
 	}
-	base := s.VWorldBase
-	if base == "" {
-		base = VWorldBaseURL
-	}
-	u := fmt.Sprintf("%s/req/wmts/1.0.0/%s/Base/%d/%d/%d.png", base, s.VWorldKey, z, y, x)
+	u := fmt.Sprintf("%s/req/wmts/1.0.0/%s/Base/%d/%d/%d.png", s.vworldBase(), s.VWorldKey, z, y, x)
 	resp, kind, attempts := s.fetchTile(r.Context(), u)
 	if resp == nil {
 		// url.Error 에 키가 든 URL 이 실리므로 오류 원문 대신 종류만 남긴다. 앱이 요청을 거둔 것(지도를 넘김)은 실패가 아니다.
