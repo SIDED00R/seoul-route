@@ -84,7 +84,9 @@ type Leg struct {
 	// 도보·따릉이 leg 가 지나는 신호 횡단보도 수와 그 기대 대기(초). Duration 에 이미 더해져 있다(route/crossing_hook.go).
 	Crossings    int     `json:"crossings,omitempty"`
 	CrossingWait float64 `json:"crossing_wait_sec,omitempty"`
-	Headsign     string  `json:"headsign,omitempty"` // 탑승 차량이 정류장에 내거는 행선지(대중교통 leg)
+	// 탑승 차량이 정류장에 내거는 행선지(대중교통 leg). 2호선 본선은 순환 방향 + 주요역("내선순환 잠실·강남") 또는
+	// 성수행이 아니면 종착역("내선순환 서울대입구")(line2_direction.go).
+	Headsign string `json:"headsign,omitempty"`
 	// 노선 색(생성 GTFS routes.txt, # 없는 6자리 16진수). 앱이 구간 칩·경로선을 이 색으로 칠한다(route/plan.go 가 붙인다).
 	Color     string `json:"color,omitempty"`
 	TextColor string `json:"text_color,omitempty"`
@@ -447,7 +449,7 @@ func (n node) itinerary() Itinerary {
 		if l.LegGeometry != nil {
 			leg.Polyline = l.LegGeometry.Points
 		}
-		leg.Headsign = l.Headsign
+		leg.Headsign = line2Headsign(leg.Route, leg.FromName, leg.NextStop, l.Headsign)
 		for _, s := range l.Steps {
 			step := Step{Dir: s.RelativeDirection, Abs: s.AbsoluteDirection, Distance: s.Distance,
 				Lat: s.Lat, Lon: s.Lon, Exit: s.Exit}
