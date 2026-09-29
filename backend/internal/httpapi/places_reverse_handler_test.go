@@ -128,11 +128,13 @@ func TestPlacesReverseErrors(t *testing.T) {
 	}
 }
 
-// 카카오 건물 이름은 단지 대표 동이다. 같은 단지의 VWorld 건물이 좌표를 품으면 그 동으로 바꾸고, 주소는 카카오 그대로다.
+// 카카오 건물 이름은 단지 대표 동이다. 반경 안 같은 단지의 가장 가까운 VWorld 동으로 바꾸고, 주소는 카카오 그대로다.
 // 이름이 다른 건물(카카오 자체 이름)은 카카오 이름을 두고, 카카오 이름이 없을 때만 VWorld 이름을 쓴다.
 func TestPlacesReverseBuildingName(t *testing.T) {
 	const withName = `{"documents":[{"road_address":{"building_name":"가나아파트 105동","address_name":"서울 가나구 가나로 1"}}]}`
 	const noName = `{"documents":[{"road_address":{"building_name":"","address_name":"서울 가나구 가나로 1"}}]}`
+	house := bldFeature("", "", bldLat, bldLon+0.00012, 0.00005)               // 서쪽 벽까지 약 6m
+	complexShop := bldFeature("가나아파트", "상가동", bldLat, bldLon-0.00018, 0.00005) // 동쪽 벽까지 약 11m
 	cases := []struct {
 		name, kakao, vworld, want string
 	}{
@@ -144,6 +146,13 @@ func TestPlacesReverseBuildingName(t *testing.T) {
 		{"카카오 이름이 없으면 VWorld 건물", noName, vworldOK(bldFeature("가나빌딩", "", bldLat, bldLon, 0.0003)), "가나빌딩"},
 		{"카카오 이름이 없으면 VWorld 건물과 동", noName, vworldOK(bldFeature("가나종합단지", "전시동", bldLat, bldLon, 0.0003)), "가나종합단지 전시동"},
 		{"둘 다 없으면 주소", noName, vworldOK(), "서울 가나구 가나로 1"},
+		// 단지 가장자리: 가장 가까운 건물은 단지 밖 이름 없는 집(약 6m), 같은 단지 상가동은 약 11m
+		{"가장 가까운 건물이 이름 없는 집이어도 같은 단지 동", withName, vworldOK(house, complexShop), "가나아파트 상가동"},
+		{"다른 단지 동이 더 가까워도 같은 단지 동", withName,
+			vworldOK(bldFeature("다라아파트", "201동", bldLat, bldLon+0.00012, 0.00005), complexShop), "가나아파트 상가동"},
+		{"카카오 이름이 없으면 가장 가까운 건물만 본다(이름 없으면 주소)", noName, vworldOK(house, complexShop), "서울 가나구 가나로 1"},
+		{"카카오 이름이 없고 가장 가까운 건물이 동 이름만 있으면 주소", noName,
+			vworldOK(bldFeature("", "1동", bldLat, bldLon, 0.0003)), "서울 가나구 가나로 1"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
