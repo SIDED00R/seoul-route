@@ -3,14 +3,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api/client.dart';
+import '../location/last_known_location.dart';
 import '../models/place.dart';
+import '../util/distance_label.dart';
 
 /// 장소 검색. 입력 후 400ms 뒤 서버(/places/search → 카카오)를 호출하고, 고르면 Place 를 돌려준다.
+/// 화면을 열 때 사용자 위치(locate)를 받기 시작해, 받은 뒤의 검색부터 함께 보낸다(가까운 곳·거리 표시).
 class PlaceSearchScreen extends StatefulWidget {
-  const PlaceSearchScreen({super.key, required this.api, required this.title});
+  const PlaceSearchScreen({super.key, required this.api, required this.title, this.locate = lastKnownLocation});
 
   final ApiClient api;
   final String title;
+  final Future<({double lat, double lon})?> Function() locate;
 
   @override
   State<PlaceSearchScreen> createState() => _PlaceSearchScreenState();
@@ -23,6 +27,13 @@ class _PlaceSearchScreenState extends State<PlaceSearchScreen> {
   String _error = '';
   bool _busy = false;
   int _gen = 0; // 검색 세대. 늦게 도착한 이전 요청의 응답은 버린다.
+  ({double lat, double lon})? _near;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.locate().then((p) => _near = p);
+  }
 
   void _onChanged(String q) {
     _debounce?.cancel();
@@ -43,7 +54,7 @@ class _PlaceSearchScreenState extends State<PlaceSearchScreen> {
       _error = '';
     });
     try {
-      final r = await widget.api.searchPlaces(q);
+      final r = await widget.api.searchPlaces(q, near: _near);
       if (!mounted || g != _gen) return;
       setState(() => _results = r);
     } catch (e) {
@@ -94,7 +105,11 @@ class _PlaceSearchScreenState extends State<PlaceSearchScreen> {
                 final p = _results[i];
                 return ListTile(
                   title: Text(p.name),
-                  subtitle: Text(p.category.isEmpty ? p.address : '${p.category} · ${p.address}'),
+                  subtitle: Text([
+                    if (p.distanceM != null) distanceLabel(p.distanceM!),
+                    if (p.category.isNotEmpty) p.category,
+                    p.address,
+                  ].join(' · ')),
                   onTap: () => Navigator.pop(context, p),
                 );
               },

@@ -8,8 +8,10 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // 검색 결과는 서울 bbox 로 한정해 요청하고, 주소는 도로명 > 지번 순으로 고른다.
@@ -34,7 +36,7 @@ func TestPlacesSearch(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body)
 	}
-	if !strings.Contains(gotQuery, "rect=") || !strings.Contains(gotQuery, "size=10") {
+	if !strings.Contains(gotQuery, "rect=") || !strings.Contains(gotQuery, "size=15") {
 		t.Errorf("서울 bbox·개수 제한이 빠졌다: %s", gotQuery)
 	}
 	var out struct {
@@ -52,6 +54,151 @@ func TestPlacesSearch(t *testing.T) {
 	}
 	if out.Places[1].Address != "서울 중구 어딘가" { // 도로명이 비면 지번
 		t.Errorf("둘째 결과 주소: %q", out.Places[1].Address)
+	}
+}
+
+// kakaoRouter 는 요청 모양으로 본 검색·역 검색을 가려 응답하고 받은 쿼리를 모은다.
+type kakaoRouter struct {
+	main, stations string // 응답 본문. stations 가 "500" 이면 500 으로 답한다
+	calls          []url.Values
+}
+
+func (k *kakaoRouter) server(t *testing.T) *Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		k.calls = append(k.calls, q)
+		switch {
+		case q.Get("category_group_code") == "SW8":
+			if k.stations == "500" {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			io.WriteString(w, k.stations)
+		default:
+			io.WriteString(w, k.main)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return &Server{KakaoKey: "k", KakaoBase: srv.URL, HTTP: srv.Client(), Log: slog.New(slog.DiscardHandler)}
+}
+
+// call 은 "stations"(지하철역 검색) 또는 "main"(본 검색) 요청의 쿼리다. 없으면 nil.
+func (k *kakaoRouter) call(kind string) url.Values {
+	for _, q := range k.calls {
+		if (kind == "stations") == (q.Get("category_group_code") == "SW8") {
+			return q
+		}
+	}
+	return nil
+}
+
+func searchNames(t *testing.T, s *Server, target string) ([]Place, int) {
+	t.Helper()
+	rr := httptest.NewRecorder()
+	s.handlePlacesSearch(rr, httptest.NewRequest(http.MethodGet, target, nil))
+	var out struct {
+		Places []Place `json:"places"`
+	}
+	json.Unmarshal(rr.Body.Bytes(), &out)
+	return out.Places, rr.Code
+}
+
+// 지역 이름 검색이면 "<q>역" 지하철역 검색을 더 불러 역을 맨 위에 둔다. 위치를 주면 x·y 와 거리가 붙는다.
+func TestPlacesSearchRegionAddsStations(t *testing.T) {
+	k := &kakaoRouter{
+		main: `{"meta":{"same_name":{"keyword":"","selected_region":"서울 가나구"}},"documents":[
+			{"id":"m1","place_name":"가나공원","category_name":"여행 > 공원","x":"127.01","y":"37.51","distance":"900"}]}`,
+		stations: `{"documents":[{"id":"s1","place_name":"가나역 2호선","category_group_code":"SW8",
+			"category_group_name":"지하철역","x":"127.02","y":"37.52","distance":"1500"}]}`,
+	}
+	s := k.server(t)
+	places, code := searchNames(t, s, "/places/search?q="+url.QueryEscape("가나")+"&lat=37.5&lon=127.0")
+	if code != http.StatusOK || len(places) != 2 || places[0].Name != "가나역 2호선" || places[0].DistanceM != 1500 ||
+		places[1].Name != "가나공원" {
+		t.Fatalf("code=%d places=%+v", code, places)
+	}
+	st := k.call("stations")
+	if st == nil || st.Get("query") != "가나역" || st.Get("x") != "127.0000000" || st.Get("y") != "37.5000000" {
+		t.Errorf("역 검색 쿼리=%v", st)
+	}
+}
+
+// 위치가 있으면 본 검색에 x·y 를 붙이고(카카오가 체인·업종을 가까운 순으로 세운다) 거리를 내려준다.
+// 1위가 검색어로 시작하면 역 검색을 부르지 않는다. 위치가 없으면 x·y 도 거리도 없다.
+func TestPlacesSearchPassesLocation(t *testing.T) {
+	k := &kakaoRouter{main: `{"meta":{"same_name":{"keyword":"가나커피"}},"documents":[
+		{"id":"m1","place_name":"가나커피 앞점","x":"127.001","y":"37.501","distance":"140"}]}`}
+	s := k.server(t)
+	places, _ := searchNames(t, s, "/places/search?q="+url.QueryEscape("가나커피")+"&lat=37.5&lon=127.0")
+	main := k.call("main")
+	if len(places) != 1 || places[0].DistanceM != 140 || main.Get("x") != "127.0000000" || main.Get("y") != "37.5000000" ||
+		main.Get("sort") != "" {
+		t.Fatalf("places=%+v main=%v", places, main)
+	}
+	if k.call("stations") != nil {
+		t.Errorf("1위가 검색어로 시작하는데 역 검색을 불렀다")
+	}
+
+	k.calls = nil
+	k.main = `{"documents":[{"id":"m1","place_name":"가나커피 앞점","x":"127.001","y":"37.501"}]}`
+	places, _ = searchNames(t, s, "/places/search?q="+url.QueryEscape("가나커피"))
+	if k.call("main").Get("x") != "" || len(places) != 1 || places[0].DistanceM != 0 {
+		t.Errorf("위치 없음: main=%v places=%+v", k.call("main"), places)
+	}
+}
+
+// 역 검색이 stationTimeout 안에 답하지 않으면 기다리지 않고 본 검색 결과로 답한다.
+func TestPlacesSearchSlowStations(t *testing.T) {
+	defer func(d time.Duration) { stationTimeout = d }(stationTimeout)
+	stationTimeout = 50 * time.Millisecond
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("category_group_code") == "SW8" {
+			select {
+			case <-time.After(2 * time.Second):
+			case <-r.Context().Done():
+				return
+			}
+		}
+		io.WriteString(w, `{"meta":{"same_name":{"keyword":"","selected_region":"서울 가나구"}},`+
+			`"documents":[{"id":"m1","place_name":"가나공원","x":"127","y":"37.5"}]}`)
+	}))
+	defer srv.Close()
+	s := &Server{KakaoKey: "k", KakaoBase: srv.URL, HTTP: srv.Client(), Log: slog.New(slog.DiscardHandler)}
+	start := time.Now()
+	places, code := searchNames(t, s, "/places/search?q="+url.QueryEscape("가나"))
+	if elapsed := time.Since(start); code != http.StatusOK || len(places) != 1 || places[0].Name != "가나공원" ||
+		elapsed > time.Second {
+		t.Errorf("code=%d places=%+v elapsed=%v", code, places, elapsed)
+	}
+}
+
+// 역 검색이 실패해도 본 검색 결과로 200 을 준다.
+func TestPlacesSearchStationFailureKeepsMain(t *testing.T) {
+	k := &kakaoRouter{
+		main: `{"meta":{"same_name":{"keyword":"","selected_region":"서울 가나구"}},` +
+			`"documents":[{"id":"m1","place_name":"가나공원","x":"127","y":"37.5"}]}`,
+		stations: "500",
+	}
+	places, code := searchNames(t, k.server(t), "/places/search?q="+url.QueryEscape("가나"))
+	if code != http.StatusOK || len(places) != 1 || places[0].Name != "가나공원" {
+		t.Errorf("code=%d places=%+v", code, places)
+	}
+}
+
+func TestPlacesSearchLocationParams(t *testing.T) {
+	k := &kakaoRouter{main: `{"documents":[]}`}
+	s := k.server(t)
+	for _, q := range []string{"&lat=37.5", "&lon=127", "&lat=abc&lon=127", "&lat=NaN&lon=127"} {
+		if _, code := searchNames(t, s, "/places/search?q=a"+q); code != http.StatusBadRequest {
+			t.Errorf("%s → %d", q, code)
+		}
+	}
+	// 서울 밖 위치는 없는 셈 친다(검색은 된다)
+	k.calls = nil
+	_, code := searchNames(t, s, "/places/search?q=a&lat=35.1&lon=129.0")
+	if code != http.StatusOK || k.call("main").Get("x") != "" {
+		t.Errorf("서울 밖: code=%d main=%v", code, k.call("main"))
 	}
 }
 

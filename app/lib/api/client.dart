@@ -93,9 +93,13 @@ class ApiClient {
     );
   }
 
-  Future<List<Place>> searchPlaces(String q) async {
-    final uri = Uri.parse('$baseUrl/places/search')
-        .replace(queryParameters: {'q': q});
+  /// 장소 검색(GET /places/search). near 를 주면 서버가 체인·업종 검색에서 가까운 곳을 먼저 두고 거리를 붙인다.
+  Future<List<Place>> searchPlaces(String q, {({double lat, double lon})? near}) async {
+    final uri = Uri.parse('$baseUrl/places/search').replace(queryParameters: {
+      'q': q,
+      if (near != null) 'lat': '${near.lat}',
+      if (near != null) 'lon': '${near.lon}',
+    });
     final r = await http
         .get(uri, headers: _headers)
         .timeout(const Duration(seconds: 15));
