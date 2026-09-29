@@ -93,6 +93,7 @@ void main() {
             baseUrl: 'http://10.0.2.2:8081',
             token: 'tok',
           ),
+          locateOnOpen: null,
           settingsStore: store,
         ),
       ),

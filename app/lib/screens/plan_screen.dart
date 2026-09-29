@@ -5,7 +5,9 @@ import '../location/current_location.dart';
 import '../models/place.dart';
 import '../models/favorite_place.dart';
 import '../models/plan_request.dart';
+import '../models/plan_time.dart';
 import '../settings/settings_store.dart';
+import '../widgets/plan_time_picker.dart';
 import '../widgets/via_stay_picker.dart';
 import 'place_search_screen.dart';
 import 'favorite_places_screen.dart';
@@ -19,15 +21,17 @@ class PlanScreenPreset {
 }
 
 /// 길찾기 탭: 출발·경유(최대 5)·도착을 고르고 구간마다 수단을 고정한 뒤 경로를 요청한다.
-/// 출발지는 현재 위치로도 고를 수 있다.
+/// 출발지는 현재 위치로도 고를 수 있고, 출발·도착을 맞바꿀 수 있다. 지금 출발 대신 출발·도착 시각을 고를 수 있다.
 class PlanScreen extends StatefulWidget {
   const PlanScreen({
     super.key,
     required this.settings,
     this.locate = currentPlace,
+    this.locateOnOpen,
     this.settingsStore = const SettingsStore(),
     this.preset,
     this.onOpenSettings,
+    this.now = DateTime.now,
   });
 
   final Settings settings;
@@ -42,6 +46,13 @@ class PlanScreen extends StatefulWidget {
   /// 현재 위치를 Place 로 받는다. 실패하면 LocationException. 테스트가 가짜로 바꾼다.
   final Future<Place> Function(ApiClient api) locate;
 
+  /// 화면을 열 때(설정이 나중에 채워지면 그때) 출발지를 채울 현재 위치. null 이면 채우지 않는다(홈은 권한을 묻지 않는
+  /// currentPlace 를 준다).
+  final Future<Place> Function(ApiClient api)? locateOnOpen;
+
+  /// 지금 시각. 출발·도착 시각의 기본값과 지난 시각 검사에 쓴다. 테스트가 바꾼다.
+  final DateTime Function() now;
+
   @override
   State<PlanScreen> createState() => _PlanScreenState();
 }
@@ -52,8 +63,10 @@ class _PlanScreenState extends State<PlanScreen> {
   final List<Place> _via = [];
   final List<int> _viaStay = []; // _via 와 같은 길이. 경유지마다 머무는 분
   final List<SegmentMode> _modes = [SegmentMode.any];
+  PlanTime _time = PlanTime.now;
   bool _busy = false;
   bool _locating = false;
+  bool _autoLocating = false; // 화면을 열 때 받는 현재 위치. _locating 과 달리 입력을 막지 않는다
   String _error = '';
   List<FavoritePlace>? _favorites;
   String _favoritesError = '';
@@ -66,6 +79,24 @@ class _PlanScreenState extends State<PlanScreen> {
     super.initState();
     _applyPreset();
     if (widget.settings.ready) _loadFavorites();
+    final locate = widget.locateOnOpen;
+    if (locate != null && widget.settings.ready && _origin == null) {
+      _autoLocate(locate);
+    }
+  }
+
+  /// 출발지가 비어 있으면 현재 위치로 채운다. 실패하면 조용히 비워 두고, 받는 동안 사용자가 출발지를 골랐거나 경로를
+  /// 찾는 중이면 늦게 온 위치로 덮지 않는다.
+  Future<void> _autoLocate(Future<Place> Function(ApiClient api) locate) async {
+    _autoLocating = true;
+    try {
+      final p = await locate(_api);
+      if (mounted && _origin == null && !_busy) setState(() => _origin = p);
+    } catch (_) {
+      // 버튼으로 다시 받을 수 있다
+    } finally {
+      if (mounted) setState(() => _autoLocating = false);
+    }
   }
 
   @override
@@ -84,9 +115,13 @@ class _PlanScreenState extends State<PlanScreen> {
         });
       }
     }
+    final locate = widget.locateOnOpen;
+    if (locate != null && !old.settings.ready && widget.settings.ready && _origin == null && !_autoLocating) {
+      _autoLocate(locate);
+    }
   }
 
-  /// 최근 경로에서 고른 검색으로 입력을 채운다.
+  /// 최근 경로에서 고른 검색으로 입력을 채운다. 시각 조건은 지금 출발로 되돌린다(시각은 경로를 고른 뒤에 바꾼다).
   void _applyPreset() {
     final p = widget.preset;
     if (p == null) return;
@@ -106,9 +141,40 @@ class _PlanScreenState extends State<PlanScreen> {
               ? List.filled(p.request.via.length + 1, SegmentMode.any)
               : p.request.segmentModes,
         );
+      _time = PlanTime.now;
       _error = '';
     });
   }
+
+  /// 도착 시각은 경유지·구간 수단 고정이 없을 때만 서버가 받는다.
+  bool get _arriveAllowed =>
+      _via.isEmpty && _modes.every((m) => m == SegmentMode.any);
+
+  /// 도착 시각을 고를 수 없게 되면 같은 시각의 출발 시각으로 바꾼다. setState 안에서 부른다.
+  void _fitTime() {
+    if (_time.kind == PlanTimeKind.arrive && !_arriveAllowed) {
+      _time = PlanTime(PlanTimeKind.depart, _time.at);
+    }
+  }
+
+  /// 출발·도착을 맞바꾼다. 경유지·체류·구간 수단은 순서를 뒤집는다.
+  void _swap() => setState(() {
+    final o = _origin;
+    _origin = _destination;
+    _destination = o;
+    final via = _via.reversed.toList();
+    final stay = _viaStay.reversed.toList();
+    final modes = _modes.reversed.toList();
+    _via
+      ..clear()
+      ..addAll(via);
+    _viaStay
+      ..clear()
+      ..addAll(stay);
+    _modes
+      ..clear()
+      ..addAll(modes);
+  });
 
   ApiClient get _api =>
       ApiClient(baseUrl: widget.settings.baseUrl, token: widget.settings.token);
@@ -156,6 +222,11 @@ class _PlanScreenState extends State<PlanScreen> {
     final o = _origin;
     final d = _destination;
     if (o == null || d == null) return;
+    final at = _time.at;
+    if (at != null && !at.isAfter(widget.now())) {
+      setState(() => _error = '지난 시각입니다 — 출발·도착 시각을 다시 고르세요');
+      return;
+    }
     setState(() {
       _busy = true;
       _error = '';
@@ -167,6 +238,8 @@ class _PlanScreenState extends State<PlanScreen> {
       segmentModes: List.of(_modes),
       viaStayMin: List.of(_viaStay),
       bikeLimitMin: widget.settings.bikeLimitMin,
+      depart: _time.depart,
+      arrive: _time.arrive,
     );
     try {
       final res = await _api.plan(req);
@@ -211,6 +284,7 @@ class _PlanScreenState extends State<PlanScreen> {
     _via.add(p);
     _viaStay.add(0);
     _modes.add(SegmentMode.any);
+    _fitTime();
   });
 
   void _removeVia(int i) => setState(() {
@@ -268,6 +342,7 @@ class _PlanScreenState extends State<PlanScreen> {
                         ? null
                         : _useCurrentLocation, // 탐색 요청 중에는 출발지를 바꾸지 않는다
                   ),
+            placeholder: _autoLocating ? '현재 위치 찾는 중…' : null,
           ),
           _segmentMode(0),
           for (var i = 0; i < _via.length; i++) ...[
@@ -300,13 +375,34 @@ class _PlanScreenState extends State<PlanScreen> {
               icon: const Icon(Icons.add),
               label: const Text('경유지 추가'),
             ),
-          _placeTile('도착', Icons.place, _destination, () async {
-            if (_busy) return; // 경로 요청 중에는 도착지 검색을 열지 않는다
-            final p = await _pick('도착지');
-            if (p != null) setState(() => _destination = p);
-          }),
+          _placeTile(
+            '도착',
+            Icons.place,
+            _destination,
+            () async {
+              if (_busy) return; // 경로 요청 중에는 도착지 검색을 열지 않는다
+              final p = await _pick('도착지');
+              if (p != null) setState(() => _destination = p);
+            },
+            extra: IconButton(
+              tooltip: '출발·도착 바꾸기',
+              icon: const Icon(Icons.swap_vert),
+              onPressed:
+                  _busy ||
+                      _locating ||
+                      (_origin == null && _destination == null)
+                  ? null
+                  : _swap,
+            ),
+          ),
           if (widget.settings.ready) _favoriteDestinations(),
-          const SizedBox(height: 16),
+          PlanTimePicker(
+            value: _time,
+            arriveEnabled: _arriveAllowed,
+            onChanged: _busy ? null : (t) => setState(() => _time = t),
+            now: widget.now,
+          ),
+          const SizedBox(height: 8),
           FilledButton.icon(
             onPressed: ready ? _plan : null,
             icon: _busy
@@ -316,7 +412,11 @@ class _PlanScreenState extends State<PlanScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.directions),
-            label: Text(_busy ? '탐색 중 (경유지가 있으면 30초 이상)' : '지금 출발 경로 찾기'),
+            label: Text(
+              _busy
+                  ? '탐색 중 (경유지가 있으면 30초 이상)'
+                  : '${_time.label(widget.now())} 경로 찾기',
+            ),
           ),
           if (_error.isNotEmpty)
             Padding(
@@ -328,16 +428,17 @@ class _PlanScreenState extends State<PlanScreen> {
     );
   }
 
-  /// extra 는 검색 아이콘 앞에 붙는 버튼(출발지의 현재 위치).
+  /// extra 는 검색 아이콘 앞에 붙는 버튼(출발지의 현재 위치, 도착지의 출발·도착 바꾸기). placeholder 는 비었을 때 제목.
   Widget _placeTile(
     String label,
     IconData icon,
     Place? p,
     VoidCallback onTap, {
     Widget? extra,
+    String? placeholder,
   }) => ListTile(
     leading: Icon(icon),
-    title: Text(p == null ? '$label지 선택' : '$label: ${p.name}'),
+    title: Text(p == null ? placeholder ?? '$label지 선택' : '$label: ${p.name}'),
     subtitle: p == null ? null : Text(p.address),
     trailing: extra == null
         ? const Icon(Icons.search)
@@ -427,7 +528,10 @@ class _PlanScreenState extends State<PlanScreen> {
             // 경로 요청 중에는 수단을 바꾸지 않는다(null 이면 버튼이 꺼진다).
             onSelectionChanged: _busy
                 ? null
-                : (s) => setState(() => _modes[i] = s.first),
+                : (s) => setState(() {
+                    _modes[i] = s.first;
+                    _fitTime();
+                  }),
           ),
         ),
       ],

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 // 앞뒤 차는 leg 출발 ±3시간 안·같은 시각 제외(배차 기반 trip 의 막차 sentinel 01:01 제거), 그리고 소요시간이
@@ -71,5 +72,34 @@ func TestPlanSendsStopLocations(t *testing.T) {
 	}
 	if v1["coordinate"] == nil || v1["stopLocationIds"] != nil {
 		t.Fatalf("역 ID 없는 경유 2 는 좌표: %v", v1)
+	}
+}
+
+// 도착 시각이 있으면 latestArrival 로, 출발 시각만 있으면 earliestDeparture 로 보낸다. 둘 다 없으면 dateTime 을 뺀다.
+func TestPlanSendsDateTime(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		got = nil
+		json.Unmarshal(body, &got)
+		w.Write([]byte(`{"data":{"planConnection":{"routingErrors":[],"edges":[]}}}`))
+	}))
+	defer srv.Close()
+	c := &Client{URL: srv.URL, HTTP: srv.Client()}
+	at := time.Date(2026, 10, 5, 9, 0, 0, 0, time.FixedZone("KST", 9*3600))
+	for _, tc := range []struct {
+		depart, arrive *time.Time
+		want           string
+	}{
+		{nil, &at, `{"latestArrival":"2026-10-05T09:00:00+09:00"}`},
+		{&at, nil, `{"earliestDeparture":"2026-10-05T09:00:00+09:00"}`},
+		{nil, nil, `null`},
+	} {
+		c.Plan(context.Background(), Request{Origin: Coord{37.55, 126.97}, Destination: Coord{37.49, 127.02},
+			Depart: tc.depart, Arrive: tc.arrive})
+		b, _ := json.Marshal(got["variables"].(map[string]any)["dateTime"])
+		if string(b) != tc.want {
+			t.Errorf("dateTime=%s want %s", b, tc.want)
+		}
 	}
 }

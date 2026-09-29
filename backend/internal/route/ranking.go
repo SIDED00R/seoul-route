@@ -71,13 +71,14 @@ func legSig(legs []otp.Leg) string {
 	return signature.String()
 }
 
-func dedupe(its []otp.Itinerary) []otp.Itinerary {
+// dedupe 는 구간 열(legSig)이 같은 여정 중 하나만 남긴다: 먼저 출발하는 것, latest 면(도착 시각 요청) 늦게 출발하는 것.
+func dedupe(its []otp.Itinerary, latest bool) []otp.Itinerary {
 	seen := map[string]int{}
 	var out []otp.Itinerary
 	for _, it := range its {
 		sig := legSig(it.Legs)
 		if index, ok := seen[sig]; ok {
-			if it.Start < out[index].Start {
+			if latest && it.Start > out[index].Start || !latest && it.Start < out[index].Start {
 				out[index] = it
 			}
 			continue

@@ -21,6 +21,7 @@ class HomeScreen extends StatefulWidget {
     super.key,
     required this.settings,
     this.locate = currentPlace,
+    this.locateOnOpen = quietCurrentPlace,
     this.settingsStore = const SettingsStore(),
     this.initialTab = 2,
     this.restore = restoreGuide,
@@ -31,6 +32,9 @@ class HomeScreen extends StatefulWidget {
 
   /// 현재 위치를 Place 로 받는다. 실패하면 LocationException. 테스트가 가짜로 바꾼다.
   final Future<Place> Function(ApiClient api) locate;
+
+  /// 길찾기 탭을 열 때 출발지를 채울 현재 위치(PlanScreen.locateOnOpen). null 이면 채우지 않는다.
+  final Future<Place> Function(ApiClient api)? locateOnOpen;
 
   /// 처음 보여 줄 탭(0 최근 · 1 현재 · 2 길찾기). 기본은 길찾기다.
   final int initialTab;
@@ -112,6 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
           PlanScreen(
             settings: _settings,
             locate: widget.locate,
+            locateOnOpen: widget.locateOnOpen,
             settingsStore: widget.settingsStore,
             preset: _preset,
             onOpenSettings: _openSettings,
