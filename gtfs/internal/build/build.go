@@ -45,6 +45,9 @@ type RouteReport struct {
 	DroppedDirections int // bbox 안 정류장이 2개 미만이라 뺀 방향 수
 	Shapes            int // 경로선(shape)을 만든 방향 수
 	NoShapeDirections int // 노선 경로가 없거나 정류장과 맞지 않아 shape 없이 둔 방향 수
+	NoBoardingStops   int // 가상·미정차라 승하차 불가로 둔 정차(방향마다 셈)
+	// NarrowedDirections: 정류장별 실제 첫차·막차에 맞춰 배차 운행 시간대를 좁힌 방향 수(busWindow)
+	NarrowedDirections int
 }
 
 type Report struct {
@@ -79,6 +82,8 @@ type Report struct {
 	NKricDupRows              int // 같은 열차·같은 역 중복 행(뒤 것을 버림)
 	NBusShapes                int // 버스 shape 수(방향당 하나)
 	NBusNoShapeDirections     int // shape 없이 둔 버스 방향 수
+	NBusNoBoardingStops       int // 가상·미정차라 승하차 불가로 둔 버스 정차(방향마다 셈)
+	NBusNarrowedDirections    int // 정류장별 실제 첫차·막차로 배차 운행 시간대를 좁힌 버스 방향 수
 	NRailShapes               int // 도시철도 shape 수(노선·정차 순서당 하나)
 	NRailStraightHops         int // 선로를 못 찾아 직선으로 이은 역 간 구간(노선·역 쌍 단위)
 	NRailNoShapeTrips         int // shape 없이 둔 도시철도 trip
@@ -122,12 +127,16 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 	if useMetro || useKric {
 		calendar = append(calendar, metroCalendar()...)
 	}
-	if useKric && kricNeedsSatSun(kricTT) {
+	satsun := useKric && kricNeedsSatSun(kricTT)
+	if satsun {
 		calendar = append(calendar, []string{"SATSUN", "0", "0", "0", "0", "0", "1", "1", ServiceStart, ServiceEnd})
 	}
 	w.table("calendar.txt",
 		[]string{"service_id", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
 			"start_date", "end_date"}, calendar)
+	if useMetro || useKric {
+		w.table("calendar_dates.txt", []string{"service_id", "date", "exception_type"}, holidayCalendarDates(satsun))
+	}
 
 	routes := [][]string{}
 	trips := [][]string{}
@@ -140,6 +149,8 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 		rep.Routes = append(rep.Routes, rr.report)
 		rep.NBusShapes += rr.report.Shapes
 		rep.NBusNoShapeDirections += rr.report.NoShapeDirections
+		rep.NBusNoBoardingStops += rr.report.NoBoardingStops
+		rep.NBusNarrowedDirections += rr.report.NarrowedDirections
 		if rr.report.Skipped == "" {
 			routes = rr.routes
 			rep.NBusRoutes++
@@ -299,8 +310,10 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 			"route_text_color"}, routes)
 	w.table("trips.txt", []string{"route_id", "service_id", "trip_id", "trip_headsign", "direction_id", "shape_id"},
 		trips)
+	padRows(stopTimes, 8) // 승하차 열(pickup_type·drop_off_type)은 버스만 채운다
 	w.table("stop_times.txt",
-		[]string{"trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence", "shape_dist_traveled"}, stopTimes)
+		[]string{"trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence", "shape_dist_traveled",
+			"pickup_type", "drop_off_type"}, stopTimes)
 	if len(shapes) > 0 {
 		w.table("shapes.txt",
 			[]string{"shape_id", "shape_pt_lat", "shape_pt_lon", "shape_pt_sequence", "shape_dist_traveled"}, shapes)
@@ -329,11 +342,13 @@ type busResult struct {
 
 // busRoute 는 노선 하나를 routes/trips/stop_times/frequencies 행으로 바꾼다.
 // 회차 지점이 있으면 상행(`_T0`/`_LAST0`)·하행(`_T1`/`_LAST1`)으로 나누고, 없으면 접미사 없이 한 방향이다.
-// 방향마다 trip 은 둘이다: (1) `_T` — 방향 첫 정류장 00:00:00 기준 상대시각 + frequencies(첫차~막차, exact_times=1).
+// 방향마다 trip 은 둘이다: (1) `_T` — 방향 첫 정류장 00:00:00 기준 상대시각 + frequencies(첫차~막차를 정류장별 실제
+// 첫차·막차에 맞춰 좁힌 시간대(busWindow), exact_times=1). 시간대가 남지 않으면 넣지 않는다.
 // exact_times=0 이면 OTP 2.10 이 승차마다 배차간격 전체를 대기로 더한다(출발 위상과 무관, 실측 2026-09-12).
 // exact_times=1 은 첫차부터 배차간격 격자로 출발하는 고정 시간표로 다뤄 대기가 위상에 따라 0~배차간격이 된다.
 // GTFS 의 frequencies end_time 은 배타적이고 OTP 2.10 도 `< end` 로 비교하므로 막차 시각 자체의 출발은 생성되지 않는다.
-// (2) `_LAST` — 막차 1회를 절대시각 stop_times 로 따로 둔다.
+// (2) `_LAST` — 막차 1회를 절대시각 stop_times 로 따로 둔다. 정류장별 실제 막차 통과시각이 있으면 그 시각이다.
+// 가상·미정차 지점(busNoBoarding)은 두 trip 모두 승하차 불가(pickup_type·drop_off_type 1).
 func busRoute(b BusRoute, routes [][]string, trips, stopTimes, freqs, shapes *[][]string,
 	stops map[string][]string) busResult {
 	r := b.Route
@@ -426,13 +441,29 @@ func busRoute(b BusRoute, routes [][]string, trips, stopTimes, freqs, shapes *[]
 		} else {
 			rep.NoShapeDirections++
 		}
-		*trips = append(*trips, []string{routeID, "ALL", tripID, d.headsign, d.id, shapeID})
-		*trips = append(*trips, []string{routeID, "ALL", lastTripID, d.headsign, d.id, shapeID})
 		// 기점 출발 후 이 방향의 첫 기록 정류장까지 걸리는 시간. bbox 클리핑으로 앞이 잘리면 회차지가 아니라
 		// 첫 안쪽 정류장이 기준이다 — OTP 는 배차 trip 의 첫 stop_time 을 0 으로 정규화하므로(실측 441번: 누적
 		// 53분 18초가 사라져 04:20 출발) frequencies 시작도 그만큼 늦춰야 절대시각 `_LAST` 와 맞는다.
 		off := times[inside[0]]
-		*freqs = append(*freqs, []string{tripID, fmtTime(first + off), fmtTime(last + off), strconv.Itoa(term * 60), "1"})
+		rel := make([]int, len(inside))
+		begin, lastTm := make([]int, len(inside)), make([]int, len(inside))
+		beginOK, lastOK := make([]bool, len(inside)), make([]bool, len(inside))
+		for n, i := range inside {
+			rel[n] = times[i] - off
+			begin[n], beginOK[n] = busStopClock(b.Stops[i].BeginTm, first)
+			lastTm[n], lastOK[n] = busStopClock(b.Stops[i].LastTm, first)
+		}
+		start, end, lastAbs := busWindow(first, last, off, rel, begin, lastTm, beginOK, lastOK)
+		if start > first+off || end < last+off {
+			rep.NarrowedDirections++
+		}
+		// 운행 시간대가 남지 않으면 배차 trip 을 넣지 않는다(frequencies 없는 배차 trip 은 00:00 출발 한 대로 읽힌다).
+		withFreq := start < end
+		if withFreq {
+			*trips = append(*trips, []string{routeID, "ALL", tripID, d.headsign, d.id, shapeID})
+			*freqs = append(*freqs, []string{tripID, fmtTime(start), fmtTime(end), strconv.Itoa(term * 60), "1"})
+		}
+		*trips = append(*trips, []string{routeID, "ALL", lastTripID, d.headsign, d.id, shapeID})
 		for n, i := range inside {
 			s := b.Stops[i]
 			dist := ""
@@ -444,10 +475,17 @@ func busRoute(b BusRoute, routes [][]string, trips, stopTimes, freqs, shapes *[]
 				stops[stopID] = []string{stopID, s.Name, strings.TrimSpace(s.Lat), strings.TrimSpace(s.Lon)}
 			}
 			seq := strconv.Itoa(i + 1)
-			rel := times[i] - off
-			*stopTimes = append(*stopTimes, []string{tripID, fmtTime(rel), fmtTime(rel), stopID, seq, dist})
-			abs := last + times[i]
-			*stopTimes = append(*stopTimes, []string{lastTripID, fmtTime(abs), fmtTime(abs), stopID, seq, dist})
+			pd := "" // pickup_type·drop_off_type: 비우면 0(승하차 가능)
+			if busNoBoarding(s.Name) {
+				pd = "1"
+				rep.NoBoardingStops++
+			}
+			if withFreq {
+				*stopTimes = append(*stopTimes,
+					[]string{tripID, fmtTime(rel[n]), fmtTime(rel[n]), stopID, seq, dist, pd, pd})
+			}
+			*stopTimes = append(*stopTimes,
+				[]string{lastTripID, fmtTime(lastAbs[n]), fmtTime(lastAbs[n]), stopID, seq, dist, pd, pd})
 		}
 	}
 	if rep.DroppedDirections == len(dirs) { // 전 방향이 빠지면 노선 자체를 제외(routes.txt 고아 행·노선 수 과계 방지)

@@ -139,6 +139,16 @@ func TestBuildReplacesPilotMetroTrips(t *testing.T) {
 	if !strings.Contains(strings.Join(services, ","), "WEEKDAY") {
 		t.Fatalf("services=%v", services)
 	}
+	// 공휴일(2026-10-05 월, 개천절 대체공휴일)은 평일 대신 휴일 시각표
+	var hol []string
+	for _, r := range readTable(t, zr, "calendar_dates.txt")[1:] {
+		if r[1] == "20261005" {
+			hol = append(hol, r[0]+":"+r[2])
+		}
+	}
+	if strings.Join(hol, ",") != "WEEKDAY:2,SUN:1" {
+		t.Fatalf("calendar_dates 20261005=%v", hol)
+	}
 	ag := readTable(t, zr, "agency.txt")
 	if len(ag) != 4 || ag[3][0] != MetroAgencyID {
 		t.Fatalf("agency=%v", ag)

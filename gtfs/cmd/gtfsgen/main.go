@@ -210,6 +210,8 @@ func printReport(rep *build.Report, out string) {
 		rep.NUnpairedTransfers, rep.NFarPairs, rep.NKricLines, rep.NKricTrips, rep.NKricSkippedStops, rep.NKricSkippedTrips,
 		rep.NKricNearestMatched, rep.NKricNonMonotonic, rep.NKricDupRows, rep.NBusShapes, rep.NBusNoShapeDirections,
 		rep.NRailShapes, rep.NRailStraightHops, rep.NRailNoShapeTrips, out)
+	fmt.Printf("버스 승하차 불가 정차 %d(가상·미정차, 방향마다 셈) | 정류장별 실제 첫차·막차로 운행 시간대를 좁힌 방향 %d\n",
+		rep.NBusNoBoardingStops, rep.NBusNarrowedDirections)
 }
 
 func envKey(path, name string) (string, error) {
