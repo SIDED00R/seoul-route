@@ -50,6 +50,7 @@ services:
       CROSSINGS_CSV: /data/crossings.csv                      # 신호 횡단보도 대기 반영용(아래 마운트, 없으면 미반영)
       FAST_EXIT_JSON: /data/fast-exit.json                    # 지하철 하차 칸 표시용(아래 마운트, cmd/fastexit 산출)
       ESCALATOR_JSON: /data/escalator.json                    # 에스컬레이터 운행방향(아래 마운트, 없으면 계단만)
+      SHOPS_CSV: /data/shop-places-seoul.csv                  # 장소 검색 부분 일치용 서울 상가(아래 마운트, 없으면 카카오만)
       PUBLIC_URL: http://api:8081               # OTP 컨테이너가 GBFS 하위 feed URL 을 이 주소로 받는다
       PORT: "8081"
     volumes:

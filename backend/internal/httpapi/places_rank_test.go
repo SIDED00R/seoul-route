@@ -60,28 +60,33 @@ func TestRankPlaces(t *testing.T) {
 		name, q  string
 		main     kakaoKeywordResult
 		stations []kakaoPlaceDoc
+		shops    []kakaoPlaceDoc
 		want     string
 	}{
+		{"역 → 상가 부분 일치 → 카카오", "가나",
+			regionResult(doc("m1", "가나공원", "")), []kakaoPlaceDoc{station("s1", "가나역 2호선")},
+			[]kakaoPlaceDoc{doc("shop:1", "가나식당", ""), doc("shop:2", "원조가나", "")},
+			"가나역 2호선 / 가나식당 / 원조가나 / 가나공원"},
 		{"지역 이름: 같은 이름 역 → 이름으로 시작하는 역 → 카카오 순서, 노선 중복은 하나", "강남",
-			regionResult(doc("m1", "서울선릉과정릉", ""), doc("m2", "압구정로데오거리", "AT4")), gangnamStations,
+			regionResult(doc("m1", "서울선릉과정릉", ""), doc("m2", "압구정로데오거리", "AT4")), gangnamStations, nil,
 			"강남역 2호선 / 강남구청역 7호선 / 서울선릉과정릉 / 압구정로데오거리"},
 		{"지역 이름이 아니면 같은 이름 역만 올리고 카카오 목록의 같은 역은 뺀다", "선릉",
 			keywordResult("선릉", doc("m1", "서울선릉과정릉", ""), station("m2", "선릉역 수인분당선"), doc("m3", "멘토즈 선릉역점", "")),
-			[]kakaoPlaceDoc{station("s1", "선릉역 2호선"), station("s2", "선정릉역 9호선")},
+			[]kakaoPlaceDoc{station("s1", "선릉역 2호선"), station("s2", "선정릉역 9호선")}, nil,
 			"선릉역 2호선 / 서울선릉과정릉 / 멘토즈 선릉역점"},
 		{"1위가 검색어로 시작하면 카카오 순서", "강남구청",
-			keywordResult("강남구청", doc("m1", "강남구청", "PO3"), station("m2", "강남구청역 7호선")), gangnamStations,
+			keywordResult("강남구청", doc("m1", "강남구청", "PO3"), station("m2", "강남구청역 7호선")), gangnamStations, nil,
 			"강남구청 / 강남구청역 7호선"},
 		{"올린 역과 같은 장소는 카카오 목록에서 한 번만", "가나",
-			regionResult(doc("m1", "가나공원", ""), doc("s1", "가나역 2호선", "")), []kakaoPlaceDoc{station("s1", "가나역 2호선")},
+			regionResult(doc("m1", "가나공원", ""), doc("s1", "가나역 2호선", "")), []kakaoPlaceDoc{station("s1", "가나역 2호선")}, nil,
 			"가나역 2호선 / 가나공원"},
 		{"id 가 없으면 같은 장소로 보지 않는다", "가나",
-			keywordResult("가나", doc("", "가나 하나", ""), doc("", "가나 둘", "")), nil,
+			keywordResult("가나", doc("", "가나 하나", ""), doc("", "가나 둘", "")), nil, nil,
 			"가나 하나 / 가나 둘"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := names(rankPlaces(c.q, c.main, c.stations)); got != c.want {
+			if got := names(rankPlaces(c.q, c.main, c.stations, c.shops)); got != c.want {
 				t.Errorf("got  %s\nwant %s", got, c.want)
 			}
 		})
@@ -93,8 +98,28 @@ func TestRankPlacesCap(t *testing.T) {
 	for i := 0; i < 15; i++ {
 		main = append(main, doc(fmt.Sprint("m", i), fmt.Sprint("명소 ", i), ""))
 	}
-	got := rankPlaces("가나", regionResult(main...), []kakaoPlaceDoc{station("s1", "가나역 2호선")})
+	got := rankPlaces("가나", regionResult(main...), []kakaoPlaceDoc{station("s1", "가나역 2호선")}, nil)
 	if len(got) != placesMax || got[0].PlaceName != "가나역 2호선" || got[placesMax-1].PlaceName != "명소 13" {
 		t.Errorf("len=%d first=%q last=%q", len(got), got[0].PlaceName, got[len(got)-1].PlaceName)
+	}
+}
+
+func TestKakaoUnderstood(t *testing.T) {
+	cases := []struct {
+		name, q string
+		docs    []kakaoPlaceDoc
+		want    bool
+	}{
+		{"이름에 그대로 있으면", "무교동북어", []kakaoPlaceDoc{doc("1", "무교동북어국집", "")}, true},
+		{"다른 단어로 쪼개 읽었으면", "무교동북", []kakaoPlaceDoc{doc("1", "동북보험대리점", "")}, false},
+		{"결과가 없으면", "스타벅", nil, false},
+		{"업종 경로에 있으면(업종 검색)", "편의점",
+			[]kakaoPlaceDoc{{ID: "1", PlaceName: "GS25 가나점", CategoryPath: "가정,생활 > 편의점 > GS25"}}, true},
+		{"공백·대소문자 무시", "gs 25", []kakaoPlaceDoc{doc("1", "GS25 가나점", "")}, true},
+	}
+	for _, c := range cases {
+		if got := kakaoUnderstood(c.q, c.docs); got != c.want {
+			t.Errorf("%s: got %v", c.name, got)
+		}
 	}
 }

@@ -1,6 +1,10 @@
 package httpapi
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/SIDED00R/seoul-route/backend/internal/shops"
+)
 
 // placesMax: /places/search 가 돌려주는 결과 수 상한.
 const placesMax = 15
@@ -13,7 +17,8 @@ type kakaoPlaceDoc struct {
 	Address      string `json:"address_name"`
 	Category     string `json:"category_group_name"`
 	CategoryCode string `json:"category_group_code"`
-	Distance     string `json:"distance"` // 요청에 x·y 가 있을 때만(m)
+	CategoryPath string `json:"category_name"` // "음식점 > 카페 > 커피전문점 > 스타벅스"
+	Distance     string `json:"distance"`      // 요청에 x·y 가 있을 때만(m)
 	X            string `json:"x"`
 	Y            string `json:"y"`
 }
@@ -46,6 +51,18 @@ func needsStationBoost(q string, main kakaoKeywordResult) bool {
 	return isRegionQuery(main) || len(main.Documents) == 0 || !strings.HasPrefix(main.Documents[0].PlaceName, q)
 }
 
+// kakaoUnderstood 는 카카오 결과 중 이름이나 업종 경로가 q 를 그대로 품은 곳이 있는지다(공백·대소문자 무시).
+// 없으면 카카오가 q 를 다른 단어로 쪼개 읽은 것이다("무교동북" → 무교동의 "동북보험대리점", "스타벅" → 0건).
+func kakaoUnderstood(q string, docs []kakaoPlaceDoc) bool {
+	k := shops.Key(q)
+	for _, d := range docs {
+		if strings.Contains(shops.Key(d.PlaceName), k) || strings.Contains(shops.Key(d.CategoryPath), k) {
+			return true
+		}
+	}
+	return false
+}
+
 // stationBase 는 카카오 지하철역 이름에서 노선을 뗀 역 이름이다("강남역 2호선" → "강남역").
 func stationBase(name string) string {
 	if i := strings.IndexByte(name, ' '); i >= 0 {
@@ -55,10 +72,11 @@ func stationBase(name string) string {
 }
 
 // rankPlaces 는 카카오 결과를 길찾기 용도 순서로 합친다. 순서: 이름이 "<q>역" 인 역(needsStationBoost 일 때)
-// → 지역 이름 검색이면 "<q>" 로 시작하는 역 → 카카오 정확도순.
+// → 지역 이름 검색이면 "<q>" 로 시작하는 역 → 상가 부분 일치(shopDocs, 핸들러가 kakaoUnderstood 가 거짓일 때만
+// 채운다) → 카카오 정확도순.
 // 같은 장소(카카오 id)는 한 번만, 지하철역(SW8)은 역 이름마다 처음 것 하나만 둔다("강남역 2호선"·"강남역 신분당선" → 앞의 것).
 // 경로 탐색은 "…역" 이름을 같은 부모역으로 앵커링하므로 노선별 항목은 같은 출발·도착이 된다.
-func rankPlaces(q string, main kakaoKeywordResult, stations []kakaoPlaceDoc) []kakaoPlaceDoc {
+func rankPlaces(q string, main kakaoKeywordResult, stations, shopDocs []kakaoPlaceDoc) []kakaoPlaceDoc {
 	out := make([]kakaoPlaceDoc, 0, placesMax)
 	seenID, seenStation := map[string]bool{}, map[string]bool{}
 	add := func(d kakaoPlaceDoc) {
@@ -84,6 +102,9 @@ func rankPlaces(q string, main kakaoKeywordResult, stations []kakaoPlaceDoc) []k
 				}
 			}
 		}
+	}
+	for _, d := range shopDocs {
+		add(d)
 	}
 	for _, d := range main.Documents {
 		add(d)

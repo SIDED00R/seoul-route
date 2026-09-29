@@ -75,6 +75,7 @@ python otp/extract_crossings.py
 python otp/extract_rail.py
 python otp/fetch_metro_timetable.py
 python otp/fetch_kric_timetable.py
+python otp/fetch_shop_places.py   # 장소 검색 부분 일치용 서울 상가(분기 갱신, 없으면 카카오 결과만)
 
 Set-Location gtfs
 go run ./cmd/gtfsgen fetch

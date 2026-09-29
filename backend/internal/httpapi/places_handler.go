@@ -18,6 +18,9 @@ import (
 // 답한다(앱은 /places/search 를 15초에 끊는다). 테스트에서 줄여 끼운다.
 var stationTimeout = 3 * time.Second
 
+// shopMax: 카카오가 검색어를 못 알아들었을 때 앞에 두는 상가 부분 일치 수. 나머지 자리는 카카오 결과다.
+const shopMax = 5
+
 // Place 는 앱에 내려주는 장소 검색 결과 한 건.
 type Place struct {
 	Name      string  `json:"name"`
@@ -69,7 +72,19 @@ func (s *Server) handlePlacesSearch(w http.ResponseWriter, r *http.Request) {
 			at.with(url.Values{"query": {q + "역"}, "category_group_code": {"SW8"}, "size": {"15"}, "rect": {rect}}), &stations)
 		cancel()
 	}
-	docs := rankPlaces(q, main, stations.Documents)
+	// 카카오가 검색어를 다른 단어로 쪼개 읽었으면(입력 중인 단어) 상가 이름 부분 일치를 앞에 둔다.
+	var shopDocs []kakaoPlaceDoc
+	if s.Shops != nil && !kakaoUnderstood(q, main.Documents) {
+		for _, m := range s.Shops.Search(q, at.lat, at.lon, at.ok, shopMax) {
+			d := kakaoPlaceDoc{ID: "shop:" + m.ID, PlaceName: m.Name, RoadAddress: m.Address, Category: m.Category,
+				X: strconv.FormatFloat(m.Lon, 'f', 7, 64), Y: strconv.FormatFloat(m.Lat, 'f', 7, 64)}
+			if at.ok {
+				d.Distance = strconv.Itoa(int(math.Round(m.DistanceM)))
+			}
+			shopDocs = append(shopDocs, d)
+		}
+	}
+	docs := rankPlaces(q, main, stations.Documents, shopDocs)
 	places := make([]Place, 0, len(docs))
 	for _, d := range docs {
 		lon, errX := strconv.ParseFloat(d.X, 64)
