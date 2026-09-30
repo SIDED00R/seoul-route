@@ -290,7 +290,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('120m 직진 후 우회전'), findsOneWidget);
-    expect(find.text('다음: 탑승 · 2호선 성수 방면 · 강남(2호선)'), findsOneWidget);
+    expect(find.text('다음: 탑승 · 2호선 성수 방면 · 강남(2호선) · 계단 4-2, 7-1 쪽 탑승'), findsOneWidget);
     expect(spoken, ['120m 직진 후 우회전']);
     await _push(tester, geo, pos(37.5, 127.0));
     expect(spoken.length, 1); // 같은 문장은 되풀이하지 않는다

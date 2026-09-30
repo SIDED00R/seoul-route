@@ -307,7 +307,7 @@ class _GuideOverlayViewState extends State<GuideOverlayView> {
                         ),
                         Text(
                           '다음: ${snapshot.next}',
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           textScaler: TextScaler.noScaling,
                           style: const TextStyle(fontSize: 12),
