@@ -22,12 +22,15 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 	status := map[string]string{"db": "ok", "otp": "ok", "version": version}
 	code := http.StatusOK
+	// 오류 원문(연결 문자열·내부 URL)은 무인증 응답에 싣지 않고 로그로 남긴다.
 	if err := s.DB.Ping(ctx); err != nil {
-		status["db"] = "fail: " + err.Error()
+		s.Log.Error("health db", "err", err)
+		status["db"] = "fail"
 		code = http.StatusServiceUnavailable
 	}
 	if err := s.otpAlive(ctx); err != nil {
-		status["otp"] = "fail: " + err.Error()
+		s.Log.Error("health otp", "err", err)
+		status["otp"] = "fail"
 		code = http.StatusServiceUnavailable
 	}
 	writeJSON(w, code, status)

@@ -30,6 +30,7 @@ type landmark struct {
 
 type cachedLandmark struct {
 	value   *landmark
+	failed  bool // 6개 카테고리가 전부 실패한 결과(landmarkPartialTTL 동안 502)
 	expires time.Time
 }
 
@@ -61,6 +62,10 @@ func (s *Server) handlePlacesLandmark(w http.ResponseWriter, r *http.Request) {
 	s.landmarkMu.Lock()
 	if c, ok := s.landmarks[key]; ok && time.Now().Before(c.expires) {
 		s.landmarkMu.Unlock()
+		if c.failed {
+			writeError(w, http.StatusBadGateway, "랜드마크 조회 실패")
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"landmark": c.value})
 		return
 	}
@@ -90,6 +95,10 @@ func (s *Server) handlePlacesLandmark(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !succeeded {
+		// 전부 실패한 결과는 landmarkPartialTTL 동안 502 로 캐시한다. 요청이 취소돼 실패한 것은 캐시하지 않는다.
+		if r.Context().Err() == nil {
+			s.cacheLandmarkFailure(key)
+		}
 		writeError(w, http.StatusBadGateway, "랜드마크 조회 실패")
 		return
 	}
@@ -106,6 +115,14 @@ func (s *Server) handlePlacesLandmark(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) cacheLandmark(key string, value *landmark, ttl time.Duration) {
+	s.storeLandmark(key, cachedLandmark{value: value}, ttl)
+}
+
+func (s *Server) cacheLandmarkFailure(key string) {
+	s.storeLandmark(key, cachedLandmark{failed: true}, landmarkPartialTTL)
+}
+
+func (s *Server) storeLandmark(key string, entry cachedLandmark, ttl time.Duration) {
 	now := time.Now()
 	s.landmarkMu.Lock()
 	defer s.landmarkMu.Unlock()
@@ -128,7 +145,8 @@ func (s *Server) cacheLandmark(key string, value *landmark, ttl time.Duration) {
 		}
 		delete(s.landmarks, oldestKey)
 	}
-	s.landmarks[key] = cachedLandmark{value: value, expires: now.Add(ttl)}
+	entry.expires = now.Add(ttl)
+	s.landmarks[key] = entry
 }
 
 func (s *Server) fetchLandmarkCategory(ctx context.Context, category string, lat, lon float64) landmarkResult {

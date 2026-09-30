@@ -88,8 +88,8 @@ func TestHealth(t *testing.T) {
 	s.OTPURL = "http://127.0.0.1:1"
 	s.HTTP = &http.Client{Timeout: time.Second}
 	rr, out = do(t, s.Router(), http.MethodGet, "/health", "", "")
-	if rr.Code != 503 || out["db"] != "ok" || !strings.HasPrefix(out["otp"].(string), "fail") {
-		t.Fatalf("OTP 죽었을 때 503 이어야 한다: code=%d body=%v", rr.Code, out)
+	if rr.Code != 503 || out["db"] != "ok" || out["otp"] != "fail" {
+		t.Fatalf("OTP 죽었을 때 503 이고 본문에는 오류 원문 없이 fail 만: code=%d body=%v", rr.Code, out)
 	}
 }
 

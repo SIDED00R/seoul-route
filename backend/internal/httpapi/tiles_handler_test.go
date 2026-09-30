@@ -172,4 +172,12 @@ func TestTileBadRequests(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("줌 범위 밖: %d", rec.Code)
 	}
+	// x·y 는 2^z 미만이어야 한다.
+	for _, path := range []string{"/tiles/6/64/1.png", "/tiles/6/1/64.png"} {
+		rec := httptest.NewRecorder()
+		tileRouter(s).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: 타일 범위 밖인데 %d", path, rec.Code)
+		}
+	}
 }

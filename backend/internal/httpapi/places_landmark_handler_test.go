@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -147,5 +148,66 @@ func TestPlacesLandmarkErrors(t *testing.T) {
 		fmt.Sprintf("/places/landmark?lat=%v&lon=%v", 37.53, 126.87), nil))
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Errorf("키 없음 code=%d", rr.Code)
+	}
+}
+
+// 6개 카테고리가 전부 실패하면 502 를 주고 landmarkPartialTTL 동안은 카카오를 다시 부르지 않는다.
+func TestPlacesLandmarkTotalFailureCachesBriefly(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	kakao := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer kakao.Close()
+	s := &Server{KakaoKey: "k", KakaoBase: kakao.URL, HTTP: kakao.Client(), Log: slog.New(slog.DiscardHandler)}
+	req := func() *http.Request {
+		return httptest.NewRequest(http.MethodGet, "/places/landmark?lat=37.5300&lon=126.8720", nil)
+	}
+	for i := 0; i < 2; i++ {
+		rr := httptest.NewRecorder()
+		s.handlePlacesLandmark(rr, req())
+		if rr.Code != http.StatusBadGateway {
+			t.Fatalf("전부 실패는 502: code=%d", rr.Code)
+		}
+	}
+	mu.Lock()
+	n := calls
+	mu.Unlock()
+	if n != len(landmarkCategories) {
+		t.Fatalf("실패 캐시 중 재호출: calls=%d want=%d", n, len(landmarkCategories))
+	}
+	s.landmarkMu.Lock()
+	c := s.landmarks["37.5300,126.8720"]
+	c.expires = time.Now().Add(-time.Second)
+	s.landmarks["37.5300,126.8720"] = c
+	s.landmarkMu.Unlock()
+	s.handlePlacesLandmark(httptest.NewRecorder(), req())
+	mu.Lock()
+	defer mu.Unlock()
+	if calls != 2*len(landmarkCategories) {
+		t.Fatalf("만료 뒤 재호출 calls=%d want=%d", calls, 2*len(landmarkCategories))
+	}
+}
+
+// 요청이 취소돼 전부 실패한 것은 상류 실패가 아니므로 실패로 캐시하지 않는다.
+func TestPlacesLandmarkCanceledRequestNotCached(t *testing.T) {
+	kakao := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{"documents":[]}`)
+	}))
+	defer kakao.Close()
+	s := &Server{KakaoKey: "k", KakaoBase: kakao.URL, HTTP: kakao.Client(), Log: slog.New(slog.DiscardHandler)}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/places/landmark?lat=37.5300&lon=126.8720", nil).WithContext(ctx)
+	s.handlePlacesLandmark(rr, req)
+	s.landmarkMu.Lock()
+	_, cached := s.landmarks["37.5300,126.8720"]
+	s.landmarkMu.Unlock()
+	if cached {
+		t.Fatalf("취소된 요청이 캐시됐다: code=%d", rr.Code)
 	}
 }
