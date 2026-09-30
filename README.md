@@ -72,6 +72,7 @@ OTP jar, South Korea OSM PBF, 국가교통DB GTFS 파일럿을 `otp/data/`에 �
 
 ```powershell
 python otp/extract_seoul.py
+python otp/patch_osm.py           # otp/osm-overrides.json 의 way 태그 오버라이드(낡은 OSM 태그 보정). 추출 뒤 매번
 python otp/extract_entrances.py
 python otp/extract_crossings.py
 python otp/extract_rail.py
