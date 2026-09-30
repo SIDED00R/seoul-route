@@ -34,7 +34,7 @@ func TestHolidayCalendarDates(t *testing.T) {
 	}
 }
 
-// 목록은 날짜 형식이 맞고 겹치지 않으며 정렬돼 있다(해마다 더할 때 실수 방지).
+// 목록은 날짜 형식이 맞고 겹치지 않으며 정렬돼 있다.
 func TestKoreanHolidaysWellFormed(t *testing.T) {
 	seen := map[string]bool{}
 	prev := ""

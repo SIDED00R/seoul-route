@@ -11,7 +11,7 @@ import (
 )
 
 // 역 구내 통로(pathways.txt) 상수. 수치 근거는 docs/gtfs-generator.md.
-//   - 부모역 안 자식 stop(노선별 승강장) 사이에 walkway pathway 를 둔다. 없으면 OTP 가 지상 도로망으로 걷는다.
+//   - 부모역 안 자식 stop(노선별 승강장) 사이에 walkway pathway 를 둔다.
 //   - 환승 통과시간은 transfers.txt 값이 있으면 그 값, 없으면 직선거리÷PathwayWalkMps + PathwayStairSec.
 //     1.0 m/s·60초는 계단·개찰 포함 역 구내 보행 placeholder(2026-09-13). 서울교통공사 환승 소요 자료로 재보정한다.
 //     거리 폴백은 PathwayFallbackMaxM 까지만 — 기준명+800m 로 묶인 부모역이 실제 환승역이라는 보장이 없다.
@@ -34,7 +34,6 @@ const (
 	// 350m: 청담역 출구 8개가 KTDB 승강장 좌표에서 264~343m(OSM stop_area 관계로 청담역 출구 확인), 동작 9번 255m.
 	// 250m 면 250~350m 대 16개(청담 8·잠실 2·마곡 2·예술회관 1·동작 1·왕십리 1·의정부 1)가 탈락한다(2026-09-13 실측).
 	// 350m 에서 오부착 1건(상왕십리 4번 출구가 상왕십리 승강장 862m·왕십리 326m 라 왕십리에 붙음)은 감수.
-	// OSM stop_area 관계 매칭은 관계명 표기가 제각각이라 별도 과제.
 	EntranceMatchM   = 350.0
 	EntranceEntrySec = 60 // 실제 출입구→승강장: 계단·개찰 상수 + 거리÷PathwayWalkMps. placeholder(2026-09-13), Phase 3 궤적으로 재보정
 	EntranceExitSec  = 30 // 승강장→실제 출입구

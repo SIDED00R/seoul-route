@@ -22,14 +22,14 @@ const StationRadiusM = 800
 
 // stationGroups 는 지하철 stop 을 부모역(location_type=1)으로 묶는다. 규칙: 괄호 앞 기준명이 같고 서로
 // StationRadiusM 이내. 부모 좌표는 자식 평균. 반환: 부모 행(stop_id, stop_name, lat, lon), stop_id → 부모 id.
-// 역 단위로 묶어 두면 OTP 가 stopLocation 요청에서 여정에 맞는 stop 을 고른다(역사 좌표 스냅 우회 방지).
+// 역 단위로 묶어 두면 OTP 가 stopLocation 요청에서 여정에 맞는 stop 을 고른다.
 func stationGroups(stops []ktdb.Row) (parents [][]string, parentOf map[string]string) {
 	type cluster struct {
 		ids      []string
 		lat, lon float64 // 누적 합
 	}
 	// 입력은 ktdb.Load 의 맵 순회 결과라 순서가 매번 다르다. stop_id 로 정렬해야 동명이역(양평·도봉산)의
-	// 부모 ID 접미사와 부모 좌표가 빌드마다 같다(안 그러면 API 가 캐시한 역 ID 가 다른 역을 가리킨다).
+	// 부모 ID 접미사와 부모 좌표가 빌드마다 같다.
 	sorted := append([]ktdb.Row(nil), stops...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i]["stop_id"] < sorted[j]["stop_id"] })
 	byBase := map[string][]*cluster{}

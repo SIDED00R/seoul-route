@@ -18,7 +18,7 @@ import (
 	"github.com/SIDED00R/seoul-route/backend/internal/db"
 )
 
-// 실제 PostgreSQL 이 필요하다. TEST_DATABASE_URL 이 없으면 건너뛴다(배선을 타는 테스트만 인정하는 규칙).
+// 실제 PostgreSQL 이 필요하다. TEST_DATABASE_URL 이 없으면 건너뛴다.
 func testServer(t *testing.T) (*Server, *pgxpool.Pool) {
 	t.Helper()
 	url := os.Getenv("TEST_DATABASE_URL")

@@ -15,8 +15,7 @@ class LegTracker {
     _enter(now ?? DateTime.now());
   }
 
-  /// 디스크에 남겨 둔 안내를 이어받는다(앱이 죽었다 다시 켜진 경우). 구간과 밀린 시간은 저장된 값을 그대로 쓴다 —
-  /// _enter 로 다시 재면 이미 지나온 구간의 계획 출발과 지금 시각 차이만큼 잘못 밀린다.
+  /// 디스크에 남겨 둔 안내를 이어받는다(앱이 죽었다 다시 켜진 경우). 구간과 밀린 시간은 저장된 값을 그대로 쓴다.
   LegTracker.resume(List<Leg> legs, {required int index, required this.shift})
     : legs = List.of(legs),
       points = _decode(legs),
@@ -71,7 +70,7 @@ class LegTracker {
     }
   }
 
-  /// 위치를 넣고 구간이 바뀌었으면 true. 마지막 구간 끝에 닿아도 index 는 마지막에 머문다(종료는 사용자가 누른다).
+  /// 위치를 넣고 구간이 바뀌었으면 true. 마지막 구간 끝에 닿아도 index 는 마지막에 머문다.
   /// activity 는 폰 활동 인식의 보류용 활동(ActivityClassifier.ridingView)이다.
   bool update(double lat, double lon, {double accuracyM = 0, DateTime? now, String activity = 'unknown'}) {
     final t = now ?? DateTime.now();
@@ -175,7 +174,7 @@ class LegTracker {
     }
     if (board == null) return;
     final end = DateTime.tryParse(current.end);
-    // 손으로 되돌린 구간의 예상 종료가 이미 지났으면 시간표 인계가 곧바로 다시 넘겨 버린다. 그때는 늦은 만큼 민다.
+    // 손으로 되돌린 구간의 예상 종료가 이미 지났으면 늦은 만큼 민다.
     if (riding &&
         end != null &&
         !end.add(board.difference(start)).isAfter(now)) {

@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:seoul_route/api/client.dart';
 import 'package:seoul_route/guide/active_guide.dart';
+import 'package:seoul_route/guide/guide_session.dart';
 import 'package:seoul_route/models/itinerary.dart';
 import 'package:seoul_route/models/place.dart';
 import 'package:seoul_route/models/plan_request.dart';
@@ -112,7 +113,7 @@ const _request = PlanRequest(
   destination: Place(name: '도착', address: '', lat: 37.502, lon: 127.0),
 );
 
-/// 테스트를 끝내며 안내를 치운다. 안내는 화면과 별개로 살아 있어(10초 타이머) 치우지 않으면 테스트가 실패한다.
+/// 테스트를 끝내며 안내를 치운다. 안내는 화면과 별개로 살아 있다(10초 타이머).
 Future<void> finish(WidgetTester tester) async {
   ActiveGuide.instance.clear();
   await tester.pumpWidget(const SizedBox());
@@ -196,7 +197,6 @@ void main() {
     await finish(tester);
   });
 
-  // "현재 경로" 탭은 진행 중인 안내를 보여 주고 안내 화면으로 돌려보낸다. 안내가 없으면 비어 있다.
   testWidgets('현재 경로 탭: 안내가 없으면 비고, 있으면 다시 열 수 있다', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: CurrentGuideTab())));
     await tester.pump();
@@ -258,8 +258,7 @@ void main() {
     await finish(tester);
   });
 
-  // 하던 안내를 끝내지 못했으면(샘플 전송 실패) 그대로 교체하지 않는다 — 치우면 못 보낸 샘플이 사라지고 서버 trip 도
-  // 열린 채 남는다. 대신 버리고 갈 길은 남겨 둔다(서버에 못 닿는 동안 새 안내를 아예 못 하게 되면 안 된다).
+  // 하던 안내를 끝내지 못했으면(샘플 전송 실패) 그대로 교체하지 않는다. 대신 버리고 갈 길은 남겨 둔다.
   testWidgets('종료에 실패하면 묻고, 버리기를 고를 때만 교체한다', (tester) async {
     api.uploadFails = true;
     await tester.pumpWidget(MaterialApp(
@@ -298,7 +297,39 @@ void main() {
     await finish(tester);
   });
 
-  // 종료 응답을 기다리는 동안 화면을 떠나도, 성공한 종료는 전역에서 치워야 한다(끝난 세션과 활동 인식 구독이 남는다).
+  testWidgets('하던 안내의 종료를 기다리는 동안 걸린 다른 안내는 치우지 않고 안내 화면도 열지 않는다', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: GuideScreen(api: api, request: _request, itinerary: _itin(37.502), speak: (_) async {}),
+      ),
+    ));
+    await _settle(tester);
+    expect(api.startCalls, 1);
+
+    api.holdEnd = true;
+    await tester.pumpWidget(MaterialApp(
+      home: DetailScreen(api: api, request: _request, itinerary: _itin(37.503), index: 0),
+    ));
+    await tester.pump();
+    await tester.tap(find.text('안내 시작'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('새로 시작'));
+    await _waitFor(tester, () => api.endCalls == 1);
+    expect(api.endCalls, 1); // 서버 응답을 기다리는 중
+
+    final other = GuideSession(api: api, request: _request, itinerary: _itin(37.504), speak: (_) async {});
+    ActiveGuide.instance.set(other);
+
+    api.release(); // 서버 응답 도착
+    await _waitFor(tester, () => find.byType(GuideScreen).evaluate().isNotEmpty, rounds: 25);
+    await tester.pumpAndSettle();
+    expect(ActiveGuide.instance.current, same(other));
+    expect(find.byType(GuideScreen), findsNothing);
+    expect(api.startCalls, 1);
+    await finish(tester);
+  });
+
+  // 종료 응답을 기다리는 동안 화면을 떠나도, 성공한 종료는 전역에서 치워야 한다.
   testWidgets('화면을 떠난 뒤 종료가 끝나도 안내를 치운다', (tester) async {
     tester.view.physicalSize = const Size(1400, 2400);
     tester.view.devicePixelRatio = 1.0;

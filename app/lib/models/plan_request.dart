@@ -39,7 +39,7 @@ class PlanRequest {
   /// 경유지 체류 합(분).
   int get totalStayMin => [for (var i = 0; i < via.length; i++) stayAt(i)].fold(0, (a, b) => a + b);
 
-  // name 은 서버가 "…역" 이면 근처 같은 이름 역(GTFS 부모역)으로 앵커링하는 데 쓴다(역사 좌표 스냅 문제).
+  // name 은 서버가 "…역" 이면 근처 같은 이름 역(GTFS 부모역)으로 앵커링하는 데 쓴다.
   static Map<String, dynamic> _pt(Place p) => {'lat': p.lat, 'lon': p.lon, 'name': p.name};
 
   Map<String, dynamic> toJson() => {

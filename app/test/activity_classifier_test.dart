@@ -69,8 +69,7 @@ void main() {
     expect(s.c.current, 'vehicle');
   });
 
-  // 열차에서 실제로 오는 순서: 걷기 확정 → IN_VEHICLE 이 잠깐 → 다시 정지가 계속. 차량 후보가 확정될 때 정지 시계를
-  // 지우면, 같은 판정은 이벤트가 오지 않으므로 시계가 다시 시작될 길이 없어 감쇠가 영영 안 돈다.
+  // 열차에서 실제로 오는 순서: 걷기 확정 → IN_VEHICLE 이 잠깐 → 다시 정지가 계속.
   test('움직임 판정이 잠깐 왔다가 정지가 이어져도 감쇠가 돈다', () {
     final s = _Stream(ActivityClassifier());
     s.hold('WALKING', 'HIGH', 30);

@@ -20,8 +20,12 @@ import (
 )
 
 // 버스 속도 폴백과 정차시간은 2026-09-12 위치 표본으로 정한 초기값이며 시간대별 표본으로 재보정한다.
+// MinSectSpeedKmh: 구간속도(sectSpd)가 이 값 미만이면 결측으로 보고 FallbackSpeedKmh 를 쓴다. 출처: fetch 캐시
+// 2026-09-30 — 정류장 행 88,835개 중 1~4km/h 534개, 그중 직전 행과 이 행의 beginTm 이 둘 다 있는 354개의 292개는 API 첫차
+// 시각 차이가 5분 이하. 캐시를 새로 받으면 다시 잰다.
 const (
 	FallbackSpeedKmh = 18.0
+	MinSectSpeedKmh  = 5.0
 	DwellTrunkSec    = 38 // routeType 3 간선
 	DwellBranchSec   = 30 // routeType 4 지선. 미측정 유형(순환·인천·경기·심야 등)도 정류장 간격이 비슷해 이 값을 쓴다
 	ServiceStart     = "20260101"
@@ -48,6 +52,7 @@ type RouteReport struct {
 	NoBoardingStops   int // 가상·미정차라 승하차 불가로 둔 정차(방향마다 셈)
 	// NarrowedDirections: 정류장별 실제 첫차·막차에 맞춰 배차 운행 시간대를 좁힌 방향 수(busWindow)
 	NarrowedDirections int
+	SlowSections       int // 구간속도가 0 초과 MinSectSpeedKmh 미만이라(결측 0 제외) FallbackSpeedKmh 로 계산한 구간
 }
 
 type Report struct {
@@ -87,28 +92,32 @@ type Report struct {
 	NRailShapes               int // 도시철도 shape 수(노선·정차 순서당 하나)
 	NRailStraightHops         int // 선로를 못 찾아 직선으로 이은 역 간 구간(노선·역 쌍 단위)
 	NRailNoShapeTrips         int // shape 없이 둔 도시철도 trip
-	NLoopLinks                int // 2호선 성수에서 이어 붙인 trip 쌍(block_id)
+	NLoopLinks                int // 순환 회차역(2호선 성수·6호선 응암)에서 이어 붙인 trip 쌍(block_id)
 	NLoopBlocks               int // 그 block_id 수
-	NLoopUnpaired             int // 본선으로 성수에 도착했지만 이어지는 출발이 없는 2호선 trip
+	NLoopUnpaired             int // 본선으로 회차역에 도착했지만 이어지는 출발이 없는 trip
+	NBusSlowSections          int // 구간속도가 0 초과 MinSectSpeedKmh 미만이라(결측 0 제외) FallbackSpeedKmh 로 계산한 버스 구간
 }
 
-// Build 는 out 에 GTFS zip 을 쓴다. subway 는 nil 이면 버스만 쓴다. entrances 는 OSM 지하철 출입구(없으면 nil).
+// Build 는 out 에 GTFS zip 을 쓴다. 실패하면 out 을 건드리지 않는다. subway 는 nil 이면 버스만 쓴다. entrances 는 OSM 지하철 출입구(없으면 nil).
 // metro 는 서울교통공사 열차운행시각표(없으면 nil → 파일럿 1~9호선 trip 그대로), kricTT 는 레일포털 시각표(없으면 nil →
 // 코레일·민자 노선 파일럿 trip 그대로). rail 은 OSM 노선 선로(없으면 nil → 도시철도 shape 없음).
 func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.Entrance,
 	metro *seoulmetro.Timetable, kricTT *kric.Timetable, rail []osm.RailWay) (*Report, error) {
 	rep := &Report{}
-	f, err := os.Create(out)
+	// 같은 디렉터리의 임시 파일에 쓰고 성공했을 때만 out 으로 바꾼다. 실패하면 out 은 그대로다.
+	tmp := out + ".tmp"
+	f, err := os.Create(tmp)
 	if err != nil {
 		return nil, err
 	}
 	closed := false
 	zw := zip.NewWriter(f)
-	// 조기 반환 경로의 핸들 정리. 성공 경로는 아래에서 명시적으로 닫고 오류를 돌려준다(중앙 디렉터리 기록은 Close 에서 일어난다).
+	// 조기 반환 경로의 핸들·임시 파일 정리. 성공 경로는 아래에서 명시적으로 닫는다.
 	defer func() {
 		if !closed {
 			zw.Close()
 			f.Close()
+			os.Remove(tmp)
 		}
 	}()
 
@@ -155,6 +164,7 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 		rep.NBusNoBoardingStops += rr.report.NoBoardingStops
 		rep.NBusNarrowedDirections += rr.report.NarrowedDirections
 		if rr.report.Skipped == "" {
+			rep.NBusSlowSections += rr.report.SlowSections
 			routes = rr.routes
 			rep.NBusRoutes++
 		}
@@ -167,7 +177,7 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 	}
 	sort.Slice(stopRows, func(i, j int) bool { return stopRows[i][0] < stopRows[j][0] })
 
-	var blocks map[string]string // trip_id → block_id(2호선 성수 이어 타기, loop_blocks.go)
+	var blocks map[string]string // trip_id → block_id(순환 열차 이어 타기, loop_blocks.go)
 	if subway != nil {
 		replaced := map[string]bool{}             // 시각표로 대체되는 파일럿 trip
 		kricLine := func(routeID string) string { // 레일포털 시각표로 대체되는 노선이면 그 코드
@@ -242,6 +252,12 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 				}
 			}
 			kr, kt, kst, ks := kricRows(kricTT, pilotStops, pilotNames)
+			made := tripRoutes(kt)
+			for _, code := range sortedLineCodes(kricTT) {
+				if !made["K_"+code] {
+					return nil, fmt.Errorf("레일포털 시각표에 노선 %s 의 열차가 없다(파일럿 trip 을 대체할 수 없음)", code)
+				}
+			}
 			routes = append(routes, kr...)
 			trips = append(trips, kt...)
 			stopTimes = append(stopTimes, kst...)
@@ -257,6 +273,16 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 				stopByName[s["stop_name"]] = s["stop_id"]
 			}
 			mr, mt, mst, ms := metroRows(metro, stopIDs, stopByName)
+			made := tripRoutes(mt)
+			for _, r := range subway.Routes {
+				if !metroReplacesRoute(r["route_id"]) {
+					continue
+				}
+				line := r["route_id"][len(metroPilotPfx) : len(metroPilotPfx)+1]
+				if !made["M_"+line] && !made["M_"+line+"_X"] {
+					return nil, fmt.Errorf("서울교통공사 시각표에 %s호선 열차가 없다(파일럿 trip 을 대체할 수 없음)", line)
+				}
+			}
 			routes = append(routes, mr...)
 			trips = append(trips, mt...)
 			stopTimes = append(stopTimes, mst...)
@@ -265,7 +291,7 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 				stopName[s["stop_id"]] = s["stop_name"]
 			}
 			var ls loopStats
-			blocks, ls = line2LoopBlocks(mt, mst, stopName)
+			blocks, ls = loopBlocks(mt, mst, stopName)
 			rep.NLoopLinks, rep.NLoopBlocks, rep.NLoopUnpaired = ls.Links, ls.Blocks, ls.Unpaired
 			rep.NMetroTrips, rep.NMetroSkippedStops, rep.NMetroSkippedTrips = ms.Trips, ms.SkippedStops, ms.SkippedTrips
 			rep.NMetroNameMatched, rep.NMetroNonMonotonic = ms.NameMatched, ms.NonMonotonic
@@ -342,12 +368,27 @@ func Build(out string, buses []BusRoute, subway *ktdb.Subway, entrances []osm.En
 	closed = true
 	if err := zw.Close(); err != nil {
 		f.Close()
+		os.Remove(tmp)
 		return nil, fmt.Errorf("zip 마무리 실패: %w", err)
 	}
 	if err := f.Close(); err != nil {
+		os.Remove(tmp)
 		return nil, fmt.Errorf("zip 파일 닫기 실패: %w", err)
 	}
+	if err := os.Rename(tmp, out); err != nil {
+		os.Remove(tmp)
+		return nil, fmt.Errorf("zip 교체 실패: %w", err)
+	}
 	return rep, nil
+}
+
+// tripRoutes 는 trips 행([route_id, …])에 나온 route_id 집합.
+func tripRoutes(trips [][]string) map[string]bool {
+	out := map[string]bool{}
+	for _, t := range trips {
+		out[t[0]] = true
+	}
+	return out
 }
 
 type busResult struct {
@@ -401,15 +442,18 @@ func busRoute(b BusRoute, routes [][]string, trips, stopTimes, freqs, shapes *[]
 		dist, _ := strconv.Atoi(strings.TrimSpace(s.SectDist))
 		spd, _ := strconv.Atoi(strings.TrimSpace(s.SectSpd))
 		kmh := float64(spd)
-		if kmh <= 0 {
+		if kmh > 0 && kmh < MinSectSpeedKmh {
+			rep.SlowSections++
+		}
+		if kmh < MinSectSpeedKmh {
 			kmh = FallbackSpeedKmh
 		}
 		times[i] = times[i-1] + int(float64(dist)/(kmh*1000/3600)+0.5) + dwellSec(r.Type)
 	}
 	rep.TravelSec = times[len(times)-1]
 
-	// 회차 지점(transYn=Y)에서 상행(기점→회차)·하행(회차→종점) 두 trip 으로 나눈다. 한 trip 이면 OTP 가 회차지를
-	// 지나 반대 방향까지 하차 없이 타는 경로를 만든다. 회차가 없거나 양 끝이면 한 방향(접미사 없음).
+	// 회차 지점(transYn=Y)에서 상행(기점→회차)·하행(회차→종점) 두 trip 으로 나눈다.
+	// 회차가 없거나 양 끝이면 한 방향(접미사 없음).
 	k := -1
 	for i, s := range b.Stops {
 		if strings.TrimSpace(s.TransYn) == "Y" {
@@ -434,7 +478,7 @@ func busRoute(b BusRoute, routes [][]string, trips, stopTimes, freqs, shapes *[]
 		dirs = []direction{{0, k, "0", "0", b.Stops[k].Name}, {k, len(b.Stops) - 1, "1", "1", r.EndName}}
 	}
 	for _, d := range dirs {
-		var inside []int // 서울 bbox 안의 정류장만 기록한다(밖은 도로망이 없어 OTP 에서 고립 정류장이 된다)
+		var inside []int // 서울 bbox 안의 정류장만 기록한다
 		for i := d.from; i <= d.to; i++ {
 			if insideBBox(b.Stops[i]) {
 				inside = append(inside, i)
@@ -472,7 +516,7 @@ func busRoute(b BusRoute, routes [][]string, trips, stopTimes, freqs, shapes *[]
 		if start > first+off || end < last+off {
 			rep.NarrowedDirections++
 		}
-		// 운행 시간대가 남지 않으면 배차 trip 을 넣지 않는다(frequencies 없는 배차 trip 은 00:00 출발 한 대로 읽힌다).
+		// 운행 시간대가 남지 않으면 배차 trip 을 넣지 않는다.
 		withFreq := start < end
 		if withFreq {
 			*trips = append(*trips, []string{routeID, "ALL", tripID, d.headsign, d.id, shapeID})
@@ -503,7 +547,7 @@ func busRoute(b BusRoute, routes [][]string, trips, stopTimes, freqs, shapes *[]
 				[]string{lastTripID, fmtTime(lastAbs[n]), fmtTime(lastAbs[n]), stopID, seq, dist, pd, pd})
 		}
 	}
-	if rep.DroppedDirections == len(dirs) { // 전 방향이 빠지면 노선 자체를 제외(routes.txt 고아 행·노선 수 과계 방지)
+	if rep.DroppedDirections == len(dirs) { // 전 방향이 빠지면 노선 자체를 제외
 		rep.Skipped = "서울 bbox 안 정류장 2개 미만"
 	}
 	return busResult{routes, rep}

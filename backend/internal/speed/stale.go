@@ -13,7 +13,7 @@ import (
 const StaleAfter = 6 * time.Hour
 
 // CloseStaleTrips 는 오래 조용한 열린 trip 을 /end 와 같은 계산으로 닫는다(속도를 프로파일에 반영한 뒤 ended_at).
-// 닫은 수를 돌려준다. 앱이 종료 요청을 보내지 못하고 죽으면 서버에는 정리할 경로가 없기 때문에 필요하다.
+// 닫은 수를 돌려준다.
 // main 이 궤적 정리와 같은 주기로 부른다.
 func CloseStaleTrips(ctx context.Context, pool *pgxpool.Pool, priors map[string]float64, now time.Time) (int, error) {
 	type trip struct{ id, userID string }

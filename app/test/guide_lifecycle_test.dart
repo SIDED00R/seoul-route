@@ -230,7 +230,6 @@ void main() {
     expect(s.tracker.index, 1);
   });
 
-  // 위치 스트림이 포그라운드 서비스라, 끊긴 뒤에는 백그라운드 앱이 네트워크를 잃어 종료 요청이 나가지 못한다.
   test('종료 요청을 보내는 동안 위치 스트림이 살아 있고, 성공한 뒤에 끊는다', () async {
     final listening = <bool>[];
     api.onEnd = () => listening.add(geo.controller.hasListener);
@@ -574,8 +573,7 @@ void main() {
     expect(ActiveGuide.instance.current, isNull);
   });
 
-  // 위치를 못 쓰면 세션을 만들지 않는다. 만들면 스트림도 업로더도 없는 안내가 활성으로 남고, 그걸 치우는 순간
-  // dispose 가 디스크에 남은 것까지 지워 되살릴 길이 없어진다.
+  // 위치를 못 쓰면 세션을 만들지 않는다.
   for (final c in [
     ('위치 권한이 없으면', () => geo.permission = LocationPermission.denied),
     ('기기 위치가 꺼져 있으면', () => geo.serviceEnabled = false),

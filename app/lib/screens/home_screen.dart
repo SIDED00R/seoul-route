@@ -90,7 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return ValueListenableBuilder(
       valueListenable: ActiveGuide.instance.session,
       builder: (context, session, child) => PopScope(
-        // 안내 중에는 뒤로가기로 앱을 끝내지 않는다 — 액티비티가 끝나면 안내가 통째로 사라진다. 대신 뒤로 보낸다.
+        // 안내 중에는 뒤로가기로 앱을 끝내지 않는다. 대신 뒤로 보낸다.
         canPop: session == null || session.ended,
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop) unawaited(moveAppToBack());

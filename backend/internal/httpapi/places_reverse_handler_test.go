@@ -40,7 +40,7 @@ func TestPlacesReverse(t *testing.T) {
 	if out["name"] != "서울역" || out["address"] != "서울 중구 세종대로 2" {
 		t.Errorf("out=%v", out)
 	}
-	// 카카오는 x=경도, y=위도다. 바꿔 보내면 엉뚱한 곳의 주소가 온다.
+	// 카카오는 x=경도, y=위도다.
 	if !strings.Contains(gotQuery, "x=126.97") || !strings.Contains(gotQuery, "y=37.55") {
 		t.Errorf("카카오 요청 쿼리=%q", gotQuery)
 	}

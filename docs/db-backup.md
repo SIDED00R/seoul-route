@@ -1,4 +1,4 @@
-# 운영 DB 백업·복구 (이슈 #149)
+# 운영 DB 백업·복구
 
 운영 Postgres(`deploy-postgres-1`, 볼륨 `deploy_pgdata`)에는 걷기·자전거 속도 학습, 즐겨찾기, 최근 경로, 안내 궤적(30일)이 있다.
 PC 를 끄면 Docker VM 이 통째로 멈춰 Postgres 는 다음 기동 때 "비정상 종료 후 자동 복구"(WAL 재생)로 시작한다. 전원이 나가도
@@ -30,8 +30,7 @@ if ($LASTEXITCODE -eq 0) { docker exec deploy-postgres-1 rm -f /tmp/restore.dump
 ```
 
 볼륨을 새로 만든 경우(빈 Postgres)도 같다. DB 를 지우고 새로 만든 뒤 복원하므로 덤프 뒤에 생긴 객체는 남지 않는다.
-2026-09-29 개발 Postgres 에서 위 블록을 실행해 정상 덤프·잘린 덤프·경로 오타·덤프 아닌 파일 네 경우를 확인했다(잘린
-덤프는 DROP 뒤 롤백되어 빈 DB 로 남고 api 는 켜지 않는다).
+목록 검사(`pg_restore -l`)는 통과하고 데이터가 잘린 덤프는 DROP 뒤 복원이 롤백되어 빈 DB 로 남는다. 어느 단계든 실패하면 api 는 켜지 않는다.
 
 배포를 되돌리려는 복원이면 마지막 줄의 `docker start deploy-api-1` 을 빼고, 덤프를 뜬 시점의 커밋을 체크아웃해
 `.\deploy\release.ps1 prod` 로 api 를 다시 배포한다 — 지금 이미지의 api 를 켜면 기동 때 같은 마이그레이션을 다시
@@ -39,8 +38,7 @@ if ($LASTEXITCODE -eq 0) { docker exec deploy-postgres-1 rm -f /tmp/restore.dump
 
 ## 복구 연습
 
-개발 Postgres 에 임시 DB 로 복원해 운영과 테이블별 행 수를 대조한 뒤 지운다(2026-09-29: users 1·trips 33·traces 5,636·
-speed_profiles 2·favorite_places 1·recent_routes 20·schema_migrations 6, 운영과 전부 같음).
+개발 Postgres 에 임시 DB 로 복원해 운영과 테이블별 행 수를 대조한 뒤 지운다.
 
 ```powershell
 docker cp C:\Users\SAMSUNG\seoul-route-db-backup\<파일>.dump seoul-route-dev-postgres-1:/tmp/drill.dump

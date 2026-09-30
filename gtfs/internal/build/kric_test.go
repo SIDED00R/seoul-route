@@ -82,7 +82,7 @@ func TestKricRows(t *testing.T) {
 		}
 		return strings.Join(s, "\n")
 	}
-	// 노선 코드별 색과 글자색이 붙는다. 우이신설은 노선 WS·기관 UI 라 기관 코드로 색을 찾으면 어긋난다.
+	// 노선 코드별 색과 글자색이 붙는다.
 	if join(routes) != "K_KJ,A_KR,경의중앙선,경의중앙선,1,77C4A3,000000\nK_WS,A_UI,우이신설,우이신설,1,B0CE18,000000" {
 		t.Fatalf("routes=\n%s", join(routes))
 	}

@@ -17,6 +17,7 @@ class MainActivity : FlutterActivity() {
     private var pendingOverlayPermission: MethodChannel.Result? = null
     private lateinit var guideOverlay: GuideOverlayController
     private lateinit var audioFocus: GuideAudioFocus
+    private var guideStatus: GuideStatusNotification? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -37,8 +38,10 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
-        // 안내 진행 알림(lib/guide/status_notification.dart). 화면이 닫힐 때 앱이 cancel 을 부른다.
+        // 안내 진행 알림(lib/guide/status_notification.dart). 안내가 끝나면 앱이 cancel 을 부르고, Activity 가 파괴되면
+        // onDestroy 가 지운다.
         val status = GuideStatusNotification(applicationContext)
+        guideStatus = status
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, STATUS_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "show" -> {
@@ -52,7 +55,7 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
-        // 안내 중 뒤로가기(lib/util/app_task.dart). 액티비티를 끝내면 안내가 통째로 사라지므로 뒤로 보내기만 한다.
+        // 안내 중 뒤로가기(lib/util/app_task.dart). 뒤로 보내기만 한다.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, TASK_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "moveToBack" -> result.success(moveTaskToBack(true))
@@ -159,10 +162,10 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         // isFinishing 이 아닌 파괴("활동 보존 안 함"·백그라운드 회수)에서도 정리한다. 이 Activity 의 Flutter 엔진(안내 세션)이
-        // 같이 죽어 창을 갱신할 주체가 없고, 재생성된 Activity 가 새 창을 띄우면 두 겹이 된다(진하기가 높으면 합산
-        // 불투명도가 터치 상한을 넘겨 뒤 앱 터치도 막힌다 — GuideOverlayController 클래스 주석의 합산 규칙).
+        // 같이 죽어 창을 갱신할 주체가 없다.
         if (::guideOverlay.isInitialized) guideOverlay.stop()
         if (::audioFocus.isInitialized) audioFocus.release()
+        guideStatus?.cancel()
         super.onDestroy()
     }
 

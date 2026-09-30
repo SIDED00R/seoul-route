@@ -16,7 +16,7 @@ import (
 //   - service: 8 평일→WEEKDAY, 7 토→SAT, 9 휴일→SUN. 토요일 시각표가 없는 노선(코레일·공항철도·신분당 등, 2026-09-14
 //     실측)은 휴일 열차를 SATSUN(토·일) 으로 넣는다.
 //   - direction_id: 첫 정차의 노선 내 순서 < 마지막 정차 순서면 0, 아니면 1. headsign 은 종점역 이름.
-//   - 시각이 역행하는 열차는 통째로 뺀다(NonMonotonic, metro.go 와 같은 이유).
+//   - 시각이 역행하는 열차는 통째로 뺀다(NonMonotonic).
 const KricNearestM = 300.0
 
 type kricStats struct {

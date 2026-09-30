@@ -124,14 +124,12 @@ func TestTileCanceledByClient(t *testing.T) {
 	}
 }
 
-// 요청 전체 데드라인 안에서 재시도가 상류에 닿는다. 시도마다 예산을 따로 주지 않으면 첫 시도가 그 데드라인을 다 쓰고
-// 끝나 두 번째가 상류에 닿지 못한다 — 운영 배선(라우트 30초 + 클라이언트 30초)이 정확히 그 모양이다.
+// 요청 전체 데드라인 안에서 재시도가 상류에 닿는다.
 func TestTileRetryHasOwnBudget(t *testing.T) {
 	defer func(d time.Duration) { tileAttemptTimeout = d }(tileAttemptTimeout)
 	tileAttemptTimeout = 40 * time.Millisecond
 	var calls int32
-	// 상류 지연을 라우트 데드라인보다 길게 둔다 — 그래야 시도별 예산이 없을 때 첫 시도가 데드라인을 다 쓰고
-	// 끝나는 실제 증상(상류 1회 접촉·502)을 태운다.
+	// 상류 지연을 라우트 데드라인보다 길게 둔다.
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&calls, 1)
 		time.Sleep(600 * time.Millisecond)
@@ -151,7 +149,7 @@ func TestTileRetryHasOwnBudget(t *testing.T) {
 	}
 }
 
-// 성공한 시도의 컨텍스트는 본문을 다 읽을 때까지 살아 있어야 한다. 곧바로 거두면 타일이 중간에 잘린다.
+// 성공한 시도의 컨텍스트는 본문을 다 읽을 때까지 살아 있어야 한다.
 func TestTileBodyNotTruncated(t *testing.T) {
 	png := bytes.Repeat([]byte("P"), 512<<10)
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(png) }))

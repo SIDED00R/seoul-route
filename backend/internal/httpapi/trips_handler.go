@@ -14,7 +14,7 @@ import (
 )
 
 // MaxTraceBatch: 한 업로드의 샘플 상한. 앱은 20개(5초 간격 100초)마다 올리므로 재전송 누적을 넉넉히 받는다. 앱 TraceUploader.maxPerRequest 와 같은 값.
-// MaxClockSkew: 샘플 ts 가 서버 시각보다 이만큼 넘게 미래면 거부한다. 궤적 30일 삭제(speed.PurgeOldTraces)가 ts 기준이라
+// MaxClockSkew: 샘플 ts 가 서버 시각보다 이만큼 넘게 미래면 저장하지 않는다. 궤적 30일 삭제(speed.PurgeOldTraces)가 ts 기준이라
 // 미래 ts 는 그만큼 오래 남기 때문. 5분은 휴대폰 시계 오차(보통 수 초)보다 넉넉한 값.
 const (
 	MaxTraceBatch = 1000
@@ -103,30 +103,38 @@ func (s *Server) handleUploadTraces(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "samples 는 1~1000개")
 		return
 	}
-	latest := time.Now().Add(MaxClockSkew)
 	for _, p := range body.Samples {
-		if p.TS.IsZero() || p.TS.After(latest) || p.Lat < route.MinLat || p.Lat > route.MaxLat ||
-			p.Lon < route.MinLon || p.Lon > route.MaxLon || p.AccuracyM < 0 ||
+		if p.TS.IsZero() || p.AccuracyM < 0 ||
 			speed.MaxSpeed[p.Mode] == 0 && p.Mode != "transit" || p.Activity != "" && !speed.Activities[p.Activity] ||
 			len(p.ActivityRaw) > MaxActivityRawLen || len(p.ActivityConf) > MaxActivityRawLen {
 			writeError(w, http.StatusBadRequest,
-				"샘플 오류(ts 미래·서울 밖 좌표·accuracy_m·mode walk/bicycle/transit·activity walk/bicycle/vehicle/still/unknown)")
+				"샘플 오류(ts·accuracy_m·mode walk/bicycle/transit·activity walk/bicycle/vehicle/still/unknown)")
 			return
 		}
 	}
+	// 서울 밖 좌표와 미래 ts 는 그 샘플만 건너뛰고 나머지를 저장한다.
+	latest := time.Now().Add(MaxClockSkew)
 	batch := &pgx.Batch{}
+	skipped := 0
 	for _, p := range body.Samples {
+		if p.TS.After(latest) || p.Lat < route.MinLat || p.Lat > route.MaxLat ||
+			p.Lon < route.MinLon || p.Lon > route.MaxLon {
+			skipped++
+			continue
+		}
 		batch.Queue(`INSERT INTO traces(trip_id, ts, lat, lon, accuracy_m, mode, activity, activity_raw, activity_conf)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT DO NOTHING`,
 			id, p.TS, p.Lat, p.Lon, p.AccuracyM, p.Mode, nullIfEmpty(p.Activity), nullIfEmpty(p.ActivityRaw),
 			nullIfEmpty(p.ActivityConf))
 	}
-	if err := s.DB.SendBatch(r.Context(), batch).Close(); err != nil {
-		s.Log.Error("upload traces", "err", err)
-		writeError(w, http.StatusInternalServerError, "저장 실패")
-		return
+	if batch.Len() > 0 {
+		if err := s.DB.SendBatch(r.Context(), batch).Close(); err != nil {
+			s.Log.Error("upload traces", "err", err)
+			writeError(w, http.StatusInternalServerError, "저장 실패")
+			return
+		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"accepted": len(body.Samples)})
+	writeJSON(w, http.StatusOK, map[string]any{"accepted": batch.Len(), "skipped": skipped})
 }
 
 // handleEndTrip 은 trip 을 닫고 궤적으로 수단별 속도를 내 사용자 프로파일에 수축 반영한다. 두 번 부르면 409.

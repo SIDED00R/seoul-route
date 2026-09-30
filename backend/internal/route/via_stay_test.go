@@ -54,7 +54,7 @@ func TestPlanViaStayDepartsAfterStay(t *testing.T) {
 	}
 }
 
-// 체류가 없으면 지금처럼 OTP via 도 부르고, 버스→버스 경유지 이음은 환승 1회다.
+// 체류가 없으면 OTP via 도 부르고, 버스→버스 경유지 이음은 환승 1회다.
 func TestPlanViaWithoutStayKeepsViaSearch(t *testing.T) {
 	viaCalls := 0
 	f := busEachSegment(&viaCalls)

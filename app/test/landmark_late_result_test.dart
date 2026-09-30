@@ -36,7 +36,7 @@ class PushGeolocator extends GeolocatorPlatform {
 class SlowApi extends ApiClient {
   SlowApi() : super(baseUrl: 'http://x', token: 't');
 
-  Completer<void>? gate; // 테스트 본문(fake async 영역)에서 만든다 — setUp 에서 만들면 완료 콜백이 fake 큐에 안 들어간다
+  Completer<void>? gate; // 테스트 본문(fake async 영역)에서 만든다
   int landmarkCalls = 0;
   GuideLandmark? Function(double lat, double lon)? result; // null 이면 "시설 없음"
 
@@ -137,7 +137,6 @@ Future<void> _settle(WidgetTester tester) async {
 }
 
 // 늦게 끝난 랜드마크 조회: 결과가 없으면 같은 회전 안내를 다시 읽지 않고, 실제로 시설이 붙었을 때만 한 번 더 읽는다.
-// (거리 문구는 걷기만 해도 바뀌므로 그것을 "새 정보"로 오인해 중복 발화하던 결함의 회귀 테스트.)
 void main() {
   const channel = MethodChannel('seoul_route/notification_permission');
   late PushGeolocator geo;

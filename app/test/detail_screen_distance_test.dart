@@ -27,7 +27,6 @@ Leg _leg(String mode, {bool rentedBike = false, int? bikes}) => Leg(
     );
 
 void main() {
-  // 탄 구간에는 거리를 안 쓰고 걷는 구간에는 쓴다. 따릉이 구간에는 남은 대수 줄이 붙는다.
   testWidgets('상세 화면: 거리는 도보·자전거만, 따릉이는 남은 대수', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: DetailScreen(

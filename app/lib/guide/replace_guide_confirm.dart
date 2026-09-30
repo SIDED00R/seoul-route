@@ -19,8 +19,7 @@ Future<bool> confirmReplaceGuide(BuildContext context) async {
 }
 
 /// 하던 안내를 끝내지 못했을 때(샘플 전송 실패·trip 종료 실패) 다시 묻는다. 그대로 교체하면 못 보낸 샘플이 사라지고
-/// 서버 trip 도 열린 채 남는다. 그렇다고 교체를 막기만 하면 서버에 닿지 못하는 동안 새 안내를 아예 시작할 수 없으므로
-/// 버리고 갈 길을 남겨 둔다. "버리고 시작" 이면 true.
+/// 서버 trip 도 열린 채 남는다. "버리고 시작" 이면 true.
 Future<bool> confirmDiscardGuide(BuildContext context, String reason) async {
   final discard = await showDialog<bool>(
     context: context,

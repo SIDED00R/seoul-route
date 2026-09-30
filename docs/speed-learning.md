@@ -49,7 +49,7 @@ OTP의 요청 속도는 평지 최대속도이고 GPS 학습값은 실제 이동
 
 ```powershell
 Set-Location backend
-$env:TEST_DATABASE_URL='postgres://seoul:seoul@localhost:5432/seoul_route_test?sslmode=disable'
+$env:TEST_DATABASE_URL='postgres://seoul:seoul@localhost:5433/seoul_route_test?sslmode=disable'
 go test ./internal/speed ./internal/httpapi
 
 Set-Location ../app

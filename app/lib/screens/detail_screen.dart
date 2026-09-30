@@ -29,16 +29,21 @@ class DetailScreen extends StatelessWidget {
 
   /// 안내를 시작한다. 다른 여정으로 이미 안내 중이면 물어보고, 그 안내를 끝낸 뒤에 시작한다 —
   /// 안내는 한 번에 하나뿐이다(위치 스트림·알림창이 하나). 끝내지 못했으면 한 번 더 묻는다.
+  /// 기다리는 동안 다른 안내가 걸렸으면 시작하지 않는다.
   Future<void> _startGuide(BuildContext context) async {
     final running = ActiveGuide.instance.current;
     if (running != null && !running.ended && !identical(running.itinerary, itinerary)) {
       if (!await confirmReplaceGuide(context)) return;
-      // end() 가 null 이면 못 보낸 샘플이 남았거나 trip 을 닫지 못한 것이다. 그대로 치우면 샘플이 사라지고
-      // 서버 trip 이 열린 채 남으므로 사용자에게 사유를 보이고 버릴지 묻는다.
+      // end() 가 null 이면 못 보낸 샘플이 남았거나 trip 을 닫지 못한 것이다. 사용자에게 사유를 보이고 버릴지 묻는다.
       if (await running.end() == null) {
         if (!context.mounted || !await confirmDiscardGuide(context, running.status)) return;
       }
-      ActiveGuide.instance.clear();
+      final current = ActiveGuide.instance.current;
+      if (identical(current, running)) {
+        ActiveGuide.instance.clear();
+      } else if (current != null && !current.ended) {
+        return;
+      }
     }
     if (!context.mounted) return;
     await Navigator.push(
@@ -136,7 +141,7 @@ class DetailScreen extends StatelessWidget {
                           '${_name(leg.toName, leg.toLat, leg.toLon)} ${leg.endClock}'),
                       // 대중교통: 방면·정거장 수
                       if (leg.rideLabel != null) Text(leg.rideLabel!),
-                      // 따릉이: 빌릴 대여소에 지금 남아 있는 자전거
+                      // 따릉이: 빌릴 대여소에 남아 있는 자전거
                       if (leg.bikesLabel != null)
                         Text(leg.bikesLabel!, style: TextStyle(color: Colors.green.shade800)),
                       // 앞뒤 차·배차: 실시간 다음 차 / 시간표 앞·뒤 열차 / 배차간격

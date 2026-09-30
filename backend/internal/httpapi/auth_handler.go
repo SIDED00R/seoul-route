@@ -6,7 +6,7 @@ import (
 )
 
 // handleAuthConfig 는 앱이 Google 로그인에 쓸 웹 클라이언트 ID 를 돌려준다(무인증). 클라이언트 ID 는 비밀이 아니라
-// 공개 식별자다(앱 바이너리에 박아도 되는 값) — 서버가 내려주면 앱을 다시 빌드하지 않고 바꿀 수 있다. 미설정이면 빈 문자열.
+// 공개 식별자다(앱 바이너리에 박아도 되는 값). 미설정이면 빈 문자열.
 func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"google_client_id": s.GoogleClientID})
 }

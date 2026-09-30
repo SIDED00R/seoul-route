@@ -98,8 +98,7 @@ func TestRecentRoutesKeyIncludesViaAndModes(t *testing.T) {
 	}
 }
 
-// 탈퇴가 끝난 뒤에 도착한 검색은 이동 기록을 되살리면 안 된다. 탈퇴는 소프트 삭제라 FK 로는 막히지 않고,
-// 그 계정 토큰은 이미 401 이라 사용자가 지울 수도 없다.
+// 탈퇴가 끝난 뒤에 도착한 검색은 이동 기록을 되살리면 안 된다.
 func TestRecentRoutesNotSavedForDeletedUser(t *testing.T) {
 	s, pool := testServer(t)
 	s.Planner = &route.Planner{OTP: okOTP{}}
@@ -146,7 +145,7 @@ func TestRecentRoutesLosesRaceWithDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
-	defer tx.Rollback(ctx) // 실패해도 잠금을 놓아 저장 쪽이 영영 기다리지 않게
+	defer tx.Rollback(ctx)
 	if _, err := tx.Exec(ctx, `UPDATE users SET deleted_at = now() WHERE id = $1`, userID); err != nil {
 		t.Fatalf("탈퇴 UPDATE: %v", err)
 	}

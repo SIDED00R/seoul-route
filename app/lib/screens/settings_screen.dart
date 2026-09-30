@@ -84,7 +84,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     final s = _current;
     final api = ApiClient(baseUrl: s.baseUrl, token: s.token);
-    // 응답 전에 화면을 나가면 State 가 폐기되므로 await 뒤 setState 마다 mounted 를 본다.
     if (s.baseUrl.isEmpty) {
       setState(() {
         _busy = false;
@@ -118,8 +117,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// Google 계정으로 로그인해 받은 서버 JWT 를 토큰 칸에 넣고 저장한 뒤, _save 와 같이 새 설정을 돌려주며 화면을 닫는다
-  /// (돌려주지 않으면 홈 화면은 앱을 다시 켤 때까지 옛 토큰을 쓴다).
+  /// Google 계정으로 로그인해 받은 서버 JWT 를 토큰 칸에 넣고 저장한 뒤, _save 와 같이 새 설정을 돌려주며 화면을 닫는다.
   Future<void> _loginGoogle() async {
     setState(() {
       _busy = true;
@@ -153,11 +151,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _save() async {
-    await widget.settingsStore.save(_current);
-    // 안내가 진행 중이면 미니 지도 켜짐·진하기를 그 안내에 바로 반영한다(다음 안내까지 기다리지 않게).
-    await ActiveGuide.instance.current?.refreshOverlaySetting();
-    if (!mounted) return;
-    Navigator.pop(context, _current);
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await widget.settingsStore.save(_current);
+      // 안내가 진행 중이면 미니 지도 켜짐·진하기를 그 안내에 바로 반영한다.
+      await ActiveGuide.instance.current?.refreshOverlaySetting();
+      if (!mounted) return;
+      Navigator.pop(context, _current);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override

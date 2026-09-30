@@ -8,7 +8,7 @@ import (
 	"github.com/SIDED00R/seoul-route/backend/internal/crossing"
 )
 
-// joinInterlined 는 같은 열차를 내리지 않고 이어 탄 구간 b(OTP interlineWithPreviousLeg — 생성 GTFS block_id, 2호선 성수)를
+// joinInterlined 는 같은 열차를 내리지 않고 이어 탄 구간 b(OTP interlineWithPreviousLeg — 생성 GTFS block_id, 2호선 성수·6호선 응암)를
 // 앞 구간 a 에 붙인 한 구간을 돌려준다. 이어 탄 역(a 의 하차역, 정류장 jointID)은 중간 정차가 되고, 탑승 쪽 정보(출발역·
 // 행선지·다음 정차·앞뒤 차)는 a 의 것을 쓴다.
 func joinInterlined(a, b Leg, jointID string) Leg {

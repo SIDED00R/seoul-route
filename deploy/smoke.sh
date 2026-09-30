@@ -54,7 +54,7 @@ else
 fi
 check "POST /auth/google (가짜 토큰→401)" 401 -X POST -H 'Content-Type: application/json' \
   -d '{"id_token":"bogus"}' "$BASE/auth/google"
-# 보호 경로는 토큰 없이 401 이어야 한다. 404 면 그 API 가 이 빌드에 없는 것이다(2026-09-22 즐겨찾기 사고).
+# 보호 경로는 토큰 없이 401 이어야 한다. 404 면 그 API 가 이 빌드에 없는 것이다.
 for p in /users/me /users/me/speed /users/me/favorites /routes/recent "/places/search?q=x" \
   "/places/reverse?lat=37.5&lon=127" "/places/landmark?lat=37.5&lon=127" /tiles/14/13977/6363.png; do
   check "GET $p (토큰 없음→401)" 401 "$BASE$p"

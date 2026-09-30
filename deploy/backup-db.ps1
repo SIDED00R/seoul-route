@@ -8,8 +8,7 @@ param(
     [int]$Keep = 14,
     [switch]$Register
 )
-# 네이티브 명령은 줄마다 $LASTEXITCODE 로 본다. Stop 이면 호출자가 오류 출력을 리다이렉트할 때(2>&1·2>$null) docker 의
-# 오류 출력이 예외가 되어 임시 파일 정리 전에 멈춘다.
+# 네이티브 명령은 줄마다 $LASTEXITCODE 로 본다.
 $ErrorActionPreference = 'Continue'
 $container = 'deploy-postgres-1'
 

@@ -75,7 +75,7 @@ class Leg {
   final double staySec; // 그 경유지 체류(초)
 
   /// 이 leg 를 만든 서버 응답 그대로. 진행 중인 안내를 디스크에 남겼다가 되살릴 때 쓴다(guide/guide_store.dart).
-  /// 필드를 하나씩 다시 쓰지 않으므로 fromJson 과 어긋날 수 없다. 코드로 만든 leg(테스트)는 비어 있다.
+  /// 코드로 만든 leg(테스트)는 비어 있다.
   final Map<String, dynamic> raw;
 
   factory Leg.fromJson(Map<String, dynamic> j) => Leg(
@@ -125,12 +125,12 @@ class Leg {
   String? get crossingLabel =>
       crossings == 0 ? null : '횡단보도 $crossings곳 · 신호 대기 약 ${(crossingWaitSec / 60).round()}분';
 
-  /// 내 발로 움직이는 구간(도보·자전거). 거리는 이때만 보여 준다 — 타고 가는 구간의 거리는 쓸 일이 없다.
+  /// 내 발로 움직이는 구간(도보·자전거). 거리는 이때만 보여 준다.
   bool get selfPowered => mode == 'WALK' || mode == 'BICYCLE';
 
   /// "검색 당시 자전거 3대". 실시간 대수를 모르면 null.
   /// 경로를 찾은 순간의 값이고 그 뒤로 갱신되지 않는다 — 서버는 10분 넘게 낡은 스냅샷이면 아예 안 내려주지만,
-  /// 응답이 앱에 온 뒤 흐르는 시간에는 상한이 없다. 그래서 현재 대수인 것처럼 읽히지 않게 시점을 함께 적는다.
+  /// 응답이 앱에 온 뒤 흐르는 시간에는 상한이 없다.
   String? get bikesLabel => bikesAvailable == null ? null : '검색 당시 자전거 $bikesAvailable대';
   /// "내릴 때 · 에스컬레이터 3-3, 8-1 · 계단 2-1". 하차역 설비 앞 칸-문. 자료가 없으면 null.
   String? get fastExitLabel => fastExit.isEmpty

@@ -36,6 +36,7 @@ func laterShifts(legs []otp.Leg, k int, d time.Duration) ([]time.Duration, time.
 
 // connect 는 직전 leg 가 cur 만큼 늦어졌을 때 leg legs[i] 의 원래 차를 타면 (0, true), 못 타면 NextDepartures 중
 // 탈 수 있는 첫 차까지의 이동량과 true 를 돌려준다. 시각을 못 읽거나 탈 수 있는 다음 차가 없으면 (cur, false).
+// 직전 leg 가 체류 경유지에 닿는 leg(StaySec > 0)면 도착 뒤 체류 시간이 지나야 탈 수 있다.
 func connect(legs []otp.Leg, i int, cur time.Duration) (time.Duration, bool) {
 	l := legs[i]
 	e, err1 := time.Parse(time.RFC3339, legs[i-1].End)
@@ -43,7 +44,18 @@ func connect(legs []otp.Leg, i int, cur time.Duration) (time.Duration, bool) {
 	if err1 != nil || err2 != nil {
 		return cur, false
 	}
-	ready := e.Add(cur + boardWait(legs, i))
+	wait := boardWait(legs, i)
+	if stay := legs[i-1].StaySec; stay > 0 {
+		if legs[i-1].TransitLeg {
+			wait = 0
+		}
+		wait += time.Duration(stay * float64(time.Second))
+	}
+	// 앵커링된 경유지(체류 0)의 환승 여유. 직전 leg 가 대중교통이면 boardWait 의 환승 여유가 같은 값이다.
+	if via := legs[i-1].ViaTransferSec; via > 0 && !legs[i-1].TransitLeg {
+		wait += time.Duration(via * float64(time.Second))
+	}
+	ready := e.Add(cur + wait)
 	if !ready.After(b) {
 		return 0, true
 	}

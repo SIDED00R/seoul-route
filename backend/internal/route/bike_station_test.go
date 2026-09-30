@@ -88,7 +88,7 @@ func TestAnnotateBikeStationsByCoords(t *testing.T) {
 	}
 }
 
-// 실시간 값이 오래됐거나 없으면 대수를 붙이지 않는다(틀린 수를 보여 주지 않는다).
+// 실시간 값이 오래됐거나 없으면 대수를 붙이지 않는다.
 func TestAnnotateBikeStationsSkipsStale(t *testing.T) {
 	for _, c := range []struct {
 		name  string

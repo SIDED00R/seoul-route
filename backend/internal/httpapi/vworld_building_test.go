@@ -82,7 +82,7 @@ func TestBuildingsNear(t *testing.T) {
 	}
 }
 
-// VWorld 는 POINT(경도 위도) 순서다. 바꿔 보내면 엉뚱한 곳의 건물이 온다.
+// VWorld 는 POINT(경도 위도) 순서다.
 func TestBuildingsNearRequest(t *testing.T) {
 	var q url.Values
 	s := vworldServer(t, vworldOK(), &q)

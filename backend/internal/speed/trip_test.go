@@ -63,8 +63,7 @@ func TestTripSpeedsExcludesActivityMismatch(t *testing.T) {
 			s[i].Activity = "vehicle"
 		}
 	}
-	// 남는 쌍: walk 구간 9개 + 빈 값 구간 9개 = 18. 빠지는 쌍: still·unknown 경계 11개 + vehicle 경계 6개 = 17 중
-	// 연속 쌍 30개에서 18을 뺀 12개가 Mismatch 다.
+	// 남는 쌍: walk 구간 9개 + 빈 값 구간 9개 = 18. 연속 쌍 30개에서 18을 뺀 12개가 Mismatch 다.
 	w := TripSpeeds(s)["walk"]
 	if !w.OK || w.Pairs != 18 || w.Mismatch != 12 || math.Abs(w.SpeedMps-1.4) > 0.01 {
 		t.Fatalf("walk=%+v", w)

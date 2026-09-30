@@ -117,7 +117,7 @@ func main() {
 		planner.FastExits = fx
 		log.Info("fast exits loaded", "stations", fx.Len())
 	}
-	// 첫 탑승 실시간 보정. 키가 있는 수단만 켠다. 외부 API 는 응답이 느릴 수 있어 짧은 타임아웃.
+	// 첫 탑승 실시간 보정. 키가 있는 수단만 켠다.
 	rt := &realtime.Corrector{Log: log}
 	rtHTTP := &http.Client{Timeout: 5 * time.Second}
 	if cfg.BusArrivalKey != "" {
@@ -137,7 +137,7 @@ func main() {
 	if rt.Bus != nil || rt.Subway != nil {
 		planner.Realtime = rt
 	}
-	// 부모역 목록은 OTP 에서 한 번 받는다. Compose 에서는 OTP 가 그래프 로드에 1~2분 걸려 api 보다 늦게 뜨므로
+	// 부모역 목록은 OTP 에서 한 번 받는다.
 	// 될 때까지 30초마다 재시도하고, 그동안은 앵커링 없이(좌표로) 동작한다.
 	go func() {
 		for {
@@ -181,7 +181,7 @@ func main() {
 	} else {
 		log.Warn("gbfs disabled", "reason", "SEOUL_OPENAPI_KEY 없음")
 	}
-	// ReadTimeout 은 본문까지 포함한 요청 전체 읽기 상한(느린 본문으로 goroutine 이 무기한 묶이는 것을 막는다).
+	// ReadTimeout 은 본문까지 포함한 요청 전체 읽기 상한.
 	// IdleTimeout 을 안 주면 keep-alive 유휴 연결도 ReadTimeout 에 닫힌다.
 	hs := &http.Server{
 		Addr: ":" + cfg.Port, Handler: srv.Router(),

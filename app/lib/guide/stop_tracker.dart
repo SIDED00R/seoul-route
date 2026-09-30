@@ -7,7 +7,7 @@ import 'geo.dart';
 /// 대중교통 구간에서 "하차까지 몇 정거장 남았나"를 센다(하차역 포함이라 최소 1). 지상에서는 위치를 경로선에
 /// 투영해 지나온 정차를 빼고, 지하라 위치가 멈춘 구간에서는 시간표(정차별 출발 기준 초)로 센다.
 /// 시간표는 위치로 읽은 지연(_delay)만큼 밀어서 센다 — 계획한 차를 놓치고 늦은 차를 타도 따라온다.
-/// 한 번 줄어든 값은 다시 늘지 않는다 — 튀는 표본으로 "다음 역" 안내가 두 번 나가지 않게.
+/// 한 번 줄어든 값은 다시 늘지 않는다.
 class StopTracker {
   /// shift 는 계획보다 밀린 시간(LegTracker.shift) — 다음 차를 탔으면 정차 시각도 그만큼 늦다.
   StopTracker(Leg leg, List<LatLng> points, {Duration shift = Duration.zero})
@@ -34,8 +34,7 @@ class StopTracker {
   /// 열차가 계획보다 이만큼 늦다고 본 값. 시간표 판정은 정차 시각을 이만큼 민다.
   Duration _delay = Duration.zero;
 
-  /// 위치로 확인한 통과 정차 수(단조 증가). 시간표로 줄어든 값은 섞지 않는다 — 시간표가 앞서 줄여 놓으면 뒤에 돌아온
-  /// 정상 표본이 "이미 지난 정차" 로 걸러져 지연을 못 읽는다.
+  /// 위치로 확인한 통과 정차 수(단조 증가). 시간표로 줄어든 값은 섞지 않는다.
   int _passedSeen = 0;
 
   /// 남은 정거장 수(하차역 포함). 위치가 없으면 시간표로 센다.
@@ -57,12 +56,11 @@ class StopTracker {
 
   /// 지금 위치를 계획 시간표 위의 한 점으로 바꿔 계획 시각과 견준다. 승강장에 서 있으면 진행이 0 이라 기다린 시간이
   /// 그대로 지연으로 잡히고, 정차 사이를 계획대로 달리는 동안에는 0 이다. 늦은 쪽으로만 고친다 — 계획보다 이른
-  /// 열차는 위치 판정이 알아서 세고, 시간표를 당기면 하차 안내가 되레 일찍 나간다.
+  /// 열차는 위치 판정이 알아서 센다.
   void _observeDelay(double alongM, DateTime now) {
     final start = _legStart;
     if (start == null) return;
-    // 위치로 이미 지난 정차보다 앞으로는 되돌리지 않는다. 뒤로 크게 튄 표본을 "지금 여기" 로 읽으면 지연이 크게
-    // 잡혀 굳고, 이번에는 하차 안내가 되레 늦게 나간다. 바닥은 정차 단위로만 움직이므로 앞으로 튄 표본은 정거장
+    // 위치로 이미 지난 정차보다 앞으로는 되돌리지 않는다. 바닥은 정차 단위로만 움직이므로 앞으로 튄 표본은 정거장
     // 간격만큼 튀어야 기준을 옮길 수 있다.
     final floorM = _passedSeen > 0 && _passedSeen <= stops.length ? _alongStop[_passedSeen - 1] : 0.0;
     final plannedSec = _plannedSec(alongM > floorM ? alongM : floorM);

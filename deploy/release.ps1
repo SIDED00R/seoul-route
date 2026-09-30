@@ -2,7 +2,7 @@
 #   .\deploy\release.ps1 prod   # .env  + deploy/compose.yml     → http://localhost:8081
 #   .\deploy\release.ps1 dev    # .env.dev + deploy/compose.dev.yml → http://localhost:8082 (devtoken 으로 인증 경로까지)
 # 이미지에 git 커밋(GIT_SHA)을 박아 /health 의 version 으로 내려주므로, 다른 트리에서 빌드한 이미지는 스모크가 잡는다.
-# 수정된 추적 파일이 있으면 중단한다(커밋 안 된 코드로 배포하면 version 이 거짓말이 된다).
+# 수정된 추적 파일이 있으면 중단한다.
 param(
     [Parameter(Mandatory = $true)][ValidateSet('prod', 'dev')][string]$Env,
     [switch]$SkipBackup # prod 배포 직전 DB 백업(backup-db.ps1)을 건너뛴다. Postgres 가 아직 없을 때만
@@ -12,7 +12,7 @@ $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 # .env 파일에서 키 하나를 읽는다. Go 쪽 readDotEnv(backend/internal/config/config.go)와 같게 첫 '=' 에서 한 번만
-# 나누고 양끝 따옴표를 벗긴다(base64 비밀의 '=' 패딩이 잘리지 않게).
+# 나누고 양끝 따옴표를 벗긴다.
 function Read-DotEnvValue([string]$Path, [string]$Key) {
     foreach ($line in Get-Content $Path) {
         $t = $line.Trim()
@@ -28,7 +28,7 @@ function Read-DotEnvValue([string]$Path, [string]$Key) {
     throw "$Path 에 $Key 가 없습니다"
 }
 
-# untracked 도 막는다 — Dockerfile 이 `COPY . .` 라 추적 안 된 .go 파일도 바이너리에 들어가는데 version 은 HEAD 를 말하게 된다.
+# untracked 도 막는다.
 $dirty = git status --porcelain
 if ($dirty) {
     Write-Host "중단: 커밋되지 않은 변경(추적 안 된 파일 포함)이 있습니다. 커밋하거나 되돌린 뒤 배포하세요." -ForegroundColor Red
@@ -77,15 +77,20 @@ $token = ''
 if ($Env -eq 'dev') {
     Push-Location backend
     # devtoken 은 config.Load() 로 레포 루트 .env(운영)를 읽으므로 개발 DB 와 개발 JWT_SECRET 을 환경변수로 덮어쓴다
-    # (환경변수가 .env 보다 우선). 운영 비밀로 서명하면 개발 api 가 전부 401 이다. 호출한 셸의 값은 되돌린다.
+    # (환경변수가 .env 보다 우선). 호출한 셸의 값은 되돌린다.
     $prevDb = $env:DATABASE_URL
     $prevJwt = $env:JWT_SECRET
-    $env:DATABASE_URL = 'postgres://seoul:seoul@localhost:5433/seoul_route?sslmode=disable'
-    $env:JWT_SECRET = Read-DotEnvValue -Path (Join-Path $root $envFile) -Key 'JWT_SECRET' # cwd 가 backend 라 절대경로
-    $token = (go run ./cmd/devtoken smoke).Trim()
-    $env:DATABASE_URL = $prevDb
-    $env:JWT_SECRET = $prevJwt
-    Pop-Location
+    try {
+        $env:DATABASE_URL = 'postgres://seoul:seoul@localhost:5433/seoul_route?sslmode=disable'
+        $env:JWT_SECRET = Read-DotEnvValue -Path (Join-Path $root $envFile) -Key 'JWT_SECRET' # cwd 가 backend 라 절대경로
+        $out = go run ./cmd/devtoken smoke
+        if ($LASTEXITCODE -ne 0 -or -not $out) { throw "devtoken 실패(exit $LASTEXITCODE)" }
+        $token = "$out".Trim()
+    } finally {
+        $env:DATABASE_URL = $prevDb
+        $env:JWT_SECRET = $prevJwt
+        Pop-Location
+    }
 }
 & bash deploy/smoke.sh $url $token
 $smoke = $LASTEXITCODE

@@ -11,7 +11,7 @@ import (
 )
 
 // 앞뒤 차는 leg 출발 ±3시간 안·같은 시각 제외(배차 기반 trip 의 막차 sentinel 01:01 제거), 그리고 소요시간이
-// 현재 leg 의 0.5~2배인 것만(2호선 사당→강남 9분 구간에 반대 방향으로 한 바퀴 도는 81분 열차가 섞이던 실측).
+// 현재 leg 의 0.5~2배인 것만.
 func TestNearbyDepartures(t *testing.T) {
 	mk := func(s string, dur float64) legTime {
 		var l legTime
@@ -36,7 +36,7 @@ func TestNearbyDepartures(t *testing.T) {
 	}
 }
 
-// 역 ID 가 있으면 출발·도착·경유 모두 좌표 대신 stopLocation 으로 나가야 한다(역사 좌표 스냅 우회).
+// 역 ID 가 있으면 출발·도착·경유 모두 좌표 대신 stopLocation 으로 나가야 한다.
 func TestPlanSendsStopLocations(t *testing.T) {
 	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -129,7 +129,7 @@ func TestLoad(t *testing.T) {
 	}
 }
 
-// 에스컬레이터는 올라가는 것만 싣는다. 방향을 모르면 싣지 않는다 — 내릴 때 쓸 수 없는 칸을 알려 주지 않는다.
+// 에스컬레이터는 올라가는 것만 싣는다. 방향을 모르면 싣지 않는다.
 func TestLookupEscalatorDirection(t *testing.T) {
 	rows := []Row{
 		{Line: "4호선", Station: "사당", Side: "하행", Toward: "남태령", Door: "1-1", Facility: "에스컬레이터", ElvtrNo: "DOWN"},

@@ -37,8 +37,7 @@ func subwayTransferItinerary() otp.Itinerary {
 }
 
 // 재탐색이 이어 붙인 자리(앞 도보 끝 1320 과 뒤 도보 시작 1380 사이가 끊긴다) 앞의 대기는 이미 뒤 구간 시각에
-// 들어 있으므로 다시 더하지 않는다. 지연 60초면 1430+60 = 1490 ≤ 1500 이라 그대로인데, 대기 114 를 다시 더하면
-// 1604 > 1500 이라 탈 수 있는 열차를 놓쳤다고 본다.
+// 들어 있으므로 다시 더하지 않는다. 지연 60초면 1430+60 = 1490 ≤ 1500 이라 그대로다.
 func TestBoardWaitStopsAtReplanSplice(t *testing.T) {
 	in := subwayTransferItinerary()
 	in.Legs[2].CrossingWait = 114

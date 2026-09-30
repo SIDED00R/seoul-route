@@ -166,8 +166,7 @@ Instruction buildInstruction({
   );
 }
 
-/// 현재 단계가 그 자리에서 하는 동작(출입구·엘리베이터)이면 문장 앞에 붙일 말. 그 단계의 거리는 0 인 경우가 많아
-/// 뒤따르는 직진 안내만 내면 동작이 빠진다.
+/// 현재 단계가 그 자리에서 하는 동작(출입구·엘리베이터)이면 문장 앞에 붙일 말.
 String _actionLead(WalkStep step) {
   switch (step.dir) {
     case 'EXIT_STATION':
