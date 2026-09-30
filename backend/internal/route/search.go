@@ -80,7 +80,10 @@ func (p *Planner) single(ctx context.Context, req PlanRequest) ([]otp.Itinerary,
 		First:       DefaultFirst,
 	}
 	base.OriginStop, base.DestStop = p.anchor(req.Origin), p.anchor(req.Destination)
-	base.Arrive = arriveFor(req, base.DestStop)
+	if req.Arrive != nil {
+		t := *req.Arrive
+		base.Arrive = &t
+	}
 	if base.OriginStop != "" && req.Arrive == nil {
 		base.Depart = entryDepart(req.Depart, p.now())
 	}
@@ -89,27 +92,55 @@ func (p *Planner) single(ctx context.Context, req PlanRequest) ([]otp.Itinerary,
 		base.ViaStops = append(base.ViaStops, p.anchor(via))
 	}
 
-	variants := []otp.Modes{modesFor(ModeAny), transitOnlyModes("SUBWAY"), transitOnlyModes("BUS")}
+	// 변형: 전체 수단·지하철 전용·버스 전용. 첫 변형(전체 수단)의 오류가 대표 오류다.
+	type variant struct {
+		modes  otp.Modes
+		arrive *time.Time
+		keep   func(otp.Itinerary) bool
+	}
+	all := func(otp.Itinerary) bool { return true }
+	variants := []variant{
+		{modesFor(ModeAny), base.Arrive, all},
+		{transitOnlyModes("SUBWAY"), base.Arrive, all},
+		{transitOnlyModes("BUS"), base.Arrive, all},
+	}
+	if req.Arrive != nil && base.DestStop != "" {
+		// 승강장에서 내리는 후보는 이탈시간만큼 일찍 승강장에 닿아야 하므로 지정 시각 − 이탈시간으로 따로 찾는다.
+		// 전체 수단은 두 번 요청해 지정 시각 결과에서 승강장에서 내리지 않는 후보를, 앞당긴 결과에서 내리는 후보를 쓴다.
+		exit := req.Arrive.Add(-time.Duration(StationExitSec) * time.Second)
+		notRail := func(it otp.Itinerary) bool { return !alightsStationLast(it) }
+		variants = []variant{
+			{modesFor(ModeAny), base.Arrive, notRail},
+			{modesFor(ModeAny), &exit, alightsStationLast},
+			{transitOnlyModes("SUBWAY"), &exit, all},
+			{transitOnlyModes("BUS"), base.Arrive, all},
+		}
+	}
 	results := make([][]otp.Itinerary, len(variants))
 	errs := make([]error, len(variants))
 	var group sync.WaitGroup
-	for i, modes := range variants {
+	for i, v := range variants {
 		group.Add(1)
 		go func() {
 			defer group.Done()
 			request := base
-			request.Modes = modes
+			request.Modes = v.modes
+			request.Arrive = v.arrive
 			results[i], errs[i] = p.OTP.Plan(ctx, request)
 		}()
 	}
 	group.Wait()
 
 	var merged []otp.Itinerary
-	for i := range variants {
+	for i, v := range variants {
 		if errs[i] != nil && !errors.Is(errs[i], otp.ErrNoRoute) {
 			return nil, errs[i]
 		}
-		merged = append(merged, results[i]...)
+		for _, it := range results[i] {
+			if v.keep(it) {
+				merged = append(merged, it)
+			}
+		}
 	}
 	switch {
 	case len(req.Via) > 0:

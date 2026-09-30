@@ -42,7 +42,7 @@ class _Api extends ApiClient {
 
   @override
   Future<GuideLandmark?> landmark(double lat, double lon) async => (lat - 37.502).abs() < 1e-6
-      ? GuideLandmark(name: '우리은행', lat: lat, lon: lon, distanceM: 8)
+      ? const GuideLandmark(name: '우리은행')
       : null;
 }
 

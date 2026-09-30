@@ -19,11 +19,9 @@ type Station struct {
 	Lon   float64
 }
 
-// Line 은 파일럿 route_id 의 노선 코드(RR_ACC1_S-1-<Pilot>-…) 하나에 대응한다.
+// Line 은 파일럿 route_id 의 노선 코드(RR_ACC1_S-1-<코드>-…, Timetable.Lines 의 키) 하나에 대응한다.
 type Line struct {
-	Pilot    string // KJ, SD, …
 	Opr      string // 운영기관 코드(KR 코레일, AR 공항철도, DX 신분당 …)
-	Code     string // 레일포털 선 코드(K4 …)
 	Name     string // 레일포털 노선명(경의중앙 …)
 	Stations []Station
 	HasSat   bool // 토요일(dayCd 7) 시각표가 있는지. 없으면 휴일 시각표를 토·일에 쓴다
@@ -40,7 +38,6 @@ type Train struct {
 	Line  string // Pilot 코드
 	Day   string // 8 평일 / 7 토 / 9 휴일
 	No    string
-	Org   string // 기점 역 코드
 	Tmn   string // 종점 역 코드
 	Stops []StopTime
 }
@@ -48,8 +45,7 @@ type Train struct {
 type Timetable struct {
 	Lines  map[string]*Line // Pilot 코드 → 노선
 	Trains []Train          // (Line, Day, No) 순
-	NRows  int
-	NDup   int // 같은 열차가 같은 역에 두 번 있는 행(뒤 것을 버림)
+	NDup   int              // 같은 열차가 같은 역에 두 번 있는 행(뒤 것을 버림)
 }
 
 // LateNightHour 미만의 시각은 전날 운행의 심야로 본다.
@@ -66,7 +62,7 @@ func Load(stationsPath, timetablePath string) (*Timetable, error) {
 	for _, r := range srows {
 		l := tt.Lines[r["line"]]
 		if l == nil {
-			l = &Line{Pilot: r["line"], Opr: r["opr"], Code: r["ln_cd"], Name: r["ln_name"]}
+			l = &Line{Opr: r["opr"], Name: r["ln_name"]}
 			tt.Lines[r["line"]] = l
 		}
 		order, _ := strconv.Atoi(r["order"])
@@ -90,14 +86,13 @@ func Load(stationsPath, timetablePath string) (*Timetable, error) {
 		if l == nil {
 			continue
 		}
-		tt.NRows++
 		if r["day"] == "7" {
 			l.HasSat = true
 		}
 		k := key{r["line"], r["day"], r["trn_no"]}
 		t := trains[k]
 		if t == nil {
-			t = &Train{Line: k.line, Day: k.day, No: k.no, Org: r["org"], Tmn: r["tmn"]}
+			t = &Train{Line: k.line, Day: k.day, No: k.no, Tmn: r["tmn"]}
 			trains[k] = t
 			seen[k] = map[string]bool{}
 			order = append(order, k)

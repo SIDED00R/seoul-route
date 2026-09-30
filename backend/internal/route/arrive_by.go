@@ -9,7 +9,8 @@ import (
 
 // 도착 시각 지정(PlanRequest.Arrive) 규칙.
 //   - 경유지·구간 수단 고정이 없는 요청만 받는다(구간별 탐색·경유지 체류는 앞 구간 도착에 뒤 구간을 이어 붙인다).
-//   - OTP 에 latestArrival 로 보낸다. 도착지가 역 ID 로 앵커링되면 이탈시간(StationExitSec)만큼 앞당겨 보낸다.
+//   - OTP 에 latestArrival 로 보낸다. 도착지가 역 ID 로 앵커링되면 승강장에서 내리는 후보(지하철 전용 변형과 전체 수단
+//     변형의 지하철·철도 종착 후보)만 이탈시간(StationExitSec)만큼 앞당긴 시각으로 찾는다(search.go single).
 //   - 횡단보도 대기로 첫 탑승을 놓치면 재탐색 대신 넘친 만큼 일찍 출발한다(여정 Start 를 앞당긴다). 대중교통이 없는
 //     여정은 대기 합만큼 일찍 출발하고 도착은 그대로다. 놓침은 addCrossingWaits 가 처음 찾은 것 하나만 보며, 그것이
 //     대중교통을 탄 뒤의 도보(환승)면 그 여정을 뺀다.
@@ -38,18 +39,6 @@ func validateArrive(req PlanRequest, now time.Time) error {
 		return fmt.Errorf("%w: 도착 시각이 지났습니다", ErrBadRequest)
 	}
 	return nil
-}
-
-// arriveFor 는 OTP 에 보낼 latestArrival. 도착 시각 요청이 아니면 nil.
-func arriveFor(req PlanRequest, destStop string) *time.Time {
-	if req.Arrive == nil {
-		return nil
-	}
-	t := *req.Arrive
-	if destStop != "" {
-		t = t.Add(-time.Duration(StationExitSec) * time.Second)
-	}
-	return &t
 }
 
 // arriveCrossings 는 addCrossingWaits 를 거친 도착 시각 요청 여정의 출발을 대기만큼 앞당긴다. k·acc 는

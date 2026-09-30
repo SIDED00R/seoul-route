@@ -23,35 +23,35 @@ func TestKricLineOf(t *testing.T) {
 func kjTimetable() *kric.Timetable {
 	return &kric.Timetable{
 		Lines: map[string]*kric.Line{
-			"KJ": {Pilot: "KJ", Opr: "KR", Code: "K4", Name: "경의중앙", Stations: []kric.Station{
+			"KJ": {Opr: "KR", Name: "경의중앙", Stations: []kric.Station{
 				{Code: "K110", Name: "용산", Order: 1, Lat: 37.5299, Lon: 126.9648},
 				{Code: "K111", Name: "이촌", Order: 2, Lat: 37.5225, Lon: 126.9738},
 				{Code: "K114", Name: "옥수", Order: 5, Lat: 37.5405, Lon: 127.0177},
 				{Code: "K334", Name: "파주(두원대학)", Order: 50, Lat: 37.8330, Lon: 126.7970},
 				{Code: "K999", Name: "없는역", Order: 60, Lat: 37.9, Lon: 126.9},
 			}},
-			"WS": {Pilot: "WS", Opr: "UI", Code: "UI", Name: "우이신설", HasSat: true, Stations: []kric.Station{
+			"WS": {Opr: "UI", Name: "우이신설", HasSat: true, Stations: []kric.Station{
 				{Code: "S110", Name: "북한산우이", Order: 1, Lat: 37.663, Lon: 127.012},
 				{Code: "S111", Name: "솔밭공원", Order: 2, Lat: 37.658, Lon: 127.013},
 			}},
 		},
 		Trains: []kric.Train{
 			// 상행(순서 증가), 기점 도착 없음·종점 출발 없음, 없는역은 빠진다
-			{Line: "KJ", Day: "8", No: "K5003", Org: "K110", Tmn: "K334", Stops: []kric.StopTime{
+			{Line: "KJ", Day: "8", No: "K5003", Tmn: "K334", Stops: []kric.StopTime{
 				{Code: "K110", Dep: "05:01:00"}, {Code: "K111", Arr: "05:04:00", Dep: "05:04:30"},
 				{Code: "K999", Arr: "05:06:00", Dep: "05:06:30"}, {Code: "K334", Arr: "05:40:00"}}},
 			// 하행 휴일 → 토요일 시각표가 없는 노선이라 SATSUN. 종점 코드가 역 목록에 없으면 마지막 정차 이름
-			{Line: "KJ", Day: "9", No: "K5166", Org: "K126", Tmn: "K000", Stops: []kric.StopTime{
+			{Line: "KJ", Day: "9", No: "K5166", Tmn: "K000", Stops: []kric.StopTime{
 				{Code: "K114", Arr: "24:05:00", Dep: "24:05:30"}, {Code: "K110", Arr: "24:11:00"}}},
 			// 정차 2개 미만(없는역 + 1개) → 뺀다
-			{Line: "KJ", Day: "8", No: "K1", Org: "K110", Tmn: "K111", Stops: []kric.StopTime{
+			{Line: "KJ", Day: "8", No: "K1", Tmn: "K111", Stops: []kric.StopTime{
 				{Code: "K999", Dep: "06:00:00"}, {Code: "K111", Arr: "06:03:00"}}},
 			// 시각 역행 → 뺀다
-			{Line: "KJ", Day: "8", No: "K2", Org: "K110", Tmn: "K114", Stops: []kric.StopTime{
+			{Line: "KJ", Day: "8", No: "K2", Tmn: "K114", Stops: []kric.StopTime{
 				{Code: "K110", Dep: "07:00:00"}, {Code: "K111", Arr: "06:59:00", Dep: "07:03:30"},
 				{Code: "K114", Arr: "07:10:00"}}},
 			// 우이신설 토요일 → SAT
-			{Line: "WS", Day: "7", No: "1508", Org: "S110", Tmn: "S111", Stops: []kric.StopTime{
+			{Line: "WS", Day: "7", No: "1508", Tmn: "S111", Stops: []kric.StopTime{
 				{Code: "S110", Dep: "06:00:00"}, {Code: "S111", Arr: "06:02:00"}}},
 		},
 	}
@@ -131,10 +131,10 @@ func TestBuildReplacesPilotKricTrips(t *testing.T) {
 		},
 	}
 	tt := &kric.Timetable{
-		Lines: map[string]*kric.Line{"KJ": {Pilot: "KJ", Opr: "KR", Code: "K4", Name: "경의중앙", Stations: []kric.Station{
+		Lines: map[string]*kric.Line{"KJ": {Opr: "KR", Name: "경의중앙", Stations: []kric.Station{
 			{Code: "K110", Name: "용산", Order: 1, Lat: 37.5299, Lon: 126.9648},
 			{Code: "K111", Name: "이촌", Order: 2, Lat: 37.5225, Lon: 126.9738}}}},
-		Trains: []kric.Train{{Line: "KJ", Day: "9", No: "K5003", Org: "K110", Tmn: "K111", Stops: []kric.StopTime{
+		Trains: []kric.Train{{Line: "KJ", Day: "9", No: "K5003", Tmn: "K111", Stops: []kric.StopTime{
 			{Code: "K110", Dep: "05:01:00"}, {Code: "K111", Arr: "05:04:00"}}}},
 	}
 	out := filepath.Join(t.TempDir(), "g.zip")

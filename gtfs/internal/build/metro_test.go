@@ -26,7 +26,7 @@ func TestMetroReplacesRoute(t *testing.T) {
 // 파일럿에 없는 역은 정차만 빼고, 정차가 2개 미만이면 열차를 뺀다.
 func TestMetroRows(t *testing.T) {
 	tt := &seoulmetro.Timetable{Trains: []seoulmetro.Train{
-		{Line: "7", Day: "DAY", Code: "7006", Dir: "DOWN", Origin: "청담", Dest: "온수", Stops: []seoulmetro.StopTime{
+		{Line: "7", Day: "DAY", Code: "7006", Dir: "DOWN", Dest: "온수", Stops: []seoulmetro.StopTime{
 			{Code: "2731", Dep: "05:39:00"}, {Code: "2732", Arr: "05:41:30", Dep: "05:41:50"}, {Code: "2733", Arr: "05:43:20"}}},
 		{Line: "9", Day: "END", Code: "9502", Dir: "UP", Express: true, Dest: "중앙보훈병원", Stops: []seoulmetro.StopTime{
 			{Code: "4101", Dep: "23:58:00"}, {Code: "9999", Arr: "24:01:00", Dep: "24:01:30"}, {Code: "4103", Arr: "24:03:00"}}},

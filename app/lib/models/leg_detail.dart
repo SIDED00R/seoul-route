@@ -3,7 +3,6 @@
 class WalkStep {
   const WalkStep({
     required this.dir,
-    this.abs = '',
     this.street = '',
     required this.distanceM,
     required this.lat,
@@ -14,7 +13,6 @@ class WalkStep {
 
   factory WalkStep.fromJson(Map<String, dynamic> j) => WalkStep(
         dir: j['dir'] as String? ?? '',
-        abs: j['abs'] as String? ?? '',
         street: j['street'] as String? ?? '',
         distanceM: (j['distance_m'] as num?)?.toDouble() ?? 0,
         lat: (j['lat'] as num?)?.toDouble() ?? 0,
@@ -24,7 +22,6 @@ class WalkStep {
       );
 
   final String dir;
-  final String abs;
   final String street;
   final double distanceM;
   final double lat;
@@ -39,7 +36,6 @@ class TransitStop {
     required this.name,
     required this.lat,
     required this.lon,
-    this.stopId = '',
     this.offsetSec = 0,
   });
 
@@ -47,13 +43,11 @@ class TransitStop {
         name: j['name'] as String? ?? '',
         lat: (j['lat'] as num?)?.toDouble() ?? 0,
         lon: (j['lon'] as num?)?.toDouble() ?? 0,
-        stopId: j['stop_id'] as String? ?? '',
         offsetSec: (j['offset_sec'] as num?)?.toInt() ?? 0,
       );
 
   final String name;
   final double lat;
   final double lon;
-  final String stopId;
   final int offsetSec;
 }

@@ -27,8 +27,8 @@ func TestLoadGroupsAndSorts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tt.NRows != 11 || len(tt.Trains) != 4 || tt.NNoTime != 1 || tt.NPassing != 1 {
-		t.Fatalf("rows=%d trains=%d notime=%d passing=%d", tt.NRows, len(tt.Trains), tt.NNoTime, tt.NPassing)
+	if len(tt.Trains) != 4 || tt.NNoTime != 1 || tt.NPassing != 1 {
+		t.Fatalf("trains=%d notime=%d passing=%d", len(tt.Trains), tt.NNoTime, tt.NPassing)
 	}
 	k := tt.Trains[0] // 1호선 일반 K1001: 남영(둘 다 결측)은 빠지고 서울역 도착·용산 출발은 빈 문자열(결측)
 	if k.Line != "1" || k.Code != "K1001" || len(k.Stops) != 2 || k.Stops[0].Arr != "" || k.Stops[0].Dep != "05:31:30" ||
@@ -40,8 +40,7 @@ func TestLoadGroupsAndSorts(t *testing.T) {
 		t.Fatalf("급행의 00:00:00 은 통과역: %+v", x.Stops)
 	}
 	a := tt.Trains[2]
-	if a.Line != "7" || a.Day != "DAY" || a.Code != "7006" || a.Dir != "DOWN" || a.Express ||
-		a.Origin != "청담" || a.Dest != "온수" {
+	if a.Line != "7" || a.Day != "DAY" || a.Code != "7006" || a.Dir != "DOWN" || a.Express || a.Dest != "온수" {
 		t.Fatalf("train=%+v", a)
 	}
 	if len(a.Stops) != 3 || a.Stops[0].Code != "2731" || a.Stops[1].Code != "2732" || a.Stops[2].Code != "2733" {

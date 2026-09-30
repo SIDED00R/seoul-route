@@ -47,7 +47,7 @@ type Server struct {
 
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer)
+	r.Use(middleware.RequestID, middleware.Recoverer)
 	r.Use(s.logRequests)
 	// chi Timeout 은 부모 컨텍스트 데드라인을 늘릴 수 없으므로 전역에 걸지 않고 라우트별로 건다.
 	short := middleware.Timeout(DefaultTimeout)
@@ -73,7 +73,7 @@ func (s *Server) Router() http.Handler {
 		r.With(short).Get("/places/search", s.handlePlacesSearch)
 		r.With(short).Get("/places/reverse", s.handlePlacesReverse)
 		r.With(short).Get("/places/landmark", s.handlePlacesLandmark)
-		r.With(short).Get("/tiles/{z}/{x}/{y}.png", s.handleTile)
+		r.With(short).Get(tilePattern, s.handleTile)
 		r.With(short).Get("/users/me/favorites", s.handleGetFavoritePlaces)
 		r.With(short).Post("/users/me/favorites", s.handleCreateFavoritePlace)
 		r.With(short).Put("/users/me/favorites/{id}", s.handleUpdateFavoritePlace)
@@ -85,6 +85,9 @@ func (s *Server) Router() http.Handler {
 	})
 	return r
 }
+
+// tilePattern 은 타일 라우트. 접근 로그가 좌표 대신 이 패턴을 남긴다(logRequests).
+const tilePattern = "/tiles/{z}/{x}/{y}.png"
 
 const (
 	DefaultTimeout = 30 * time.Second
@@ -137,11 +140,11 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 		start := time.Now()
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 		next.ServeHTTP(ww, r)
-		// 쿼리스트링은 기록하지 않는다. 경로는 라우트 패턴으로 남긴다.
-		// 라우트가 없는 요청(404·405)은 패턴이 비어 요청 경로를 남긴다.
-		path := chi.RouteContext(r.Context()).RoutePattern()
-		if path == "" {
-			path = r.URL.Path
+		// 쿼리스트링은 기록하지 않는다. 타일 경로는 좌표가 위치 정보라 라우트 패턴으로 남기고,
+		// 나머지(라우트가 없는 404·405 포함)는 요청 경로를 남긴다.
+		path := r.URL.Path
+		if pattern := chi.RouteContext(r.Context()).RoutePattern(); pattern == tilePattern {
+			path = pattern
 		}
 		s.Log.Info("http", "method", r.Method, "path", path, "status", ww.Status(),
 			"ms", time.Since(start).Milliseconds(), "req", middleware.GetReqID(r.Context()))

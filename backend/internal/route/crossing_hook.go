@@ -17,8 +17,8 @@ import (
 //   - 경유지(Via) 요청은 재탐색하지 않는다. 대기 가산은 그대로 한다.
 //   - 갈아 끼운 뒤 구간의 도보 leg 에도 대기를 더하되 재탐색은 다시 하지 않는다(1회).
 //   - 재탐색은 놓친 탑승 정류장(역 ID)에서 시작한다.
-//   - 도착지가 역 ID 로 앵커링됐으면 재탐색 결과에도 이탈 시간(StationExitSec)을 다시 붙인다 — tail 의 End 가
-//     applyStationSlack 이 붙인 값을 덮어쓴다.
+//   - 도착지가 역 ID 로 앵커링됐고 재탐색 결과가 승강장에서 내리는 지하철·철도로 끝나면 이탈 시간(StationExitSec)을
+//     다시 붙인다 — tail 의 End 가 applyStationSlack 이 붙인 값을 덮어쓴다.
 //   - 재탐색 결과의 대중교통 열(노선·탑승 정류장)이 탑승을 놓치지 않는 다른 후보와 같으면 버린다(열등 복제).
 //   - 서로 다른 원래 후보가 재탐색 뒤 같은 대중교통 열·같은 다음 정차역이 되면 점수(score)가 가장 좋은 하나만 남긴다.
 //     같은 역·같은 노선이라도 다음 정차역이 다르면(순환선 내선·외선) 둘 다 남긴다.
@@ -203,7 +203,7 @@ func (p *Planner) replanFrom(ctx context.Context, it otp.Itinerary, k int, wait 
 	out := it
 	out.Legs = append(append([]otp.Leg(nil), it.Legs[:k+1]...), best.Legs...)
 	out.End = best.End
-	if destAnchored {
+	if destAnchored && alightsStationLast(best) {
 		if e, err := time.Parse(time.RFC3339, best.End); err == nil {
 			out.End = e.Add(time.Duration(StationExitSec) * time.Second).Format(time.RFC3339)
 		}

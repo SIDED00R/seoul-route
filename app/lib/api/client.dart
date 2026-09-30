@@ -63,10 +63,7 @@ class ApiClient {
         )
         .timeout(const Duration(seconds: 15));
     final j = _decode(r);
-    return LoginResult(
-      token: j['token'] as String,
-      userId: j['user_id'] as String,
-    );
+    return LoginResult(token: j['token'] as String);
   }
 
   Future<Map<String, dynamic>> me() async {

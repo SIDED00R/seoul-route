@@ -211,8 +211,8 @@ func printReport(rep *build.Report, out string) {
 		rep.NKricNearestMatched, rep.NKricNonMonotonic, rep.NKricDupRows, rep.NBusShapes, rep.NBusNoShapeDirections,
 		rep.NRailShapes, rep.NRailStraightHops, rep.NRailNoShapeTrips, out)
 	fmt.Printf("버스 승하차 불가 정차 %d(가상·미정차, 방향마다 셈) | 정류장별 실제 첫차·막차로 운행 시간대를 좁힌 방향 %d | "+
-		"구간속도가 낮아 폴백 속도로 계산한 구간 %d\n",
-		rep.NBusNoBoardingStops, rep.NBusNarrowedDirections, rep.NBusSlowSections)
+		"시간대가 남지 않아 뺀 방향 %d | 구간속도가 낮아 폴백 속도로 계산한 구간 %d\n",
+		rep.NBusNoBoardingStops, rep.NBusNarrowedDirections, rep.NBusNoServiceDirections, rep.NBusSlowSections)
 	fmt.Printf("순환 회차역(2호선 성수·6호선 응암) 이어 타기 trip 쌍 %d(block %d) | 이어지는 출발이 없는 회차역 도착 %d\n",
 		rep.NLoopLinks, rep.NLoopBlocks, rep.NLoopUnpaired)
 }

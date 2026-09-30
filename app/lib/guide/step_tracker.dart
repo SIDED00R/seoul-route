@@ -20,8 +20,6 @@ class StepTracker {
   static const maxAccuracyM = 50.0;
 
   bool get isEmpty => steps.isEmpty;
-  WalkStep? get current => steps.isEmpty ? null : steps[index];
-  WalkStep? get next => index + 1 < steps.length ? steps[index + 1] : null;
 
   /// 위치를 넣고 단계가 바뀌었으면 true. 오차가 큰 표본은 무시한다.
   bool update(double lat, double lon, {double accuracyM = 0}) {

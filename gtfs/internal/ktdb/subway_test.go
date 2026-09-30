@@ -25,8 +25,6 @@ func writeFixture(t *testing.T) string {
 			"RR_KTX_Ord001,05:00:00,05:00:00,RS_A,1,0,0,1\n", // 고속철도(6) → 제외
 		"transfers.txt": "\xef\xbb\xbffrom_stop_id,to_stop_id,transfer_type,min_transfer_time\n" +
 			"RS_A,RS_B,2,120\nRS_A,RS_FAR,2,120\n",
-		"calendar.txt": "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n" +
-			"B1,1,1,1,1,1,1,1,20170101,20301231\n",
 	}
 	for name, body := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {

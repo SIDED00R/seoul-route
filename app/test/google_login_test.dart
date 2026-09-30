@@ -54,7 +54,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final store = SettingsStore(tokenStorage: MemoryTokenStorage());
     final out = <Future<Settings?>>[];
-    await openAndLogin(tester, (_) async => const LoginResult(token: 'NEWJWT', userId: 'u1'), out, store);
+    await openAndLogin(tester, (_) async => const LoginResult(token: 'NEWJWT'), out, store);
     expect(find.byType(SettingsScreen), findsNothing, reason: '성공하면 설정 화면이 닫혀야 한다');
     expect((await out.single)?.token, 'NEWJWT', reason: '홈이 push 결과로 세션을 갱신한다');
     expect((await store.load()).token, 'NEWJWT');

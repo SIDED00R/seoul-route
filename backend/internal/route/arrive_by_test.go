@@ -37,14 +37,15 @@ func TestValidateArrive(t *testing.T) {
 // 늦게 도착하는 여정은 빠지고(정각 도착은 남는다), 같은 구간 열이면 늦게 출발하는 여정이 남는다. 실시간 보정은 하지 않는다.
 func TestPlanArriveBy(t *testing.T) {
 	arrive, _ := time.Parse(time.RFC3339, "2026-10-05T09:00:00+09:00")
-	bus := func(route string) otp.Leg {
-		return otp.Leg{Mode: "BUS", Route: route, FromName: "서울역", ToName: "강남", TransitLeg: true}
+	// 역에서 바로 타고 내리는 지하철(진입·이탈 가산 대상)
+	rail := func(route string) otp.Leg {
+		return otp.Leg{Mode: "SUBWAY", Route: route, FromName: "서울역", ToName: "강남", TransitLeg: true}
 	}
 	f := &fakeOTP{answer: func(r otp.Request) ([]otp.Itinerary, error) {
 		return []otp.Itinerary{
-			itin("2026-10-05T08:20:00+09:00", "2026-10-05T08:50:00+09:00", bus("402")),
-			itin("2026-10-05T08:30:00+09:00", "2026-10-05T08:59:00+09:00", bus("402")),
-			itin("2026-10-05T08:35:00+09:00", "2026-10-05T09:05:00+09:00", bus("740")),
+			itin("2026-10-05T08:20:00+09:00", "2026-10-05T08:50:00+09:00", rail("402")),
+			itin("2026-10-05T08:30:00+09:00", "2026-10-05T08:59:00+09:00", rail("402")),
+			itin("2026-10-05T08:35:00+09:00", "2026-10-05T09:05:00+09:00", rail("740")),
 		}, nil
 	}}
 	rt := &fakeRealtime{}
@@ -57,11 +58,23 @@ func TestPlanArriveBy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// 변형 4개: 전체 수단은 지정 시각과 지정 −1분 두 번, 지하철 전용은 −1분, 버스 전용은 지정 시각.
+	exact, early := 0, 0
 	for _, c := range f.calls {
-		if c.Depart != nil || c.Arrive == nil || !c.Arrive.Equal(arrive.Add(-time.Minute)) || c.DestStop != "seoul:ST_강남" ||
-			c.OriginStop != "seoul:ST_서울" {
+		if c.Depart != nil || c.Arrive == nil || c.DestStop != "seoul:ST_강남" || c.OriginStop != "seoul:ST_서울" {
 			t.Fatalf("OTP 요청: depart=%v arrive=%v origin=%q dest=%q", c.Depart, c.Arrive, c.OriginStop, c.DestStop)
 		}
+		switch {
+		case c.Arrive.Equal(arrive):
+			exact++
+		case c.Arrive.Equal(arrive.Add(-time.Minute)):
+			early++
+		default:
+			t.Fatalf("도착 제한: %v", c.Arrive)
+		}
+	}
+	if len(f.calls) != 4 || exact != 2 || early != 2 {
+		t.Fatalf("변형 요청 수: 전체 %d, 지정 시각 %d, −1분 %d", len(f.calls), exact, early)
 	}
 	// 402 는 08:30 출발(도착 08:59 + 이탈 1분 = 09:00)만 남고, 740(09:05 + 1분)은 빠진다. 출발은 역 진입 2분 앞당김.
 	if len(its) != 1 || its[0].Start != "2026-10-05T08:28:00+09:00" || its[0].End != "2026-10-05T09:00:00+09:00" ||

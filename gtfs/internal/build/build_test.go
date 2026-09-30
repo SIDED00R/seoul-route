@@ -75,19 +75,16 @@ func TestBuildBusOnly(t *testing.T) {
 	if len(fr) != 2 || fr[1][1] != "04:10:00" || fr[1][2] != "24:30:00" || fr[1][3] != "360" {
 		t.Errorf("frequencies=%v (막차 00:30 은 자정 넘김이라 24:30:00 이어야 한다)", fr)
 	}
-	// 막차는 frequencies 의 배타적 end_time 에 걸리지 않도록 절대시각 trip 으로 따로 있어야 한다.
+	// 방향마다 배차 trip 하나뿐이다. 막차는 frequencies 의 end_time 으로만 표현하고 절대시각 막차 trip(_LAST)은 만들지
+	// 않는다(OTP 2.10 은 frequencies 가 있는 패턴의 시각표 trip 을 경로 탐색에 쓰지 않는다).
 	tr := readTable(t, zr, "trips.txt")
-	if len(tr) != 3 || tr[2][2] != "B_100100047_LAST" {
-		t.Errorf("trips=%v (배차 trip + 막차 trip)", tr)
+	if len(tr) != 2 || tr[1][2] != "B_100100047_T" {
+		t.Errorf("trips=%v (배차 trip 하나)", tr)
 	}
-	var lastTimes []string
 	for _, row := range st[1:] {
-		if row[0] == "B_100100047_LAST" {
-			lastTimes = append(lastTimes, row[1])
+		if row[0] != "B_100100047_T" {
+			t.Errorf("배차 trip 이 아닌 stop_times 행: %v", row)
 		}
-	}
-	if strings.Join(lastTimes, ",") != "24:30:00,24:31:14,24:33:32" {
-		t.Errorf("막차 trip stop_times=%v (막차 24:30:00 + 누적 소요)", lastTimes)
 	}
 	rt := readTable(t, zr, "routes.txt")
 	if rt[1][0] != "B_100100047" || rt[1][4] != "3" {
@@ -107,7 +104,7 @@ func TestBuildBusOnly(t *testing.T) {
 }
 
 // 회차 지점(transYn=Y)에서 상행·하행 trip 으로 나뉜다. 하행 frequencies 는 회차지 도착 시각만큼 늦게 시작하고,
-// 하행 stop_times 는 회차지 0초 기준. 막차 trip 은 절대시각 그대로.
+// 하행 stop_times 는 회차지 0초 기준.
 func TestBuildSplitsAtTurnaround(t *testing.T) {
 	b := sampleRoute() // 간선: 정차 38초. A→B 36s, B→C 100s → 누적 0, 74, 212
 	b.Stops = append(b.Stops, seoulbus.Stop{Seq: "4", StationID: "106000090", Name: "D", Lon: "127.099", Lat: "37.594",
@@ -125,7 +122,7 @@ func TestBuildSplitsAtTurnaround(t *testing.T) {
 		trips[row[2]] = row // trip_id → row(route_id, service_id, trip_id, headsign, direction_id)
 	}
 	if trips["B_100100047_T0"][3] != "C" || trips["B_100100047_T0"][4] != "0" ||
-		trips["B_100100047_T1"][3] != "월드컵파크7단지" || trips["B_100100047_T1"][4] != "1" || len(trips) != 4 {
+		trips["B_100100047_T1"][3] != "월드컵파크7단지" || trips["B_100100047_T1"][4] != "1" || len(trips) != 2 {
 		t.Fatalf("상·하행 trip: %v", trips)
 	}
 	freq := map[string][]string{}
@@ -140,8 +137,7 @@ func TestBuildSplitsAtTurnaround(t *testing.T) {
 		st[row[0]] = append(st[row[0]], row[1]+"@"+row[4])
 	}
 	if strings.Join(st["B_100100047_T0"], ",") != "00:00:00@1,00:01:14@2,00:03:32@3" ||
-		strings.Join(st["B_100100047_T1"], ",") != "00:00:00@3,00:01:14@4" ||
-		strings.Join(st["B_100100047_LAST1"], ",") != "24:33:32@3,24:34:46@4" {
+		strings.Join(st["B_100100047_T1"], ",") != "00:00:00@3,00:01:14@4" || len(st) != 2 {
 		t.Fatalf("stop_times: %v", st)
 	}
 }

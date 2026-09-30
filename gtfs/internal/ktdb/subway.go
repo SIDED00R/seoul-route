@@ -18,13 +18,11 @@ const utf8BOM = "\xef\xbb\xbf"
 
 // Subway 는 bbox 를 지나는 도시철도 trip 과 그 참조 행이다.
 type Subway struct {
-	Header    map[string][]string // 파일명 → 헤더
 	Routes    []Row
 	Trips     []Row
 	StopTimes []Row
 	Stops     []Row
 	Transfers []Row
-	Calendar  []Row
 }
 
 type BBox struct{ MinLon, MinLat, MaxLon, MaxLat float64 }
@@ -35,7 +33,7 @@ func (b BBox) Contains(lon, lat float64) bool {
 
 // Load 는 dir 의 파일럿 txt 를 읽어 route_type=="1"(도시철도) 이면서 bbox 안 정류장을 하나라도 지나는 trip 만 남긴다.
 func Load(dir string, bbox BBox) (*Subway, error) {
-	s := &Subway{Header: map[string][]string{}}
+	s := &Subway{}
 
 	routes, err := s.read(dir, "routes.txt")
 	if err != nil {
@@ -115,10 +113,6 @@ func Load(dir string, bbox BBox) (*Subway, error) {
 		return nil, err
 	}
 	s.Transfers = filter(transfers, func(r Row) bool { return usedStops[r["from_stop_id"]] && usedStops[r["to_stop_id"]] })
-	s.Calendar, err = s.read(dir, "calendar.txt")
-	if err != nil {
-		return nil, err
-	}
 	if len(s.Trips) == 0 {
 		return nil, fmt.Errorf("ktdb: bbox 안 도시철도 trip 이 없다 (%s)", dir)
 	}
@@ -146,7 +140,6 @@ func (s *Subway) stream(dir, name string, fn func(Row)) error {
 	// ReuseRecord 라 Read 가 돌려준 슬라이스는 다음 Read 에서 덮인다 → 헤더는 복사본을 쓴다.
 	hdr := append([]string(nil), first...)
 	hdr[0] = strings.TrimPrefix(hdr[0], utf8BOM) // 파일럿 일부 파일은 UTF-8 BOM 으로 시작한다
-	s.Header[name] = hdr
 	for {
 		rec, err := rd.Read()
 		if err == io.EOF {

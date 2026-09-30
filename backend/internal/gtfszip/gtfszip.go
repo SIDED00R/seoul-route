@@ -48,9 +48,7 @@ func (r *Reader) Rows(name string) (rows []map[string]string, found bool, err er
 			}
 			row := make(map[string]string, len(header))
 			for i, h := range header {
-				if i < len(rec) {
-					row[h] = rec[i]
-				}
+				row[h] = rec[i]
 			}
 			rows = append(rows, row)
 		}

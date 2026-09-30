@@ -34,8 +34,7 @@ class GoogleLogin {
 }
 
 class LoginResult {
-  const LoginResult({required this.token, required this.userId});
+  const LoginResult({required this.token});
 
   final String token;
-  final String userId;
 }

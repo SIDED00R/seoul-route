@@ -21,7 +21,7 @@ func upEscalators(rows []Row) map[string]Escalator {
 	out := map[string]Escalator{}
 	for _, r := range rows {
 		if r.ElvtrNo != "" {
-			out[r.ElvtrNo] = Escalator{No: r.ElvtrNo, Direction: "상행", Section: "B2-B1", Position: "1번 출입구"}
+			out[r.ElvtrNo] = Escalator{No: r.ElvtrNo, Direction: "상행", Position: "1번 출입구"}
 		}
 	}
 	return out
@@ -139,8 +139,8 @@ func TestLookupEscalatorDirection(t *testing.T) {
 		{Line: "4호선", Station: "사당", Side: "상행", Toward: "총신대입구", Door: "9-1", Facility: "계단"},
 	}
 	ix := NewIndex(rows, map[string]Escalator{
-		"DOWN": {No: "DOWN", Direction: "하행", Section: "B2-B3", Position: "1번 출입구"},
-		"UP":   {No: "UP", Direction: "상행", Section: "B3-B2", Position: "2번 출입구"},
+		"DOWN": {No: "DOWN", Direction: "하행", Position: "1번 출입구"},
+		"UP":   {No: "UP", Direction: "상행", Position: "2번 출입구"},
 	})
 	got := ix.Lookup("4호선", "사당(4호선)", "총신대입구")
 	want := []Facility{{"에스컬레이터", []string{"3-3"}}, {"계단", []string{"5-2"}}}
