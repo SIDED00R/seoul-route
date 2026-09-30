@@ -16,6 +16,25 @@ import 'package:seoul_route/models/plan_request.dart';
 import 'package:seoul_route/screens/detail_screen.dart';
 import 'package:seoul_route/screens/guide_screen.dart';
 
+const _legJson = <String, dynamic>{
+  'mode': 'WALK',
+  'duration_sec': 300,
+  'distance_m': 222,
+  'from_name': 'Origin',
+  'to_name': 'Destination',
+  'from_lat': 37.5,
+  'from_lon': 127.0,
+  'to_lat': 37.502,
+  'to_lon': 127.0,
+  'start': '2026-09-15T09:00:00+09:00',
+  'end': '2026-09-15T09:05:00+09:00',
+};
+
+Position _at(double lat) => Position(
+  latitude: lat, longitude: 127.0, timestamp: DateTime.now(), accuracy: 5, altitude: 0,
+  altitudeAccuracy: 0, heading: 0, headingAccuracy: 0, speed: 0, speedAccuracy: 0,
+);
+
 const _twoLegs = Itinerary(
   start: '2026-09-15T09:00:00+09:00',
   end: '2026-09-15T09:10:00+09:00',
@@ -197,6 +216,24 @@ void main() {
     expect(statusCalls.last, 'cancel');
   });
 
+  /// trip 발급을 붙잡아 둔 채 세션을 시작하고, 첫 구간 끝 표본으로 구간 1로 넘긴 뒤 발급을 실패시킨다.
+  Future<GuideSession> failedAtSecondLeg(Itinerary itinerary) async {
+    api.failFirst = api.startCalls + 1;
+    api.startGate = Completer<void>();
+    final s = GuideSession(api: api, request: _request, itinerary: itinerary, speak: (_) async {});
+    ActiveGuide.instance.set(s);
+    final started = s.start();
+    await Future<void>.delayed(Duration.zero);
+    geo.controller.add(_at(37.502));
+    await Future<void>.delayed(Duration.zero);
+    expect(s.tracker.index, 1);
+    api.startGate!.complete();
+    await started;
+    expect(s.ended, isTrue);
+    statusCalls.clear();
+    return s;
+  }
+
   test('시작하지 못한 세션은 구간을 옮기지 않고 진행 알림도 띄우지 않는다', () async {
     api.failFirst = 1;
     final s = GuideSession(api: api, request: _request, itinerary: _twoLegs, speak: (_) async {});
@@ -206,16 +243,41 @@ void main() {
     statusCalls.clear();
     s.nextLeg();
     expect(s.tracker.index, 0);
-    s.nextLeg();
-    s.prevLeg();
+    expect(statusCalls, isEmpty);
+
+    final s2 = await failedAtSecondLeg(_twoLegs);
+    s2.prevLeg();
+    expect(s2.tracker.index, 1);
+    expect(statusCalls, isEmpty);
+  });
+
+  test('시작하지 못한 세션은 체류를 끝내지 않고 진행 알림도 띄우지 않는다', () async {
+    final stayFirst = Itinerary(
+      start: _twoLegs.start,
+      end: _twoLegs.end,
+      durationSec: _twoLegs.durationSec,
+      transfers: 0,
+      walkM: _twoLegs.walkM,
+      legs: [Leg.fromJson({..._legJson, 'stay_via': 1, 'stay_sec': 1800}), _leg],
+    );
+    final s = await failedAtSecondLeg(stayFirst);
+    expect(s.staying, isTrue);
+    s.endStay();
+    expect(s.staying, isTrue);
     expect(statusCalls, isEmpty);
   });
 
   testWidgets('시작하지 못한 세션의 안내 화면은 이전·다음 구간 버튼을 끈다', (tester) async {
     api.failFirst = 1;
+    api.startGate = Completer<void>();
     await tester.pumpWidget(MaterialApp(
       home: GuideScreen(api: api, request: _request, itinerary: _twoLegs, speak: (_) async {}),
     ));
+    await tester.pump();
+    geo.controller.add(_at(37.502));
+    await tester.pump();
+    expect(ActiveGuide.instance.current!.tracker.index, 1);
+    api.startGate!.complete();
     for (var i = 0; i < 50 && !ActiveGuide.instance.current!.ended; i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
       await tester.pump();
