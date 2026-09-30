@@ -194,8 +194,8 @@ func TestBuildWritesBusShapes(t *testing.T) {
 	for _, r := range trips[1:] {
 		shapeOf[r[2]] = r[5]
 	}
-	if shapeOf["B_100100047_T0"] != "BSH_100100047_0" || shapeOf["B_100100047_LAST0"] != "BSH_100100047_0" ||
-		shapeOf["B_100100047_T1"] != "BSH_100100047_1" {
+	if shapeOf["B_100100047_T0"] != "BSH_100100047_0" || shapeOf["B_100100047_T1"] != "BSH_100100047_1" ||
+		len(shapeOf) != 2 {
 		t.Errorf("shape_id=%v", shapeOf)
 	}
 	var dists []string

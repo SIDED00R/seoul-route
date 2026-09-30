@@ -49,22 +49,10 @@ class FavoritePlace {
 }
 
 class GuideLandmark {
-  const GuideLandmark({
-    required this.name,
-    required this.lat,
-    required this.lon,
-    required this.distanceM,
-  });
+  const GuideLandmark({required this.name});
 
-  factory GuideLandmark.fromJson(Map<String, dynamic> json) => GuideLandmark(
-    name: json['name'] as String,
-    lat: (json['lat'] as num).toDouble(),
-    lon: (json['lon'] as num).toDouble(),
-    distanceM: (json['distance_m'] as num).toInt(),
-  );
+  factory GuideLandmark.fromJson(Map<String, dynamic> json) =>
+      GuideLandmark(name: json['name'] as String);
 
   final String name;
-  final double lat;
-  final double lon;
-  final int distanceM;
 }

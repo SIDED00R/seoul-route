@@ -8,6 +8,7 @@ import (
 
 // TransferSlackSec: 도보 leg 없는 환승(같은 역 승강장 이동)에 OTP 가 두는 여유(초). 그 이동은 leg 으로 나오지
 // 않으므로 이 값이 그 자리를 대신한다. OTP 2.10 기본 transferSlack PT2M — router-config 에서 바꾸면 같이 바꾼다.
+// route.ViaTransferSec(앵커링된 경유지의 다음 구간 출발 여유)도 이 값을 쓴다.
 const TransferSlackSec = 120
 
 // laterShifts 는 첫 탑승 leg k 가 d 만큼 옮겨졌을 때 k 뒤 leg 마다의 이동량과 도착(End) 이동량을 돌려준다.

@@ -30,7 +30,6 @@ func TestLoad(t *testing.T) {
 	p := writeZip(t, map[string]string{
 		"trips.txt": utf8BOM + `route_id,service_id,trip_id
 B_1,ALL,B_1_T
-B_1,ALL,B_1_LAST
 B_2,ALL,B_2_T
 RR_9,ALL,RR_9_1
 `,

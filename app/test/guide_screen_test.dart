@@ -64,7 +64,7 @@ class FakeApi extends ApiClient {
       throw ApiException(502, '일시 오류');
     }
     if (lat == failLandmarkOnceAt) {
-      return GuideLandmark(name: '우리은행', lat: lat, lon: lon, distanceM: 8);
+      return const GuideLandmark(name: '우리은행');
     }
     return null;
   }

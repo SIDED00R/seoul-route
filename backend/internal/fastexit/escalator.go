@@ -17,7 +17,6 @@ const EscalatorService = "tbTrfcEscalInstlPrst"
 type Escalator struct {
 	No        string `json:"ESCAL_NO"`
 	Direction string `json:"DIRECTION"`  // 상행·하행·상/하겸용
-	Section   string `json:"SECTION"`    // 운행구간 "B2-B1"
 	Position  string `json:"INSTL_PSTN"` // 설치위치 "1번 출입구", "환승통로(1,3호선)"
 }
 

@@ -44,7 +44,7 @@ Leg leg(String mode, {bool transit = false, String route = '', String headsign =
 Itinerary it(List<Leg> legs) =>
     Itinerary(start: '', end: '', durationSec: 1800, transfers: 0, walkM: 500, legs: legs);
 
-const twoStops = [TransitStop(name: '성수', lat: 37.5, lon: 127.05, stopId: '', offsetSec: 120)];
+const twoStops = [TransitStop(name: '성수', lat: 37.5, lon: 127.05, offsetSec: 120)];
 
 Leg line2({List<FastExitFacility> fastExit = exitSide, List<TransitStop> stops = twoStops}) => leg('SUBWAY',
     transit: true, route: '2호선', headsign: '성수', toName: '잠실', stops: stops, fastExit: fastExit);

@@ -323,3 +323,26 @@ func TestCrossingReplanKeepsOppositeDirections(t *testing.T) {
 		t.Fatalf("방향이 다른 재탐색 결과 둘이 모두 남아야 한다: err=%v %+v", err, its)
 	}
 }
+
+// 도착지가 역 ID 로 앵커링돼도 재탐색 결과가 출입구까지 걷는 도보로 끝나면 이탈 60초를 붙이지 않는다.
+func TestCrossingReplanNoExitSlackWhenWalkingOut(t *testing.T) {
+	f := &fakeOTP{answer: func(r otp.Request) ([]otp.Itinerary, error) {
+		if r.OriginStop == "seoul:ST_A" {
+			return []otp.Itinerary{itin("2026-09-14T14:06:54+09:00", "2026-09-14T14:42:00+09:00",
+				otp.Leg{Mode: "BUS", Route: "402", FromStopID: "seoul:ST_A", TransitLeg: true,
+					Start: "2026-09-14T14:12:00+09:00", End: "2026-09-14T14:40:00+09:00"},
+				walkLeg("out", "2026-09-14T14:40:00+09:00", "2026-09-14T14:42:00+09:00", gangnam.Lat, gangnam.Lon))}, nil
+		}
+		return []otp.Itinerary{itin("2026-09-14T14:00:00+09:00", "2026-09-14T14:30:00+09:00",
+			walkLeg("a", "2026-09-14T14:00:00+09:00", "2026-09-14T14:05:00+09:00", 37.55, 126.97),
+			otp.Leg{Mode: "SUBWAY", Route: "1호선", FromStopID: "seoul:ST_A", TransitLeg: true,
+				Start: "2026-09-14T14:06:00+09:00", End: "2026-09-14T14:30:00+09:00"})}, nil
+	}}
+	p := &Planner{OTP: f, Crossings: fakeCrossings{"a": 3}, CrossingSec: 38}
+	p.SetStations([]otp.Station{{ID: "seoul:ST_강남", Name: "강남", Lat: gangnam.Lat, Lon: gangnam.Lon}})
+	dest := Point{Lat: gangnam.Lat, Lon: gangnam.Lon, Name: "강남역"}
+	its, err := p.Plan(context.Background(), PlanRequest{Origin: seoulStn, Destination: dest})
+	if err != nil || !its[0].Replanned || its[0].End != "2026-09-14T14:42:00+09:00" || its[0].Duration != 2520 {
+		t.Fatalf("도보로 끝나는 재탐색 결과에 이탈 60초가 붙었다: err=%v %+v", err, its)
+	}
+}

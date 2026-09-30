@@ -209,7 +209,7 @@ void main() {
 
   testWidgets('늦게 온 랜드마크가 실제로 붙으면 보강 문장을 한 번만 읽는다', (tester) async {
     api.result = (lat, lon) => (lat - 37.5011).abs() < 1e-6
-        ? const GuideLandmark(name: '우리은행', lat: 37.5011, lon: 127.0, distanceM: 8)
+        ? const GuideLandmark(name: '우리은행')
         : null;
     await startWalkAndReleaseLandmark(tester);
     expect(spoken.length, 2, reason: '회전점에 시설이 붙었으니 한 번 더 읽는다');

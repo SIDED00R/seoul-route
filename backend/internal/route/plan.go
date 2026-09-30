@@ -129,7 +129,15 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) ([]otp.Itinerary, e
 	}
 	now := p.now()
 	destAnchored := anchorsSegment(req.Modes[len(req.Modes)-1]) && p.anchor(req.Destination) != ""
-	applyStationSlack(its, anchorsSegment(req.Modes[0]) && p.anchor(req.Origin) != "", destAnchored)
+	var base *time.Time // 출발 시각 요청의 기준 시각. 도착 시각 요청은 nil
+	if req.Arrive == nil {
+		b := now
+		if req.Depart != nil {
+			b = *req.Depart
+		}
+		base = &b
+	}
+	applyStationSlack(its, anchorsSegment(req.Modes[0]) && p.anchor(req.Origin) != "", destAnchored, base)
 	timed := req.Depart
 	if req.Arrive != nil {
 		timed = req.Arrive

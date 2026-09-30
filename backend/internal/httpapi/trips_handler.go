@@ -129,7 +129,7 @@ func (s *Server) handleUploadTraces(w http.ResponseWriter, r *http.Request) {
 	}
 	if batch.Len() > 0 {
 		if err := s.DB.SendBatch(r.Context(), batch).Close(); err != nil {
-			s.Log.Error("upload traces", "err", err)
+			s.Log.Error("upload traces", "trip", id, "err", err)
 			writeError(w, http.StatusInternalServerError, "저장 실패")
 			return
 		}

@@ -90,7 +90,7 @@ func TestBuildFailsWhenMetroTimetableMissesLine(t *testing.T) {
 // 레일포털 역 파일에는 있는 노선(KJ)의 열차가 시각표에 없으면 빌드가 실패한다.
 func TestBuildFailsWhenKricTimetableMissesLine(t *testing.T) {
 	tt := &kric.Timetable{
-		Lines: map[string]*kric.Line{"KJ": {Pilot: "KJ", Opr: "KR", Code: "K4", Name: "경의중앙", Stations: []kric.Station{
+		Lines: map[string]*kric.Line{"KJ": {Opr: "KR", Name: "경의중앙", Stations: []kric.Station{
 			{Code: "K110", Name: "용산", Order: 1, Lat: 37.5299, Lon: 126.9648},
 			{Code: "K111", Name: "이촌", Order: 2, Lat: 37.5225, Lon: 126.9738}}}},
 	}

@@ -28,16 +28,14 @@ type Train struct {
 	Code    string // 열차코드
 	Dir     string // UP / DOWN / IN(2호선 내선) / OUT(외선)
 	Express bool
-	Origin  string
 	Dest    string
 	Stops   []StopTime
 }
 
 type Timetable struct {
 	Trains   []Train // (Line, Day, Code) 순으로 정렬
-	NRows    int
-	NPassing int // 급행 통과역 행(한쪽 시각만 "00:00:00")으로 뺀 정차
-	NNoTime  int // 도착·출발이 모두 결측("00:00:00" 포함)이라 뺀 정차(현 데이터 0)
+	NPassing int     // 급행 통과역 행(한쪽 시각만 "00:00:00")으로 뺀 정차
+	NNoTime  int     // 도착·출발이 모두 결측("00:00:00" 포함)이라 뺀 정차(현 데이터 0)
 }
 
 func blankZero(s string) string {
@@ -79,7 +77,6 @@ func Load(path string) (*Timetable, error) {
 	type key struct{ line, day, code string }
 	trains := map[key]*Train{}
 	out := &Timetable{}
-	n := 0
 	for line := 2; ; line++ {
 		rec, err := r.Read()
 		if err == io.EOF {
@@ -88,12 +85,11 @@ func Load(path string) (*Timetable, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s:%d: %w", path, line, err)
 		}
-		n++
 		k := key{rec[idx["호선"]], rec[idx["주중주말"]], rec[idx["열차코드"]]}
 		t, ok := trains[k]
 		if !ok {
 			t = &Train{Line: k.line, Day: k.day, Code: k.code, Dir: rec[idx["방향"]], Express: rec[idx["급행여부"]] == "1",
-				Origin: rec[idx["출발역"]], Dest: rec[idx["도착역"]]}
+				Dest: rec[idx["도착역"]]}
 			trains[k] = t
 		}
 		// 급행에서 한쪽 시각만 00:00:00인 행은 통과역이다. 실제 자정은 24:00:00으로 기록된다.
@@ -109,7 +105,6 @@ func Load(path string) (*Timetable, error) {
 		}
 		t.Stops = append(t.Stops, st)
 	}
-	out.NRows = n
 	for _, t := range trains {
 		sort.SliceStable(t.Stops, func(i, j int) bool { return timeKey(t.Stops[i]) < timeKey(t.Stops[j]) })
 		out.Trains = append(out.Trains, *t)

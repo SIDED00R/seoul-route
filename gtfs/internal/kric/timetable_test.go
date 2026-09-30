@@ -36,8 +36,8 @@ func TestLoadGroupsAndSorts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Lines) != 2 || got.NRows != 7 || got.NDup != 1 || len(got.Trains) != 3 {
-		t.Fatalf("lines=%d rows=%d dup=%d trains=%d", len(got.Lines), got.NRows, got.NDup, len(got.Trains))
+	if len(got.Lines) != 2 || got.NDup != 1 || len(got.Trains) != 3 {
+		t.Fatalf("lines=%d dup=%d trains=%d", len(got.Lines), got.NDup, len(got.Trains))
 	}
 	kj := got.Lines["KJ"]
 	if kj.Opr != "KR" || kj.Name != "경의중앙" || kj.HasSat || len(kj.Stations) != 3 || kj.Stations[0].Code != "K110" ||
@@ -48,7 +48,7 @@ func TestLoadGroupsAndSorts(t *testing.T) {
 		t.Fatal("우이신설은 토요일 시각표가 있다")
 	}
 	a := got.Trains[0]
-	if a.Line != "KJ" || a.Day != "8" || a.No != "K5003" || a.Org != "K110" || a.Tmn != "K137" || len(a.Stops) != 3 ||
+	if a.Line != "KJ" || a.Day != "8" || a.No != "K5003" || a.Tmn != "K137" || len(a.Stops) != 3 ||
 		a.Stops[0].Code != "K110" || a.Stops[0].Arr != "" || a.Stops[0].Dep != "05:01:00" ||
 		a.Stops[1].Code != "K111" || a.Stops[2].Arr != "05:08:30" {
 		t.Fatalf("train=%+v", a)
