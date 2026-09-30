@@ -116,4 +116,56 @@ void main() {
         request: request, itinerary: it([line2(), leg('WALK', toName: '회사')]), legIndex: 0, remainingStops: 1);
     expect(i.utterance, '다음 역에서 내리세요. 회사까지 도보');
   });
+
+  test('화면·알림 문구: 탑승 전 "다음" 안내와 타고 가는 동안의 현재 안내에 짧은 칸-문 표기를 붙인다', () {
+    final before = buildInstruction(
+        request: request, itinerary: it([leg('WALK'), line2(), leg('WALK', toName: '회사')]), legIndex: 0);
+    expect(before.next, '탑승 · 2호선 성수 방면 · a · 에스컬레이터 3-3, 8-1 쪽 탑승');
+    final riding = buildInstruction(
+        request: request, itinerary: it([leg('WALK'), line2(), leg('WALK', toName: '회사')]), legIndex: 1,
+        remainingStops: 2, nextStopName: '역삼');
+    expect(riding.now, '2정거장 뒤 잠실에서 내리기 · 다음 정차 역삼 · 에스컬레이터 3-3, 8-1 쪽 탑승');
+    final transfer = buildInstruction(
+      request: request,
+      itinerary: it([
+        line2(),
+        leg('WALK', toName: '잠실'),
+        leg('SUBWAY', transit: true, route: '8호선', headsign: '모란',
+            fastExit: const [FastExitFacility(name: '계단', doors: ['1-1', '2-2', '3-3'])]),
+      ]),
+      legIndex: 0,
+      remainingStops: 2,
+    );
+    expect(transfer.next, endsWith(' · 계단 1-1, 2-2 쪽 탑승'));
+    final none = buildInstruction(
+        request: request, itinerary: it([leg('WALK'), line2(fastExit: const []), leg('WALK')]), legIndex: 0);
+    expect(none.next, '탑승 · 2호선 성수 방면 · a');
+  });
+
+  test('짧은 칸-문 표기는 읽는 문장에는 들어가지 않는다', () {
+    final i = buildInstruction(
+      request: request,
+      itinerary: it([
+        line2(),
+        leg('WALK', toName: '잠실'),
+        leg('SUBWAY', transit: true, route: '8호선', headsign: '모란',
+            fastExit: const [FastExitFacility(name: '계단', doors: ['1-1', '2-2'])]),
+      ]),
+      legIndex: 0,
+      remainingStops: 1,
+    );
+    expect(i.next, endsWith(' · 계단 1-1, 2-2 쪽 탑승'));
+    expect(i.utterance, '다음 역에서 내리세요. 환승 · 8호선 모란 방면 · a');
+  });
+
+  test('한 정거장짜리 구간은 승강장에서 기다리는 현재 안내에도 짧은 칸-문 표기를 붙인다', () {
+    final i = buildInstruction(
+        request: request, itinerary: it([leg('WALK'), line2(stops: const []), leg('WALK', toName: '회사')]),
+        legIndex: 1, remainingStops: 1);
+    expect(i.now, '다음 역에서 내리세요 · 잠실 · 에스컬레이터 3-3, 8-1 쪽 탑승');
+    final riding = buildInstruction(
+        request: request, itinerary: it([leg('WALK'), line2(), leg('WALK', toName: '회사')]), legIndex: 1,
+        remainingStops: 1);
+    expect(riding.now, '다음 역에서 내리세요 · 잠실');
+  });
 }

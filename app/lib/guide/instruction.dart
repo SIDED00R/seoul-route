@@ -91,27 +91,31 @@ Instruction buildInstruction({
 }) {
   final ls = legs ?? itinerary.legs;
   final leg = ls[legIndex];
-  final next = _nextAction(request, ls, legIndex);
+  // 화면용 next 에는 짧은 칸-문 표기가 붙고, 읽는 문장에는 붙이지 않는다(칸-문은 fastExitPhrase 가 말로 읽는다).
+  final next = _nextAction(request, ls, legIndex, withDoor: true);
   if (leg.transitLeg) {
     final to = legEndpointName(request, leg.toName, leg.toLat, leg.toLon);
     final unit = leg.mode == 'BUS' ? '정류장' : '역';
     final ride = '${leg.label}${_headsignText(leg)}';
     final total = leg.stops.length + 1; // 하차역 포함 전체 정거장 수
-    final fast = fastExitPhrase(leg, transferAfter: _subwayTransferAfter(ls, legIndex));
+    final transferAfter = _subwayTransferAfter(ls, legIndex);
+    final fast = fastExitPhrase(leg, transferAfter: transferAfter);
+    final door = fastExitShort(leg, transferAfter: transferAfter);
     if (remainingStops <= 1) {
       // 한 정거장짜리 구간은 탑승 안내 없이 바로 여기로 오므로 무엇을 타는지(와 빠른 하차 칸-문)도 함께 읽는다.
       final head = total <= 1 ? '${withObjectParticle(ride)} 타고 ' : '';
       final board = total <= 1 && fast.isNotEmpty ? '$fast. ' : '';
+      final shown = total <= 1 && door.isNotEmpty ? ' · $door' : '';
       return Instruction(
-        now: '다음 $unit에서 내리세요 · $to',
+        now: '다음 $unit에서 내리세요 · $to$shown',
         next: next,
-        utterance: '$head다음 $unit에서 내리세요. $board$next',
+        utterance: '$head다음 $unit에서 내리세요. $board${_nextAction(request, ls, legIndex)}',
         cueKey: 'L$legIndex:alight',
       );
     }
     final via = nextStopName == null ? '' : ' · 다음 정차 $nextStopName';
     return Instruction(
-      now: '$remainingStops정거장 뒤 $to에서 내리기$via',
+      now: '$remainingStops정거장 뒤 $to에서 내리기$via${door.isEmpty ? '' : ' · $door'}',
       next: next,
       // 탑승 안내는 구간에 들어올 때 한 번만 읽는다. 문장의 정거장 수는 구간 전체 값이라 역을 지나도 바뀌지 않는다.
       utterance: '${withObjectParticle(ride)} 타고 $total정거장 뒤 $to에서 내리세요${fast.isEmpty ? '' : '. $fast'}',
@@ -214,6 +218,18 @@ String fastExitPhrase(Leg leg, {required bool transferAfter}) {
   return '${f.name}${_hasFinalConsonant(f.name) ? '과' : '와'} 가까운 $doorsText 쪽에서 타세요';
 }
 
+/// 화면·알림에 넣을 짧은 빠른 하차 표기("에스컬레이터 3-3, 8-1 쪽 탑승"). 설비 선택은 fastExitPhrase 와 같고
+/// 칸-문은 앞에서 두 개까지. 자료가 없으면 빈 문자열.
+String fastExitShort(Leg leg, {required bool transferAfter}) {
+  if (leg.fastExit.isEmpty) return '';
+  final f = leg.fastExit.firstWhere(
+    (f) => f.name.startsWith('환승통로') == transferAfter,
+    orElse: () => leg.fastExit.first,
+  );
+  if (f.doors.isEmpty || f.name.isEmpty) return '';
+  return '${f.name} ${f.doors.take(2).join(', ')} 쪽 탑승';
+}
+
 /// 백엔드 칸-문 표기를 읽는 말로 바꾼다. "3-3" → "3번 칸 3번 문", "3-2,3-3 사이" → "3번 칸 2번 문과 3번 칸 3번 문 사이".
 String _doorText(String door) {
   if (door.endsWith('사이')) {
@@ -236,8 +252,8 @@ bool _subwayTransferAfter(List<Leg> legs, int legIndex) {
   return false;
 }
 
-/// 이 구간 다음에 할 일. 환승·하차 후 출구·대여·반납·도착.
-String _nextAction(PlanRequest request, List<Leg> legs, int legIndex) {
+/// 이 구간 다음에 할 일. 환승·하차 후 출구·대여·반납·도착. withDoor 면 탑승·환승 뒤에 빠른 하차 칸-문 표기를 붙인다.
+String _nextAction(PlanRequest request, List<Leg> legs, int legIndex, {bool withDoor = false}) {
   if (legIndex + 1 >= legs.length) return '도착 · ${request.destination.name}';
   final next = legs[legIndex + 1];
   final to = legEndpointName(request, next.toName, next.toLat, next.toLon);
@@ -249,7 +265,8 @@ String _nextAction(PlanRequest request, List<Leg> legs, int legIndex) {
       next.fromLon,
     );
     final verb = legs[legIndex].transitLeg ? '환승' : '탑승';
-    return '$verb · ${next.label}${_headsignText(next)} · $board';
+    final door = withDoor ? fastExitShort(next, transferAfter: _subwayTransferAfter(legs, legIndex + 1)) : '';
+    return '$verb · ${next.label}${_headsignText(next)} · $board${door.isEmpty ? '' : ' · $door'}';
   }
   if (next.mode == 'BICYCLE') {
     return '${next.rentedBike ? '따릉이 대여' : '자전거 타기'} · $to';
@@ -267,7 +284,8 @@ String _nextAction(PlanRequest request, List<Leg> legs, int legIndex) {
         ride.fromLat,
         ride.fromLon,
       );
-      return '환승 · ${ride.label}${_headsignText(ride)} · $board';
+      final door = withDoor ? fastExitShort(ride, transferAfter: _subwayTransferAfter(legs, legIndex + 2)) : '';
+      return '환승 · ${ride.label}${_headsignText(ride)} · $board${door.isEmpty ? '' : ' · $door'}';
     }
     // 출구 안내는 역 출입구를 실제로 지날 때만 한다(버스 정류장에는 출구가 없다).
     final exit = _firstEntrance(next.steps);
