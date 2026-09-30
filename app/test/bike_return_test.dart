@@ -18,11 +18,13 @@ void main() {
         at: t0.add(Duration(seconds: sec)),
       );
 
-  /// 2초마다 1.2m/s 로 북쪽으로 걷는 표본을 sec 초까지 넣는다.
-  bool walk(BikeReturnDetector d, int untilSec, {double speed = 1.2, double stationM = 400, double routeM = 180}) {
+  /// fromSec 부터 untilSec 초까지 2초마다 북쪽으로 실제 mps 로 움직이는 표본을 넣는다(위치는 0초 기준). speed 는
+  /// 보고 속도.
+  bool walk(BikeReturnDetector d, int untilSec,
+      {int fromSec = 0, double mps = 1.2, double speed = 1.2, double stationM = 400, double routeM = 180}) {
     var fired = false;
-    for (var s = 0; s <= untilSec; s += 2) {
-      fired |= feed(d, s, lat: 37.5 + s * 1.2 / 111195, speed: speed, stationM: stationM, routeM: routeM);
+    for (var s = fromSec; s <= untilSec; s += 2) {
+      fired |= feed(d, s, lat: 37.5 + s * mps / 111195, speed: speed, stationM: stationM, routeM: routeM);
     }
     return fired;
   }
@@ -34,14 +36,41 @@ void main() {
     expect(feed(d, 92, lat: 37.5 + 92 * 1.2 / 111195), isFalse); // 창을 새로 시작한다
   });
 
-  test('계획 대여소 150m 안, 경로선 60m 안, 자전거 속도면 창을 지운다', () {
+  test('계획 대여소 150m 안, 경로선 60m 안, 자전거 속도가 5표본 이어지면 창을 지운다', () {
     expect(walk(BikeReturnDetector(), 120, stationM: 120), isFalse);
     expect(walk(BikeReturnDetector(), 120, routeM: 40), isFalse);
-    expect(walk(BikeReturnDetector(), 120, speed: 4.0), isFalse);
+    expect(walk(BikeReturnDetector(), 120, mps: 4.0, speed: 4.0), isFalse);
     final d = BikeReturnDetector();
     walk(d, 80);
-    feed(d, 82, speed: 4.0); // 한 번 자전거 속도가 나오면 처음부터
-    expect(walk(d, 88), isFalse);
+    walk(d, 88, fromSec: 82, speed: 2.0); // 4표본은 견딘다
+    expect(walk(d, 92, fromSec: 90), isTrue);
+    final e = BikeReturnDetector();
+    walk(e, 80);
+    expect(walk(e, 90, fromSec: 82, speed: 2.0), isFalse); // 5표본째에 처음부터
+    expect(walk(e, 170, fromSec: 92), isFalse);
+    expect(walk(e, 182, fromSec: 172), isTrue);
+  });
+
+  test('걷는 표본의 속도가 한 번 크게 튀어도 창을 지우지 않는다', () {
+    final d = BikeReturnDetector();
+    walk(d, 80);
+    feed(d, 82, lat: 37.5 + 82 * 1.2 / 111195, speed: 3.8);
+    expect(walk(d, 90, fromSec: 84), isTrue);
+  });
+
+  test('2m/s 안팎으로 계속 타거나 신호에 서며 타면 참이 되지 않는다', () {
+    expect(walk(BikeReturnDetector(), 180, mps: 2.0, speed: 2.0), isFalse);
+    expect(walk(BikeReturnDetector(), 180, mps: 2.0, speed: 0), isFalse); // 속도 미상이어도 평균으로
+    // 2.4m/s 로 40초 타고 50초 서기를 반복(평균 1.07m/s): 타는 동안의 속도 표본이 이어져 창이 지워진다
+    final d = BikeReturnDetector();
+    var fired = false;
+    var lat = 37.5;
+    for (var s = 0; s <= 270; s += 2) {
+      final riding = s % 90 < 40;
+      if (riding) lat += 2 * 2.4 / 111195;
+      fired |= feed(d, s, lat: lat, speed: riding ? 2.4 : 0.3);
+    }
+    expect(fired, isFalse);
   });
 
   test('제자리(60m 미만)면 참이 되지 않고, 걷는 속도를 넘는 이동이면 창을 지운다', () {
