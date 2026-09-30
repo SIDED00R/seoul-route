@@ -38,6 +38,9 @@ def env_key() -> str:
         for line in f:
             if line.startswith("KRIC_API_KEY="):
                 v = line.split("=", 1)[1].strip()
+                # 값을 감싼 따옴표는 벗긴다(backend config·deploy/release.ps1 과 같은 규칙).
+                if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+                    v = v[1:-1]
                 if v:
                     return v
     print("KRIC_API_KEY 가 .env 에 없다", file=sys.stderr)

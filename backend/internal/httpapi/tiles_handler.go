@@ -53,7 +53,7 @@ func (s *Server) handleTile(w http.ResponseWriter, r *http.Request) {
 	z, errZ := strconv.Atoi(chi.URLParam(r, "z"))
 	x, errX := strconv.Atoi(chi.URLParam(r, "x"))
 	y, errY := strconv.Atoi(chi.URLParam(r, "y"))
-	if errZ != nil || errX != nil || errY != nil || z < 6 || z > 19 || x < 0 || y < 0 {
+	if errZ != nil || errX != nil || errY != nil || z < 6 || z > 19 || x < 0 || y < 0 || x >= 1<<z || y >= 1<<z {
 		writeError(w, http.StatusBadRequest, "타일 좌표 오류")
 		return
 	}

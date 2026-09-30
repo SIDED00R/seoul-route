@@ -57,7 +57,7 @@ Copy-Item out/seoul-gtfs.zip ../otp/data/seoul-gtfs.zip
 - 시간표 파일이 있는데 대체 대상 노선의 열차가 하나도 없으면 빌드가 실패합니다.
 - 평일·토요일·일요일 service를 분리합니다.
 - 2호선 순환 열차는 서울교통공사 시간표에서 성수 도착으로 끝나는 trip과 성수 출발로 시작하는 trip으로 나뉩니다(같은 열차가 성수에 섰다가 계속 갑니다). 본선으로 성수에 도착한 trip과 3분 안에 같은 방향 본선으로 출발하는 trip을 같은 `block_id`로 묶어 OTP가 내리지 않고 계속 타는 것으로 계산하게 합니다(`gtfs/internal/build/loop_blocks.go`). 2026-09-29 시각표 기준 본선 성수 도착 1,257건 중 같은 방향 다음 출발까지 1분 이하 1,089·1~2분 102·2~3분 5·3~5분 37·5분 넘음 11·없음 13건이고, 묶은 쌍은 1,192개(block 179개)입니다. 3분이 넘는 도착은 9~11시·20~22시에 몰려 있어 차량기지 입고로 보고 묶지 않습니다. 6호선 응암 순환(새절→응암 도착과 응암→역촌 출발)도 같은 규칙으로 묶습니다. 서버는 OTP가 이어 탔다고 표시한 구간(`interlineWithPreviousLeg`)을 한 구간으로 합치고 회차역을 중간 정차로 넣습니다(`backend/internal/otp/interline.go`).
-- 공휴일(`gtfs/internal/build/holidays.go`, 2026~2027)은 `calendar_dates.txt`로 평일·토요일 service를 빼고 일요일 service를 넣습니다. 서울교통공사 휴일 시간표(END)는 일요일·공휴일용입니다. 버스는 공휴일 구분이 없습니다.
+- 공휴일(`gtfs/internal/build/holidays.go`, 2026~2028)은 `calendar_dates.txt`로 평일·토요일 service를 빼고 일요일 service를 넣습니다. 서울교통공사 휴일 시간표(END)는 일요일·공휴일용입니다. 버스는 공휴일 구분이 없습니다.
 - 도시철도 shape은 OSM 선로를 따라 만들고, 선로 연결을 찾지 못한 hop은 직선으로 잇습니다.
 
 ### 역과 출입구
