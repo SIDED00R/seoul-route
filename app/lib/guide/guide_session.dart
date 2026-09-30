@@ -557,7 +557,7 @@ class GuideSession extends ChangeNotifier {
 
   /// 체류를 끝내고 경유지 다음 구간 안내로 돌아간다(체류 시각이 됐거나 사용자가 "지금 출발"을 눌렀을 때).
   void endStay() {
-    if (_stayUntil == null || _ending || _closed) return;
+    if (_stayUntil == null || _ending || _ended || _closed) return;
     _stayUntil = null;
     _shiftFrom(now());
     _stops = StopTracker(tracker.current, tracker.currentPoints, shift: tracker.shift);
@@ -610,7 +610,7 @@ class GuideSession extends ChangeNotifier {
 
   /// 사용자가 손으로 앞뒤 구간을 맞춘다.
   void prevLeg() {
-    if (tracker.index == 0 || _ending) return;
+    if (tracker.index == 0 || _ending || _ended) return;
     tracker.prev(now: now());
     _offRoute.reset();
     _voice.forget('L${tracker.index}:');
@@ -619,7 +619,7 @@ class GuideSession extends ChangeNotifier {
   }
 
   void nextLeg() {
-    if (tracker.isLast || _ending) return;
+    if (tracker.isLast || _ending || _ended) return;
     tracker.next(now: now());
     _offRoute.reset();
     _voice.forget('L${tracker.index}:');

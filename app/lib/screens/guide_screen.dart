@@ -262,12 +262,12 @@ class _GuideScreenState extends State<GuideScreen> {
                   Row(
                     children: [
                       OutlinedButton(
-                        onPressed: tracker.index > 0 && !s.ending ? s.prevLeg : null,
+                        onPressed: tracker.index > 0 && !s.ending && !s.ended ? s.prevLeg : null,
                         child: const Text('이전 구간'),
                       ),
                       const SizedBox(width: 8),
                       OutlinedButton(
-                        onPressed: !tracker.isLast && !s.ending ? s.nextLeg : null,
+                        onPressed: !tracker.isLast && !s.ending && !s.ended ? s.nextLeg : null,
                         child: const Text('다음 구간'),
                       ),
                       const Spacer(),

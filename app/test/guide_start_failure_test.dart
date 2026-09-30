@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +14,16 @@ import 'package:seoul_route/models/itinerary.dart';
 import 'package:seoul_route/models/place.dart';
 import 'package:seoul_route/models/plan_request.dart';
 import 'package:seoul_route/screens/detail_screen.dart';
+import 'package:seoul_route/screens/guide_screen.dart';
+
+const _twoLegs = Itinerary(
+  start: '2026-09-15T09:00:00+09:00',
+  end: '2026-09-15T09:10:00+09:00',
+  durationSec: 600,
+  transfers: 0,
+  walkM: 444,
+  legs: [_leg, _leg],
+);
 
 /// 위치 권한과 위치 서비스 상태를 테스트가 정한다.
 class _Geo extends GeolocatorPlatform {
@@ -101,6 +112,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const permission = MethodChannel('seoul_route/notification_permission');
   const status = MethodChannel('seoul_route/guide_status');
+  const pathProvider = MethodChannel('plugins.flutter.io/path_provider');
   late _Geo geo;
   late _Api api;
   late List<String> statusCalls;
@@ -115,6 +127,8 @@ void main() {
       statusCalls.add(call.method);
       return null;
     });
+    // 안내 화면의 지도 타일 캐시가 묻는 경로. 테스트 호스트에는 플러그인이 없다.
+    messenger.setMockMethodCallHandler(pathProvider, (call) async => Directory.systemTemp.path);
     geo = _Geo();
     GeolocatorPlatform.instance = geo;
     api = _Api();
@@ -125,6 +139,7 @@ void main() {
     final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(permission, null);
     messenger.setMockMethodCallHandler(status, null);
+    messenger.setMockMethodCallHandler(pathProvider, null);
   });
 
   GuideSession newSession() {
@@ -180,6 +195,38 @@ void main() {
     await started;
     expect(s.ended, isTrue);
     expect(statusCalls.last, 'cancel');
+  });
+
+  test('시작하지 못한 세션은 구간을 옮기지 않고 진행 알림도 띄우지 않는다', () async {
+    api.failFirst = 1;
+    final s = GuideSession(api: api, request: _request, itinerary: _twoLegs, speak: (_) async {});
+    ActiveGuide.instance.set(s);
+    await s.start();
+    expect(s.ended, isTrue);
+    statusCalls.clear();
+    s.nextLeg();
+    expect(s.tracker.index, 0);
+    s.nextLeg();
+    s.prevLeg();
+    expect(statusCalls, isEmpty);
+  });
+
+  testWidgets('시작하지 못한 세션의 안내 화면은 이전·다음 구간 버튼을 끈다', (tester) async {
+    api.failFirst = 1;
+    await tester.pumpWidget(MaterialApp(
+      home: GuideScreen(api: api, request: _request, itinerary: _twoLegs, speak: (_) async {}),
+    ));
+    for (var i = 0; i < 50 && !ActiveGuide.instance.current!.ended; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+    }
+    expect(ActiveGuide.instance.current!.ended, isTrue);
+    final next = tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, '다음 구간'));
+    expect(next.onPressed, isNull);
+    expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, '이전 구간')).onPressed, isNull);
+    ActiveGuide.instance.clear();
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 10));
   });
 
   testWidgets('trip 발급 실패로 시작하지 못한 안내와 같은 여정을 상세 화면에서 다시 시작하면 새 세션으로 시작한다', (tester) async {
