@@ -185,6 +185,15 @@ class _GuideScreenState extends State<GuideScreen> {
                 label: const Text('지금 출발'),
               ),
             ),
+          if (s.canReturnBike)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              child: OutlinedButton.icon(
+                onPressed: s.returnBikeElsewhere,
+                icon: const Icon(Icons.pedal_bike),
+                label: const Text('다른 대여소에 반납'),
+              ),
+            ),
           Expanded(
             child: Stack(children: [
               FlutterMap(

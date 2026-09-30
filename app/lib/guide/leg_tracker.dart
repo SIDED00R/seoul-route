@@ -191,13 +191,14 @@ class LegTracker {
     if (index > 0) _goto(index - 1, now ?? DateTime.now(), manual: true);
   }
 
-  /// 현재 구간을 다시 찾은 구간들로 갈아 끼운다(경로 이탈 재탐색). index 는 첫 새 구간을 가리킨 채로 둔다.
-  /// 밀린 시간은 "새 구간들이 끝나는 시각 − 갈아 끼운 구간의 계획 종료" 로 다시 잡되 줄이지는 않는다.
-  void replaceCurrent(List<Leg> fresh, DateTime now) {
-    if (fresh.isEmpty) return;
-    final plannedEnd = DateTime.tryParse(current.end);
-    legs.replaceRange(index, index + 1, fresh);
-    points.replaceRange(index, index + 1, _decode(fresh));
+  /// 현재 구간부터 count 개를 다시 찾은 구간들로 갈아 끼운다(경로 이탈 재탐색은 1개, 따릉이를 다른 대여소에 반납했을
+  /// 때는 자전거 구간과 뒤 도보 구간 2개). index 는 첫 새 구간을 가리킨 채로 둔다.
+  /// 밀린 시간은 "새 구간들이 끝나는 시각 − 갈아 끼운 마지막 구간의 계획 종료" 로 다시 잡되 줄이지는 않는다.
+  void replaceCurrent(List<Leg> fresh, DateTime now, {int count = 1}) {
+    if (fresh.isEmpty || count < 1 || index + count > legs.length) return;
+    final plannedEnd = DateTime.tryParse(legs[index + count - 1].end);
+    legs.replaceRange(index, index + count, fresh);
+    points.replaceRange(index, index + count, _decode(fresh));
     _hits = 0;
     _hitLeg = -1;
     _lastGoodFix = now;
