@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
@@ -25,7 +27,65 @@ class MemoryTokenStorage implements TokenStorage {
   Future<void> delete() async => token = null;
 }
 
+/// 저장 횟수를 세고, gate 가 끝날 때까지 저장을 붙잡아 둔다.
+class HeldSettingsStore extends SettingsStore {
+  HeldSettingsStore() : super(tokenStorage: MemoryTokenStorage());
+
+  final gate = Completer<void>();
+  int saves = 0;
+
+  @override
+  Future<void> save(Settings s) async {
+    saves++;
+    await gate.future;
+  }
+}
+
 void main() {
+  testWidgets('저장이 끝나기 전에 저장을 다시 눌러도 한 번만 저장하고 설정 화면만 닫는다', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final store = HeldSettingsStore();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (ctx) => Scaffold(
+            body: ElevatedButton(
+              onPressed: () => Navigator.push<Settings>(
+                ctx,
+                MaterialPageRoute(
+                  builder: (_) => SettingsScreen(
+                    initial: const Settings(
+                      baseUrl: 'http://10.0.2.2:8081',
+                      token: 'tok',
+                    ),
+                    settingsStore: store,
+                  ),
+                ),
+              ),
+              child: const Text('설정으로'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('설정으로'));
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('저장'));
+    await tester.tap(find.text('저장'));
+    await tester.tap(find.text('저장')); // 화면을 다시 그리기 전
+    await tester.pump();
+    await tester.tap(find.text('저장'), warnIfMissed: false); // 다시 그린 뒤
+    await tester.pump();
+    expect(store.saves, 1);
+
+    store.gate.complete();
+    await tester.pumpAndSettle();
+    expect(store.saves, 1);
+    expect(find.byType(SettingsScreen), findsNothing);
+    expect(find.text('설정으로'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('음성 안내 토글은 저장되고 다시 읽힌다', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final store = SettingsStore(tokenStorage: MemoryTokenStorage());

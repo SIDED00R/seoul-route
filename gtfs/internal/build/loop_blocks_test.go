@@ -9,7 +9,7 @@ import (
 	"github.com/SIDED00R/seoul-route/gtfs/internal/seoulmetro"
 )
 
-func TestLine2LoopBlocks(t *testing.T) {
+func TestLoopBlocks(t *testing.T) {
 	names := map[string]string{"HY": "한양대(2호선)", "TS": "뚝섬(2호선)", "SS": "성수(2호선)", "KD": "건대입구(2호선)",
 		"GU": "구의(광진구청)(2호선)", "YD": "용답(2호선)"}
 	var trips, st [][]string
@@ -37,8 +37,20 @@ func TestLine2LoopBlocks(t *testing.T) {
 	add("S", "SAT", [2]string{"TS", "07:59:30"}, [2]string{"SS", "08:01:00"})
 	add("Y", "WEEKDAY", [2]string{"YD", "08:00:00"}, [2]string{"SS", "08:01:00"})
 
-	blocks, stats := line2LoopBlocks(trips, st, names)
-	want := map[string]string{"A": "B_A", "B": "B_A", "K": "B_A", "D": "B_D", "E": "B_D"}
+	// 6호선: P 새절→응암 10:00:00 도착 → Q 10:00:30 응암→역촌(이어짐). R 은 2호선 trip 이라 같은 시각·같은 역이어도 잇지 않는다.
+	names["SJ"], names["EA"], names["YC"] = "새절(6호선)", "응암(6호선)", "역촌(6호선)"
+	add6 := func(id string, stops ...[2]string) {
+		trips = append(trips, []string{"M_6", "WEEKDAY", id, "응암", "0"})
+		for _, s := range stops {
+			st = append(st, []string{id, s[1], s[1], s[0], ""})
+		}
+	}
+	add6("P", [2]string{"SJ", "09:58:00"}, [2]string{"EA", "10:00:00"})
+	add("R", "WEEKDAY", [2]string{"EA", "10:00:10"}, [2]string{"YC", "10:02:00"})
+	add6("Q", [2]string{"EA", "10:00:30"}, [2]string{"YC", "10:02:30"})
+
+	blocks, stats := loopBlocks(trips, st, names)
+	want := map[string]string{"A": "B_A", "B": "B_A", "K": "B_A", "D": "B_D", "E": "B_D", "P": "B_P", "Q": "B_P"}
 	if len(blocks) != len(want) {
 		t.Fatalf("blocks=%v", blocks)
 	}
@@ -47,7 +59,7 @@ func TestLine2LoopBlocks(t *testing.T) {
 			t.Errorf("%s: block %q want %q", trip, blocks[trip], b)
 		}
 	}
-	if stats != (loopStats{Links: 3, Blocks: 2, Unpaired: 2}) {
+	if stats != (loopStats{Links: 4, Blocks: 3, Unpaired: 2}) {
 		t.Errorf("stats=%+v", stats)
 	}
 }

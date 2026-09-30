@@ -6,7 +6,6 @@ import 'package:seoul_route/models/itinerary.dart';
 
 import 'support/polyline_encode.dart';
 
-// 이슈 #133: 2호선에서 내리기 전(활동 인식 vehicle)인데 지하 위치가 튀어 도보·따릉이 구간으로 먼저 넘어가던 경우.
 // 09:00~09:10 2호선(37.50 → 37.52) → 09:10~09:13 도보(37.52 → 37.5215, 대여소) → 09:13~ 따릉이(→ 37.53).
 DateTime at(int m, [int s = 0]) => DateTime(2026, 9, 28, 9, m, s);
 

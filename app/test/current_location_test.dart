@@ -142,7 +142,7 @@ void main() {
 
     await tester.tap(find.byTooltip('현재 위치'));
     await tester.pump();
-    expect(_planEnabled(tester), isFalse); // 이대로 누르면 A역 기준으로 요청이 나간다
+    expect(_planEnabled(tester), isFalse);
     loc.complete(_here);
     await _frames(tester);
     expect(find.text('출발: 현재 위치'), findsOneWidget);
@@ -186,7 +186,7 @@ void main() {
 
       await tester.tap(find.byType(FilledButton));
       await tester.pump();
-      expect(here().onPressed, isNull); // 이대로 누르면 홈 출발지가 요청과 달라진다
+      expect(here().onPressed, isNull);
       // 꺼진 아이콘을 눌러도 탭이 감싼 출발지 줄로 넘어가 검색이 열리지 않아야 한다. 줄 본문도 마찬가지.
       await tester.tap(find.byIcon(Icons.my_location));
       await _frames(tester);

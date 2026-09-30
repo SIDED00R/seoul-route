@@ -9,18 +9,17 @@ import (
 
 // 신호 횡단보도 대기(crossing.Index)를 후보에 반영하는 규칙.
 //   - 도보·자전거 leg 마다 폴리라인이 지나는 신호 횡단보도 수 × 기대 대기(crossing.ExpectedWaitSec)를 그 leg 와 여정의
-//     Duration 에 더한다. leg 의 Start/End 문자열은 OTP 시간표 값 그대로 둔다(대중교통 leg 의 시각을 옮기면 시간표와
-//     어긋난다). 여정 End 는 마지막 leg 가 도보·자전거일 때만 그 대기만큼 늦춘다.
+//     Duration 에 더한다. leg 의 Start/End 문자열은 OTP 시간표 값 그대로 둔다. 여정 End 는 마지막 대중교통 leg
+//     뒤(대중교통이 없으면 전 구간)의 도보·자전거 대기만큼 늦춘다.
 //   - 탑승 직전까지 이어진 도보·자전거 leg 들(따릉이 접근은 도보+자전거+도보)의 대기 합이 여유(탑승 출발 − 마지막 leg 끝)를
 //     넘기면 그 탑승을 놓친다. 그 지점에서 늦어진 시각으로 한 번 다시 탐색해 뒤 구간을 갈아 끼운다(Replanned).
-//     점수순 상위 ReplanMax 개 후보에만 하고, 재탐색이 실패하면 후보를 그대로 둔다.
-//   - 경유지(Via) 요청은 재탐색하지 않는다 — 재탐색이 leg k 이후를 최종 목적지행으로 통째로 바꿔 남은 경유지·구간 수단
-//     고정이 사라진다. 대기 가산은 그대로 한다.
+//     탑승을 놓치는 후보 중 점수순 상위 ReplanMax 개에만 하고, 재탐색이 실패하면 후보를 그대로 둔다.
+//   - 경유지(Via) 요청은 재탐색하지 않는다. 대기 가산은 그대로 한다.
 //   - 갈아 끼운 뒤 구간의 도보 leg 에도 대기를 더하되 재탐색은 다시 하지 않는다(1회).
 //   - 재탐색은 놓친 탑승 정류장(역 ID)에서 시작한다.
 //   - 도착지가 역 ID 로 앵커링됐으면 재탐색 결과에도 이탈 시간(StationExitSec)을 다시 붙인다 — tail 의 End 가
 //     applyStationSlack 이 붙인 값을 덮어쓴다.
-//   - 재탐색 결과의 대중교통 열(노선·탑승 정류장)이 재탐색하지 않은 다른 후보와 같으면 버린다(열등 복제).
+//   - 재탐색 결과의 대중교통 열(노선·탑승 정류장)이 탑승을 놓치지 않는 다른 후보와 같으면 버린다(열등 복제).
 //   - 서로 다른 원래 후보가 재탐색 뒤 같은 대중교통 열·같은 다음 정차역이 되면 점수(score)가 가장 좋은 하나만 남긴다.
 //     같은 역·같은 노선이라도 다음 정차역이 다르면(순환선 내선·외선) 둘 다 남긴다.
 //   - 역 안 환승 통로 도보(Leg.InStation: 양끝이 같은 부모역의 정류장이고 역 출입구를 지나지 않는다)는 횡단보도를 세지
@@ -38,6 +37,12 @@ func walksOrBikes(l otp.Leg) bool { return l.Mode == "WALK" || l.Mode == "BICYCL
 // 그 탑승 앞에 연속된 도보·자전거 leg 들의 대기 합을 돌려준다.
 func addCrossingWaits(it *otp.Itinerary, cx Crossings, waitPer float64) (int, float64) {
 	needReplan, needWait, acc := -1, 0.0, 0.0
+	lastTransit := -1
+	for i, l := range it.Legs {
+		if l.TransitLeg {
+			lastTransit = i
+		}
+	}
 	for i := range it.Legs {
 		l := &it.Legs[i]
 		if !walksOrBikes(*l) {
@@ -51,7 +56,7 @@ func addCrossingWaits(it *otp.Itinerary, cx Crossings, waitPer float64) (int, fl
 				l.Duration += wait
 				it.Duration += wait
 				it.CrossingWait += wait
-				if i == len(it.Legs)-1 {
+				if i > lastTransit {
 					if end, err := time.Parse(time.RFC3339, it.End); err == nil {
 						it.End = end.Add(time.Duration(wait * float64(time.Second))).Format(time.RFC3339)
 					}
@@ -78,7 +83,7 @@ func slackSec(walkEnd, boardStart string) (float64, bool) {
 	return s.Sub(e).Seconds(), true
 }
 
-// applyCrossings 는 전 후보에 대기를 더하고, 점수순 상위 ReplanMax 개 중 탑승을 놓치는 후보를 다시 탐색한다.
+// applyCrossings 는 전 후보에 대기를 더하고, 탑승을 놓치는 후보 중 점수순 상위 ReplanMax 개를 다시 탐색한다.
 // 재탐색 결과가 다른 후보의 열등 복제면 뺀 목록을 돌려준다. destAnchored 는 Plan 이 applyStationSlack 에 준 값과 같다.
 func (p *Planner) applyCrossings(ctx context.Context, its []otp.Itinerary, req PlanRequest, waitPer float64,
 	destAnchored bool) []otp.Itinerary {
@@ -101,7 +106,7 @@ func (p *Planner) applyCrossings(ctx context.Context, its []otp.Itinerary, req P
 	if len(req.Via) > 0 {
 		return its
 	}
-	// 재탐색 대상은 점수순 상위 ReplanMax. 정렬은 하지 않고(호출자가 나중에 rank) 상위 인덱스만 고른다.
+	// 재탐색 대상은 탑승을 놓치는 후보 중 점수순 상위 ReplanMax. 정렬은 하지 않고(호출자가 나중에 rank) 상위 인덱스만 고른다.
 	order := make([]int, len(its))
 	for i := range order {
 		order[i] = i
@@ -125,7 +130,9 @@ func (p *Planner) applyCrossings(ctx context.Context, its []otp.Itinerary, req P
 	for i, it := range its {
 		sig := transitSig(it.Legs)
 		if !it.Replanned {
-			kept[sig] = true
+			if replanAt[i] < 0 {
+				kept[sig] = true
+			}
 			continue
 		}
 		dir := sig + nextStops(it.Legs)
@@ -176,7 +183,7 @@ func (p *Planner) replanFrom(ctx context.Context, it otp.Itinerary, k int, wait 
 		return it, false
 	}
 	depart := end.Add(time.Duration(wait * float64(time.Second)))
-	// 재탐색 구간은 도보 접근 + 대중교통만(대여를 다시 섞으면 이미 자전거를 탔거나 반납한 상태와 어긋난다).
+	// 재탐색 구간은 도보 접근 + 대중교통만.
 	// 출발은 놓친 탑승 정류장 ID(있으면)로.
 	r := otp.Request{Origin: otp.Coord{Lat: walk.ToLat, Lon: walk.ToLon}, OriginStop: it.Legs[k+1].FromStopID,
 		Destination: coord(req.Destination), DestStop: p.anchor(req.Destination), Modes: modesFor(ModeTransit),
@@ -224,7 +231,7 @@ func (p *Planner) replanFrom(ctx context.Context, it otp.Itinerary, k int, wait 
 }
 
 func sortIdxByScore(its []otp.Itinerary, idx []int) {
-	for i := 1; i < len(idx); i++ { // 후보 수가 작아(수십) 삽입 정렬로 충분하고 안정적이다
+	for i := 1; i < len(idx); i++ {
 		for j := i; j > 0 && score(its[idx[j]]) < score(its[idx[j-1]]); j-- {
 			idx[j], idx[j-1] = idx[j-1], idx[j]
 		}

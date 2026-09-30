@@ -3,7 +3,7 @@
 /// 이어지는 동안은 아무 이벤트도 오지 않는다. 그래서 관측은 후보와 시작 시각만 기록하고, settle() 을 주기적으로 불러
 /// 후보가 hold 이상 유지됐을 때 현재 활동으로 확정한다. 한 번 튄 판정은 곧 다른 판정 이벤트가 오며 지워진다.
 /// LOW 신뢰도·UNKNOWN 은 후보가 되지 않고 후보도 지우지 않는다. STILL 도 후보가 되지는 않지만, stillHold 이상
-/// 이어지면 확정 활동을 미상으로 되돌린다 — 그러지 않으면 열차처럼 폰이 계속 정지로 보는 동안 직전 활동이 그대로 남는다.
+/// 이어지면 확정 활동을 미상으로 되돌린다.
 /// 값은 서버 traces.activity 와 같은 walk / bicycle / vehicle / unknown.
 /// 안내 구간 넘김 보류에는 current 대신 ridingView 를 쓴다(vehicle 이 정지 감쇠로 미상이 된 뒤에도 ridingGrace 동안 vehicle).
 class ActivityClassifier {
@@ -69,8 +69,7 @@ class ActivityClassifier {
       _vehicleDecayedAt = null;
       _candidate = null;
       _since = null;
-      // 정지 시계는 건드리지 않는다. 움직임 관측이 이미 지우므로, 여기서 지우면 "움직임 판정이 잠깐 왔다가
-      // 정지가 계속되는" 순서에서 시계가 다시 시작될 길이 없어(같은 판정은 이벤트가 오지 않는다) 감쇠가 죽는다.
+      // 정지 시계는 건드리지 않는다. 움직임 관측이 이미 지운다.
       return true;
     }
     final still = _stillSince;

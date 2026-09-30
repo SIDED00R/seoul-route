@@ -49,7 +49,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 		applied[n] = true
 	}
 	rows.Close()
-	// Next 는 오류로 끊겨도 false 를 돌려주므로 Err 를 봐야 한다. 안 보면 적용 목록이 비어 기존 SQL 을 재실행한다.
+	// Next 는 오류로 끊겨도 false 를 돌려주므로 Err 를 봐야 한다.
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

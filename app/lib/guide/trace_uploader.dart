@@ -45,7 +45,7 @@ class TraceUploader {
     if (_pending.length >= batchSize) _send();
   }
 
-  // 한 요청 상한. 서버 httpapi.MaxTraceBatch 와 같은 값 — 넘기면 400 이라 오래 끊겼던 큐가 영영 못 나간다.
+  // 한 요청 상한. 서버 httpapi.MaxTraceBatch 와 같은 값 — 넘기면 400 이다.
   static const maxPerRequest = 1000;
 
   Future<void> _send() async {

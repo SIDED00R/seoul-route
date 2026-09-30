@@ -10,7 +10,7 @@ import 'package:seoul_route/settings/settings_store.dart';
 import 'scroll_to.dart';
 import 'settings_test.dart' show MemoryTokenStorage;
 
-// 미니 지도 진하기(overlayOpacity): 저장·복원·상한 자르기, 슬라이더가 네이티브에 바로 반영, 안내 시작 시 전달.
+// 미니 지도 진하기(overlayOpacity): 저장·복원·상한 자르기, 슬라이더가 네이티브에 바로 반영.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -24,7 +24,7 @@ void main() {
     expect((await store.load()).overlayOpacity, closeTo(0.35, 1e-9));
     expect(await SettingsStore.loadOverlayOpacity(), closeTo(0.35, 1e-9));
 
-    // 0.8 을 넘기면 Android 가 뒤 앱 터치를 막으므로 저장 단계에서 자른다.
+    // 저장 단계에서 자른다.
     await store.save(const Settings(baseUrl: 'http://x', token: 't', overlayOpacity: 0.95));
     expect((await store.load()).overlayOpacity, Settings.maxOverlayOpacity);
     await store.save(const Settings(baseUrl: 'http://x', token: 't', overlayOpacity: 0.0));

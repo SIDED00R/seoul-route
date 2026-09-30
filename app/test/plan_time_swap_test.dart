@@ -40,6 +40,14 @@ Future<void> _pick(WidgetTester t, Finder opener, Place p) async {
   await _frames(t);
 }
 
+/// index 번째 경유지의 체류 드롭다운을 열고 label 항목을 고른다.
+Future<void> _chooseStay(WidgetTester t, int index, String label) async {
+  await t.tap(find.byType(DropdownButton<int>).at(index));
+  await _frames(t);
+  await t.tap(find.text(label).last);
+  await _frames(t);
+}
+
 /// 경유지·시각 줄이 늘어도 경로 찾기 버튼까지 한 화면에 들어오게 화면을 키운다(목록 밖 위젯은 만들어지지 않는다).
 void _tall(WidgetTester t) {
   t.view.physicalSize = const Size(1440, 4000);
@@ -121,6 +129,8 @@ void main() {
       await _pick(tester, find.text('도착지 선택'), _b);
       await _pick(tester, find.text('경유지 추가'), _c);
       await _pick(tester, find.text('경유지 추가'), _d);
+      await _chooseStay(tester, 0, '30분'); // C역 30분
+      await _chooseStay(tester, 1, '1시간'); // D역 60분
       await tester.tap(find.text('도보').first); // 구간 1(A→C) 도보
       await tester.pump();
       await tester.tap(find.byTooltip('출발·도착 바꾸기'));
@@ -133,6 +143,9 @@ void main() {
       await tester.tap(find.byType(FilledButton));
       await _frames(tester);
       expect(sent!['segment_modes'], ['any', 'any', 'walk']); // 도보 구간은 이제 마지막(C→A)
+      final via = sent!['via'] as List;
+      expect([for (final v in via) v['name']], ['D역', 'C역']);
+      expect([for (final v in via) v['stay_min']], [60, 30]); // 체류는 경유지를 따라간다
     }, () => mock);
   });
 

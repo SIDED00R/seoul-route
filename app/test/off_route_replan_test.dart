@@ -417,7 +417,6 @@ void main() {
     await tester.pump(const Duration(seconds: 10));
   });
 
-  // 다시 찾은 경로가 여러 구간이면 화면의 구간 수도 그만큼 늘어야 한다.
   testWidgets('여러 구간으로 다시 찾으면 화면 구간 수가 따라간다', (tester) async {
     api.reply = PlanResult(itineraries: [
       Itinerary(start: _t(0), end: _t(8), durationSec: 480, transfers: 0, walkM: 400, legs: [
@@ -519,7 +518,6 @@ void main() {
     await tester.pump(const Duration(seconds: 10));
   });
 
-  // 구간이 바뀌면 이탈 셈을 지워야 한다 — 앞 구간에서 쌓인 수가 남으면 새 구간에서 바로 재탐색이 터진다.
   testWidgets('자동으로 구간이 넘어가면 이탈 셈을 지운다', (tester) async {
     await pumpTwo(tester);
     await push(tester, _pos(37.5, 127.0));

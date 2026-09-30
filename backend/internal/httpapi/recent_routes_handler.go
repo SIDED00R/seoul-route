@@ -73,9 +73,7 @@ func (s *Server) saveRecentRoute(ctx context.Context, userID string, req route.P
 		s.Log.Warn("recent route marshal", "err", err)
 		return
 	}
-	// 탈퇴는 소프트 삭제라 users 행이 남아 FK 만으로는 막히지 않는다. 탐색 도중 탈퇴가 끝나면 그 뒤 이 INSERT 가
-	// 이동 기록을 되살리고, 그 계정 토큰은 이미 401 이라 지울 수도 없다. 사용자 행을 잠가 탈퇴(handleDeleteMe 도
-	// 같은 행을 먼저 잠근다)와 순서를 정하고, 살아 있을 때만 넣는다.
+	// 사용자 행을 잠가 탈퇴(handleDeleteMe 도 같은 행을 먼저 잠근다)와 순서를 정하고, 살아 있을 때만 넣는다.
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		s.Log.Warn("recent route begin", "err", err)

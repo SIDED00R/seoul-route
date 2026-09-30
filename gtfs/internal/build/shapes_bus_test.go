@@ -152,7 +152,7 @@ func TestShapeRowsSkipsRepeatedPoint(t *testing.T) {
 	if len(rows) != 2 || rows[1][3] != "2" || rows[0][4] != "0.00" || rows[1][4] != "111.19" {
 		t.Errorf("rows=%v", rows)
 	}
-	// 마지막 점이 빠지면 남는 점이 shape 길이를 갖는다(마지막 정류장 거리가 shape 길이를 넘지 않게).
+	// 마지막 점이 빠지면 남는 점이 shape 길이를 갖는다.
 	rows = shapeRows("S", []geo.Point{{Lat: 37.5, Lon: 127.0}, {Lat: 37.501, Lon: 127.0}, {Lat: 37.5010004, Lon: 127.0}})
 	if len(rows) != 2 || rows[1][4] != "111.24" {
 		t.Errorf("끝점: rows=%v", rows)
@@ -221,7 +221,8 @@ func TestBuildWritesBusShapes(t *testing.T) {
 		t.Errorf("하행 shape 점 %d개", n)
 	}
 
-	// 노선 경로가 없으면 shapes.txt 를 쓰지 않고 shape_id 는 비운다.
+	// 노선 경로가 없으면 shapes.txt 를 쓰지 않고 shape_id 는 비운다. 같은 경로에 다시 쓰므로 먼저 닫는다.
+	zr.Close()
 	b.Path = nil
 	rep, err = Build(out, []BusRoute{b}, nil, nil, nil, nil, nil)
 	if err != nil {

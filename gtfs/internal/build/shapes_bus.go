@@ -14,7 +14,6 @@ import (
 //   - BusMaxOffStops 1, BusFarM 300: 한 방향에서 어긋난 가운데 정류장이 이 수 이하이고, 양 끝을 포함한 모든 정류장이
 //     BusFarM 안이면 경로를 쓴다. 양 끝 정류장(차고지 기점)은 어긋난 수에 세지 않는다.
 //   - 탐색 창: 앞 정류장 위치에서 구간거리(fullSectDist)×BusWindowFactor+BusWindowSlackM 안에서만 다음 정류장을 찾는다.
-//     창이 없으면 왕복 노선에서 맞은편 차로에 붙는다.
 const (
 	BusSnapM        = 100.0
 	BusMaxOffStops  = 1

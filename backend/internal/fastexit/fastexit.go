@@ -61,8 +61,7 @@ func Load(path, escalatorPath string) (*Index, error) {
 	return NewIndex(rows, esc), nil
 }
 
-// NewIndex 는 빠른하차 행과 에스컬레이터 운행방향표로 색인을 만든다. escalators 가 비면 에스컬레이터는 싣지 않는다
-// — 올라가는지 내려가는지 모르는 채로 보여 주면 내릴 때 쓸 수 없는 칸을 알려 주게 된다.
+// NewIndex 는 빠른하차 행과 에스컬레이터 운행방향표로 색인을 만든다. escalators 가 비면 에스컬레이터는 싣지 않는다.
 func NewIndex(rows []Row, escalators map[string]Escalator) *Index {
 	ix := &Index{rows: map[[2]string][]Row{}, escalators: escalators}
 	for _, r := range rows {
@@ -76,7 +75,7 @@ func NewIndex(rows []Row, escalators map[string]Escalator) *Index {
 func (ix *Index) Len() int { return len(ix.rows) }
 
 // Lookup 은 line("4호선") 열차로 prevStop 을 지나 station 에 내릴 때의 설비별 칸-문을 돌려준다. 승강장 방향은
-// prevStop 쪽으로 가는 방향의 반대편으로 정한다. 역이 자료에 없거나 방향을 정할 수 없으면 nil(틀린 칸을 주지 않는다).
+// prevStop 쪽으로 가는 방향의 반대편으로 정한다. 역이 자료에 없거나 방향을 정할 수 없으면 nil.
 func (ix *Index) Lookup(line, station, prevStop string) []Facility {
 	rows := ix.rows[[2]string{strings.TrimSpace(line), canon(station)}]
 	prev := canon(prevStop)

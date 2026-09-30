@@ -92,7 +92,7 @@ class GuideStore {
     try {
       s = GuideSnapshot.fromJson(jsonDecode(raw) as Map<String, dynamic>);
     } catch (_) {
-      await p.remove(_key); // 형식이 바뀌었거나 깨진 값 — 다음 실행에서 또 걸리지 않게 지운다
+      await p.remove(_key); // 형식이 바뀌었거나 깨진 값
       return null;
     }
     if ((now ?? DateTime.now()).difference(s.startedAt) > maxAge) {

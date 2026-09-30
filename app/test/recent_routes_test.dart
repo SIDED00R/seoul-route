@@ -65,7 +65,6 @@ Map<String, dynamic> _row(String from, String to,
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
 
-  // 서버가 준 요청을 그대로 되살린다 — 경유지·구간 수단까지 그대로여야 고른 대로 다시 검색된다.
   test('RecentRoute.fromJson: 요청을 그대로 되살린다', () {
     final r = RecentRoute.fromJson(_row('서울역', '강남역',
         via: [
@@ -135,7 +134,7 @@ void main() {
     expect(find.text('서울역 → 강남역'), findsNothing);
   });
 
-  // 삭제를 기다리는 동안 먼저 떠 있던 조회가 돌아온다. 그 응답을 그리면 지운 기록이 화면에 되살아난다.
+  // 삭제를 기다리는 동안 먼저 떠 있던 조회가 돌아온다.
   testWidgets('모두 지우기: 삭제 전에 떠 있던 조회가 지운 목록을 되살리지 않는다', (tester) async {
     final api = _Api(routes: [_row('서울역', '강남역')], holdFrom: 2)
       ..holdClear = Completer<void>()
@@ -193,7 +192,6 @@ void main() {
     expect(find.text('서울역 → 강남역'), findsNothing);
   });
 
-  // 계정이 바뀌면 남아 있는 목록은 남의 기록이다. 먼저 비우고 새로 받아야 한다.
   testWidgets('계정이 바뀌면 이전 기록을 비우고 다시 받는다', (tester) async {
     final mine = _Api(routes: [_row('서울역', '강남역')]);
     final other = _Api(routes: [_row('이태원', '홍대입구')], tok: 'other');
@@ -210,7 +208,6 @@ void main() {
     expect(other.loads, 1);
   });
 
-  // 조회 중에 계정이 바뀌면, 늦게 돌아온 이전 계정 응답이 화면을 덮으면 안 되고 새 계정은 반드시 받아야 한다.
   testWidgets('조회 중 계정이 바뀌어도 이전 계정 응답이 남지 않는다', (tester) async {
     final mine = _Api(routes: [_row('서울역', '강남역')], delay: const Duration(milliseconds: 300));
     final other = _Api(routes: [_row('이태원', '홍대입구')], tok: 'other');
@@ -225,7 +222,6 @@ void main() {
     expect(find.text('서울역 → 강남역'), findsNothing); // 늦게 온 이전 계정 응답이 덮지 않았다
   });
 
-  // 길찾기 탭에서 방금 찾은 경로가 보이려면 탭에 들어올 때마다 다시 받아야 한다.
   testWidgets('탭에 들어올 때마다 목록을 다시 받는다', (tester) async {
     final api = _Api(routes: [_row('서울역', '강남역')]);
     Widget tab(int key) => MaterialApp(
@@ -243,7 +239,6 @@ void main() {
     expect(api.loads, 2);
   });
 
-  // 홈은 세 탭이고, 최근 경로를 고르면 길찾기 탭으로 넘어가 출발·도착이 채워진다.
   testWidgets('홈 탭: 최근 경로를 고르면 길찾기 탭에 채워진다', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: HomeScreen(settings: Settings(baseUrl: 'http://x', token: 't'), initialTab: 0, locateOnOpen: null),

@@ -51,8 +51,7 @@ func FetchEscalators(hc *http.Client, base, key string) ([]json.RawMessage, erro
 			return nil, fmt.Errorf("에스컬레이터 API %d행부터: %w", start, err)
 		}
 		// 오류는 HTTP 200 으로 오고 봉투가 세 가지다: 서비스 래퍼 안(RESULT), 래퍼 없는 최상위 RESULT, 평면 CODE.
-		// 래퍼만 보면 최상위 오류가 빈 코드로 통과해 0행이 정상 결과가 된다(gbfs/poller.go 가 같은 호스트에서 셋을
-		// 모두 본다). 잘못된 키는 /json/ 요청에도 XML 로 오므로 위 Unmarshal 이 막는다.
+		// 잘못된 키는 /json/ 요청에도 XML 로 오므로 위 Unmarshal 이 막는다.
 		var p struct {
 			Result struct {
 				Code    string `json:"CODE"`

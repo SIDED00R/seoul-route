@@ -133,7 +133,7 @@ func TestCrossingReplanFailureKeepsItinerary(t *testing.T) {
 	}
 }
 
-// 경유지 요청은 재탐색하지 않는다(재탐색이 남은 경유지를 버린다). 대기는 그대로 더한다.
+// 경유지 요청은 재탐색하지 않는다. 대기는 그대로 더한다.
 func TestCrossingNoReplanWithVia(t *testing.T) {
 	f := &fakeOTP{answer: func(r otp.Request) ([]otp.Itinerary, error) {
 		if r.OriginStop == "seoul:ST_A" {

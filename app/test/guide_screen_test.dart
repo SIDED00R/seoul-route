@@ -84,7 +84,7 @@ Position pos(double lat, double lon, {double acc = 8, DateTime? ts}) =>
       speedAccuracy: 0,
     );
 
-// 시각은 실행 시각 기준으로 만든다 — 고정 시각을 쓰면 StopTracker 의 시간표 판정이 벽시계에 따라 달라진다.
+// 시각은 실행 시각 기준으로 만든다.
 final _base = DateTime.now();
 String _t(int minutes) =>
     _base.add(Duration(minutes: minutes)).toIso8601String();
@@ -234,7 +234,7 @@ void main() {
   late List<String> spoken;
 
   setUp(() {
-    // 안내는 앱에 하나뿐이라 테스트마다 치운다 — 안 그러면 앞 테스트의 안내를 이어받는다.
+    // 안내는 앱에 하나뿐이라 테스트마다 치운다.
     ActiveGuide.instance.clear();
     SharedPreferences.setMockInitialValues(<String, Object>{});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -251,8 +251,7 @@ void main() {
         .setMockMethodCallHandler(channel, null);
   });
 
-  /// 시각은 픽스처를 만든 순간(_base)으로 고정한다. 실제 시계를 쓰면 LegTracker 가 구간 1 에 늦게 들어온
-  /// 것으로 보고 도착 예정을 그만큼 밀어, _base 의 초에 따라 카드의 분이 한 칸 올라간다.
+  /// 시각은 픽스처를 만든 순간(_base)으로 고정한다.
   Future<void> pumpGuide(WidgetTester tester, {bool voice = true}) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -268,7 +267,7 @@ void main() {
     await _settle(tester);
   }
 
-  /// 화면을 닫고 안내도 치운다. 안내는 화면과 별개로 살아 있어(ActiveGuide) 치우지 않으면 10초 타이머가 남는다.
+  /// 화면을 닫고 안내도 치운다.
   Future<void> close(WidgetTester tester) async {
     ActiveGuide.instance.clear();
     await tester.pumpWidget(const SizedBox());
@@ -478,14 +477,49 @@ void main() {
     await close(tester);
   });
 
+  /// 폰 음성 엔진(flutter_tts 채널)을 흉내 내고 읽으라고 받은 문장을 차례로 적는다. speak 를 넘기지 않은 안내는
+  /// 실제 TtsSpeaker 로 이 채널을 부른다.
+  List<String> mockTts() {
+    const tts = MethodChannel('flutter_tts');
+    final read = <String>[];
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(tts, (call) async {
+      // 안드로이드는 {text, focus} 맵, 그 밖의 플랫폼(테스트 호스트)은 문장만 보낸다.
+      final args = call.arguments;
+      if (call.method == 'speak') {
+        read.add('${args is Map ? args['text'] : args}');
+      }
+      return switch (call.method) {
+        'getEngines' => ['com.google.android.tts'],
+        'isLanguageAvailable' => true,
+        _ => 1,
+      };
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(tts, null));
+    return read;
+  }
+
   testWidgets('음성 안내가 꺼져 있으면 읽지 않는다', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'voice_guide': false,
     });
+    final read = mockTts();
     await pumpGuide(tester, voice: false);
     await _push(tester, geo, pos(37.5, 127.0));
     expect(find.text('120m 직진 후 우회전'), findsOneWidget);
-    expect(spoken, isEmpty);
+    expect(read, isEmpty);
+    await close(tester);
+  });
+
+  testWidgets('음성 안내가 켜져 있으면 폰 음성 엔진으로 읽는다', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'voice_guide': true,
+    });
+    final read = mockTts();
+    await pumpGuide(tester, voice: false);
+    await _push(tester, geo, pos(37.5, 127.0));
+    expect(read, ['120m 직진 후 우회전']);
     await close(tester);
   });
 

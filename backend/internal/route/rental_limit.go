@@ -192,7 +192,7 @@ func (p *Planner) fastestBike(ctx context.Context, req PlanRequest, from, to Poi
 }
 
 // splitStation 은 run 대여 묶음의 경로선에서 대여 시작 뒤 limit 초 안에 닿는 지점의 SplitStationM 안에 있는 대여소 중
-// 가장 늦게 닿는 곳. 한도의 절반도 못 가서 닿는 곳뿐이면 없다고 본다(거기서 나누면 뒤쪽이 거의 줄지 않는다).
+// 가장 늦게 닿는 곳. 한도의 절반도 못 가서 닿는 곳뿐이면 없다고 본다.
 func (p *Planner) splitStation(legs []otp.Leg, run [2]int, limit float64) (Point, bool) {
 	if p.Bikes == nil {
 		return Point{}, false

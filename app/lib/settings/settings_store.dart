@@ -40,14 +40,13 @@ class Settings {
   /// 화면 퍼센트 → 알파.
   static double overlayAlphaOf(num percent) => percent / 100 * maxOverlayOpacity;
 
-  // dev flavor 는 서버 주소를 비워 두고 사용자가 넣게 한다. 에뮬레이터 주소(10.0.2.2:8082)를 몰래 넣으면 폰에서는
-  // 닿지 않는 주소로 조용히 타임아웃만 난다(2026-09-22 실측). 비어 있으면 홈이 "먼저 설정하세요"를 띄운다.
+  // dev flavor 는 서버 주소를 비워 두고 사용자가 넣게 한다. 비어 있으면 홈이 "먼저 설정하세요"를 띄운다.
   static const defaultBaseUrl = '';
 
   bool get ready => baseUrl.isNotEmpty && token.isNotEmpty;
 }
 
-/// 서버 주소 정규화. 끝의 `/` 를 지운다(남기면 `//places` 처럼 붙어 chi 가 404 를 낸다). 저장·세션 양쪽이 이 함수를 쓴다.
+/// 서버 주소 정규화. 끝의 `/` 를 지운다. 저장·세션 양쪽이 이 함수를 쓴다.
 String normalizeBaseUrl(String s) => s.trim().replaceAll(RegExp(r'/+$'), '');
 
 class SettingsStore {

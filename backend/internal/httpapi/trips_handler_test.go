@@ -92,11 +92,20 @@ func TestTripTracesAndSpeedLearning(t *testing.T) {
 		token); rr.Code != 404 {
 		t.Fatalf("잘못된 id code=%d", rr.Code)
 	}
-	// 서울 밖 좌표·잘못된 mode 는 400
-	busan := `{"samples":[{"ts":"2026-09-13T09:00:00Z","lat":35.1,"lon":129.0,"accuracy_m":5,"mode":"walk"}]}`
-	if rr, _ := do(t, h, http.MethodPost, "/trips/"+tripID+"/traces", busan, token); rr.Code != 400 {
-		t.Fatalf("부산 좌표 code=%d", rr.Code)
+	// 서울 밖 좌표는 그 샘플만 건너뛴다: 같은 배치의 서울 안 샘플은 저장된다
+	busan := `{"samples":[{"ts":"2026-09-13T08:00:00Z","lat":35.1,"lon":129.0,"accuracy_m":5,"mode":"walk"},` +
+		`{"ts":"2026-09-13T08:00:05Z","lat":0,"lon":0,"accuracy_m":5,"mode":"walk"},` +
+		`{"ts":"2026-09-13T08:00:10Z","lat":37.55,"lon":126.97,"accuracy_m":5,"mode":"transit"}]}`
+	rr, out = do(t, h, http.MethodPost, "/trips/"+tripID+"/traces", busan, token)
+	if rr.Code != 200 || out["accepted"] != float64(1) || out["skipped"] != float64(2) {
+		t.Fatalf("서울 밖 좌표 섞인 배치 code=%d body=%v", rr.Code, out)
 	}
+	var kept int
+	pool.QueryRow(context.Background(), `SELECT count(*) FROM traces WHERE trip_id = $1`, tripID).Scan(&kept)
+	if kept != 1 {
+		t.Fatalf("서울 안 샘플 1개만 저장돼야 한다: traces=%d", kept)
+	}
+	// 잘못된 mode 는 400
 	run := `{"samples":[{"ts":"2026-09-13T09:00:00Z","lat":37.55,"lon":126.97,"accuracy_m":5,"mode":"run"}]}`
 	if rr, _ := do(t, h, http.MethodPost, "/trips/"+tripID+"/traces", run, token); rr.Code != 400 {
 		t.Fatalf("mode run code=%d", rr.Code)
@@ -106,10 +115,11 @@ func TestTripTracesAndSpeedLearning(t *testing.T) {
 	if rr, _ := do(t, h, http.MethodPost, "/trips/"+tripID+"/traces", drive, token); rr.Code != 400 {
 		t.Fatalf("activity driving code=%d", rr.Code)
 	}
-	// 서버 시각보다 MaxClockSkew 넘게 미래인 ts 는 400(30일 삭제가 ts 기준이라 미래 행이 오래 남는다)
+	// 서버 시각보다 MaxClockSkew 넘게 미래인 ts 는 저장하지 않는다
 	future := samplesJSON(time.Now().Add(MaxClockSkew+time.Minute), "walk", 1, 1, 5)
-	if rr, _ := do(t, h, http.MethodPost, "/trips/"+tripID+"/traces", future, token); rr.Code != 400 {
-		t.Fatalf("미래 ts code=%d", rr.Code)
+	rr, out = do(t, h, http.MethodPost, "/trips/"+tripID+"/traces", future, token)
+	if rr.Code != 200 || out["accepted"] != float64(0) || out["skipped"] != float64(1) {
+		t.Fatalf("미래 ts code=%d body=%v", rr.Code, out)
 	}
 	// 걷기 1.6 m/s 30개(29쌍) + 같은 배치 재전송(멱등) + 자전거 8개(7쌍, 표본 부족) + 대중교통 2개
 	t0 := time.Date(2026, 9, 13, 9, 0, 0, 0, time.UTC)
@@ -138,7 +148,7 @@ func TestTripTracesAndSpeedLearning(t *testing.T) {
 	}
 	var n int
 	pool.QueryRow(context.Background(), `SELECT count(*) FROM traces WHERE trip_id = $1`, tripID).Scan(&n)
-	if n != 45 {
+	if n != 46 {
 		t.Fatalf("재전송이 중복 저장됐다: traces=%d", n)
 	}
 	var stored, rawStored, confStored string
@@ -194,8 +204,7 @@ func TestTripTracesAndSpeedLearning(t *testing.T) {
 	_, out = do(t, h, http.MethodPost, "/trips", "", token)
 	trip2 := out["trip_id"].(string)
 	do(t, h, http.MethodPost, "/trips/"+trip2+"/traces", samplesJSON(t0.Add(3*time.Hour), "walk", 1.0, 30, 8), token)
-	// 풀을 미리 데운다: 새 커넥션을 여는 약 40ms 동안 첫 요청이 끝나 버리면 두 요청이 겹치지 않아 사전 검사만으로 409 가 난다.
-	// 커넥션이 준비돼 있어야 둘 다 ownTrip 을 통과해 조건부 UPDATE 가 갈린다.
+	// 풀을 미리 데운다. 커넥션이 준비돼 있어야 둘 다 ownTrip 을 통과해 조건부 UPDATE 가 갈린다.
 	var warm sync.WaitGroup
 	for i := 0; i < 4; i++ {
 		warm.Add(1)

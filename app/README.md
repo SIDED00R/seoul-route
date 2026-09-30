@@ -33,7 +33,6 @@ dev flavor 의 API 주소(처음엔 비어 있어 홈이 입력을 요구합니�
 | 폰(Tailscale) | `http://<PC 호스트명>.<tailnet>.ts.net:8082` |
 | Android 에뮬레이터 | `http://10.0.2.2:8082` |
 | USB 실기기 | `adb reverse tcp:8082 tcp:8082` 후 `http://127.0.0.1:8082` |
-| Tailscale | PC에서 개발 API를 serve한 tailnet 호스트명 URL |
 
 Compose는 API를 `127.0.0.1`에만 공개하므로 같은 Wi-Fi의 사설 IP로 직접 연결할 수 없습니다.
 

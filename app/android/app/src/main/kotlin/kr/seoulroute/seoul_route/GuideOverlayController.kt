@@ -39,6 +39,7 @@ class GuideOverlayController(private val appContext: Context) {
         if (!value) {
             hide()
             destroyEngine()
+            latest = null
         } else if (android.provider.Settings.canDrawOverlays(appContext)) {
             prepareEngine()
             if (appInBackground) show()

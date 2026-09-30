@@ -31,8 +31,7 @@ const tileAttempts = 2
 // 테스트에서 줄여 끼운다.
 var tileAttemptTimeout = 10 * time.Second
 
-// tileBody 는 본문을 다 읽고 닫을 때 그 시도의 컨텍스트를 거둔다. 성공한 시도에서 곧바로 cancel 하면 호출자가
-// io.Copy 로 읽는 도중에 끊겨 타일이 잘린다.
+// tileBody 는 본문을 다 읽고 닫을 때 그 시도의 컨텍스트를 거둔다.
 type tileBody struct {
 	io.ReadCloser
 	cancel context.CancelFunc
@@ -63,7 +62,7 @@ func (s *Server) handleTile(w http.ResponseWriter, r *http.Request) {
 	if resp == nil {
 		// url.Error 에 키가 든 URL 이 실리므로 오류 원문 대신 종류만 남긴다. 앱이 요청을 거둔 것(지도를 넘김)은 실패가 아니다.
 		if kind != "canceled" {
-			s.Log.Warn("vworld tile", "z", z, "x", x, "y", y, "err", kind, "attempts", attempts)
+			s.Log.Warn("vworld tile", "z", z, "err", kind, "attempts", attempts)
 		}
 		writeError(w, http.StatusBadGateway, "지도 타일 실패")
 		return
@@ -77,8 +76,7 @@ func (s *Server) handleTile(w http.ResponseWriter, r *http.Request) {
 
 // fetchTile 은 타일을 받아 200 응답과 실제 상류 요청 횟수를 돌려준다. 연결 오류·시간 초과·상류 5xx 면 한 번 더
 // 보내고, 끝내 실패하면 nil 과 실패 종류("timeout"·"transport"·"canceled"·"status 404" …)를 돌려준다. 4xx 는 다시
-// 보내지 않는다. 시도마다 tileAttemptTimeout 을 따로 주되, 요청 전체가 끝났으면(앱이 거뒀거나 라우트 데드라인)
-// 다시 보내도 상류에 닿지 않으므로 그만둔다.
+// 보내지 않는다. 시도마다 tileAttemptTimeout 을 따로 주되, 요청 전체가 끝났으면(앱이 거뒀거나 라우트 데드라인) 그만둔다.
 func (s *Server) fetchTile(ctx context.Context, u string) (*http.Response, string, int) {
 	kind := ""
 	attempts := 0

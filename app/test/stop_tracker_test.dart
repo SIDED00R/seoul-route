@@ -82,15 +82,13 @@ void main() {
     expect(t.nextStopName(), isNull);
   });
 
-  // 정차 사이를 계획대로 달리는 것은 지연이 아니다. 진행 거리로 계획 시각을 나눠 재지 않고 직전 정차 시각과만
-  // 견주면 정상 주행 시간이 지연으로 쌓여, 위치가 끊긴 뒤 남은 정거장 수가 한 정거장 늦게 줄어든다.
+  // 정차 사이를 계획대로 달리는 것은 지연이 아니다.
   test('정시 주행 중의 위치는 지연으로 쌓이지 않는다', () {
     final t = StopTracker(leg, line);
     expect(t.remaining(37.5005, 127.0, 8, at(60)), 4); // 출발역과 역1 사이 절반, 계획대로
     expect(t.remaining(null, null, 0, at(121)), 3); // 역1 계획 시각이 지나면 그대로 줄어든다
   });
 
-  // 뒤로 크게 튄 표본을 "지금 여기" 로 읽으면 지연이 크게 잡혀 굳고, 이번에는 하차 안내가 되레 늦게 나간다.
   test('뒤로 튄 표본은 지연으로 재지 않는다', () {
     final t = StopTracker(leg, line);
     expect(t.remaining(37.5008, 127.0, 8, at(96)), 3); // 역1 을 20여 m 앞둔 지점 — 통과로 센다
@@ -98,7 +96,7 @@ void main() {
     expect(t.remaining(null, null, 0, at(361)), 1); // 지연이 잡히지 않아 시간표가 그대로 센다
   });
 
-  // 지연은 늦은 쪽으로만 키운다. 계획보다 앞선 지점을 보고 줄이면 하차 안내가 되레 일찍 나간다.
+  // 지연은 늦은 쪽으로만 키운다.
   test('지연은 줄어들지 않는다', () {
     final t = StopTracker(leg, line);
     expect(t.remaining(37.5, 127.0, 8, at(240)), 4); // 승강장에서 240초 기다렸다
@@ -114,8 +112,7 @@ void main() {
     expect(t.remaining(null, null, 0, at(300)), 4); // 기다린 240초가 시간표에 반영된다
   });
 
-  // 남은 정거장 수에는 시간표로 줄어든 값도 섞인다. 그 값으로 "지나온 정차" 를 정하면, 위치가 잠깐 끊긴 사이 시간표가
-  // 한 정거장 줄여 놓은 뒤 돌아온 정상 표본이 "이미 지난 정차" 로 걸러져 기다린 시간을 영영 못 읽는다.
+  // 남은 정거장 수에는 시간표로 줄어든 값도 섞인다.
   test('시간표로 줄어든 값이 지연 관측을 막지 않는다', () {
     final t = StopTracker(leg, line);
     expect(t.remaining(37.5, 127.0, 8, at(0)), 4);
@@ -130,7 +127,7 @@ void main() {
     expect(t.remaining(37.501, 127.0, 8, at(150)), 3); // 역1(계획 도착 120초) 위에 서 있다
     expect(t.remaining(null, null, 0, at(241)), 2); // 역2 계획 시각까지 그대로 센다
 
-    // 떠난 쪽도 같다. 한쪽만 막으면 정차 시간이 그대로 지연으로 들어온다.
+    // 떠난 쪽도 같다.
     final past = StopTracker(leg, line);
     expect(past.remaining(37.50118, 127.0, 8, at(150)), 3); // 역1 을 20m 지난 지점
     expect(past.remaining(null, null, 0, at(241)), 2);

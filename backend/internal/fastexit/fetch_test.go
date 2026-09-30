@@ -61,8 +61,7 @@ func escPage(rows ...string) string {
 		`"row":[%s]}}`, strings.Join(rows, ","))
 }
 
-// 오류가 HTTP 200 으로 오는 봉투 세 가지를 전부 막는지. 래퍼 안쪽만 보면 최상위 오류가 빈 코드로 통과해 0행이
-// 정상 결과가 된다 — 그러면 수집기가 기존 escalator.json 을 "null" 로 덮는다.
+// 오류가 HTTP 200 으로 오는 봉투 세 가지를 전부 막는지.
 func TestFetchEscalatorsErrorEnvelopes(t *testing.T) {
 	body := ""
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, body) }))
@@ -83,8 +82,7 @@ func TestFetchEscalatorsErrorEnvelopes(t *testing.T) {
 	}
 }
 
-// INFO-200 은 오류가 아니라 "범위 밖 = 빈 페이지" 다. 전체 행수가 정확히 1,000의 배수면 마지막 쪽에서 이걸 받는데,
-// 오류로 처리하면 모아 둔 행 전량이 버려진다.
+// INFO-200 은 오류가 아니라 "범위 밖 = 빈 페이지" 다. 전체 행수가 정확히 1,000의 배수면 마지막 쪽에서 이걸 받는다.
 func TestFetchEscalatorsEmptyLastPage(t *testing.T) {
 	var start []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

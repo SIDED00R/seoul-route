@@ -28,7 +28,6 @@ Leg _subway({List<FastExitFacility> fastExit = const []}) => Leg(
     );
 
 void main() {
-  // 상세 화면의 지하철 구간 줄에 하차역 설비 앞 칸이 보이고, 자료가 없는 구간에는 그 줄이 없다.
   testWidgets('상세 화면은 지하철 구간에 하차역 설비 앞 칸을 보여 준다', (tester) async {
     final itinerary = Itinerary(
       start: '2026-09-21T09:00:00+09:00',

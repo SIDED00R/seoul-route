@@ -205,6 +205,9 @@ func (p *Planner) extend(ctx context.Context, req PlanRequest, points []Point, s
 		}
 	} else {
 		depart := candidate.end.Add(stayOf(points[segment]))
+		if request.OriginStop != "" && points[segment].StayMin == 0 {
+			depart = depart.Add(ViaTransferSec * time.Second)
+		}
 		request.Depart = &depart
 	}
 
@@ -236,6 +239,9 @@ func (p *Planner) extend(ctx context.Context, req PlanRequest, points []Point, s
 		if stay := points[segment].StayMin; segment > 0 && stay > 0 && len(candidate.legs) > 0 {
 			arrive := &next.legs[len(candidate.legs)-1]
 			arrive.StayVia, arrive.StaySec = segment, float64(stay*60)
+		}
+		if segment > 0 && request.OriginStop != "" && points[segment].StayMin == 0 && len(candidate.legs) > 0 {
+			next.legs[len(candidate.legs)-1].ViaTransferSec = ViaTransferSec
 		}
 		if len(candidate.legs) > 0 && points[segment].StayMin == 0 &&
 			(lastVehicle(candidate.legs) != "WALK" || firstVehicle(itinerary.Legs) != "WALK") {

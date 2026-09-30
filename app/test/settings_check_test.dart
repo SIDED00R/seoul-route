@@ -15,7 +15,6 @@ import 'settings_test.dart' show MemoryTokenStorage;
 
 // 설정 화면 "연결 확인"이 실패 원인을 구분해 보여 준다(주소 비움 / 서버 미도달 / 401). 허용목록 밖 계정 403 은
 // 토큰 발급 전 /auth/google 에서만 나므로 Google 로그인 경로에서 알린다.
-// 오늘(2026-09-22) Dev 앱이 에뮬레이터용 기본 주소로 조용히 타임아웃만 내던 것을 화면에서 바로 알게 하기 위함.
 void main() {
   // http.runWithClient 존 안에서 pump·tap 을 해야 화면의 top-level http 호출이 MockClient 로 간다.
   Future<void> pump(WidgetTester tester, String baseUrl) async {

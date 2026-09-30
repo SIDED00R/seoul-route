@@ -89,7 +89,7 @@ class GuideSession extends ChangeNotifier {
   /// 위치가 아예 끊기는 지하에서도 시간표로 구간을 넘기려고 이 간격으로 한 번씩 본다.
   static const tickInterval = Duration(seconds: 10);
 
-  /// 경로 이탈 재탐색을 이 간격보다 자주 하지 않는다. 다시 찾은 경로에서도 벗어나면 서버 호출이 이어진다.
+  /// 경로 이탈 재탐색을 이 간격보다 자주 하지 않는다.
   static const rerouteMinGap = Duration(minutes: 1);
 
   /// 도착 자동 종료가 실패하면 10초 점검마다 다시 보낸다. 도착 뒤 이 시간이 지나도 실패하면 위치 스트림을 끊고
@@ -161,7 +161,7 @@ class GuideSession extends ChangeNotifier {
   String get status => _status;
   bool get ending => _ending;
 
-  /// 안내가 끝났다. "현재 경로" 탭은 이때 비운다.
+  /// 안내가 끝났거나 시작하지 못했다. "현재 경로" 탭은 이때 비운다.
   bool get ended => _ended;
 
   /// 경유지에서 머무는 중이다. 안내 화면은 이때 "지금 출발" 버튼을 보여 준다.
@@ -189,7 +189,17 @@ class GuideSession extends ChangeNotifier {
 
   DateTime now() => (_clock ?? DateTime.now)();
 
-  /// 위치 권한·스트림·trip 발급·음성·활동 인식을 켠다. 실패하면 status 에 이유가 남고 안내는 시작되지 않는다.
+  /// 시작하지 못한 세션은 끝난 세션이다. 같은 여정으로 다시 시작하면 새 세션을 만든다. trip 발급을 기다리는 동안
+  /// 위치 표본이 띄운 진행 알림도 지운다(놓은 세션이면 새 안내의 알림이라 건드리지 않는다).
+  void _startFailed(String reason) {
+    _set(() {
+      _status = reason;
+      _ended = true;
+    });
+    if (!_closed) unawaited(_statusNotification.cancel());
+  }
+
+  /// 위치 권한·스트림·trip 발급·음성·활동 인식을 켠다. 실패하면 status 에 이유가 남고 세션은 끝난 상태(ended)가 된다.
   Future<void> start() async {
     var perm = await Geolocator.checkPermission();
     if (perm == LocationPermission.denied) {
@@ -198,11 +208,11 @@ class GuideSession extends ChangeNotifier {
     if (_closed) return;
     if (perm == LocationPermission.denied ||
         perm == LocationPermission.deniedForever) {
-      _set(() => _status = '위치 권한이 없어 안내를 시작할 수 없습니다. 설정에서 허용한 뒤 다시 시작하세요.');
+      _startFailed('위치 권한이 없어 안내를 시작할 수 없습니다. 설정에서 허용한 뒤 다시 시작하세요.');
       return;
     }
     if (!await Geolocator.isLocationServiceEnabled()) {
-      _set(() => _status = '기기 위치 서비스가 꺼져 있습니다.');
+      _startFailed('기기 위치 서비스가 꺼져 있습니다.');
       return;
     }
     // 거부해도 안내는 계속한다(알림창에 안내 알림만 안 뜬다).
@@ -216,8 +226,8 @@ class GuideSession extends ChangeNotifier {
     ).listen(_onPosition, onError: (e) => _set(() => _status = '위치 오류: $e'));
     try {
       final tripId = _resumedTripId ?? await api.startTrip();
-      if (_closed) {
-        // trip 발급을 기다리는 동안 안내를 놓았다면 서버에 열린 기록을 남기지 않는다(이어받은 trip 은 그대로 둔다).
+      if (_closed || _ending || _ended) {
+        // trip 발급을 기다리는 동안 안내를 놓았거나 끝냈다면 서버에 열린 기록을 남기지 않는다(이어받은 trip 은 그대로 둔다).
         if (_resumedTripId == null) {
           try {
             await api.endTrip(tripId);
@@ -231,13 +241,13 @@ class GuideSession extends ChangeNotifier {
     } catch (e) {
       await _positions?.cancel();
       _positions = null;
-      _set(() => _status = 'trip 발급 실패: $e');
+      _startFailed('trip 발급 실패: $e');
       return;
     }
     _persist();
     _set(() => _status = '안내 중');
     _ticker = Timer.periodic(tickInterval, (_) => _onTick());
-    // 첫 발화부터 랜드마크를 쓰되 외부 검색 때문에 안내 시작이 지연되지 않게 2초만 기다린다.
+    // 첫 발화부터 랜드마크를 쓰되 2초만 기다린다.
     // 늦게 도착한 결과는 진행 중인 안내에 비동기로 반영하고, 실패하면 거리 안내로 계속한다.
     final firstLandmarks = _prefetchLandmarks();
     try {
@@ -245,7 +255,7 @@ class GuideSession extends ChangeNotifier {
     } on TimeoutException {
       unawaited(_refreshLandmarks(firstLandmarks));
     }
-    if (_closed) return;
+    if (_closed || _ended) return;
     // 되살린 안내의 체류가 이미 끝났으면 지난 체류 문구를 읽기 전에 끝낸다(음성은 아직 꺼져 있다).
     _checkStayOver(now());
     _instr = _buildInstruction();
@@ -260,7 +270,7 @@ class GuideSession extends ChangeNotifier {
   Future<void> refreshOverlaySetting() async {
     _overlayEnabled = await SettingsStore.loadOverlayGuide();
     final overlayOpacity = await SettingsStore.loadOverlayOpacity();
-    if (_closed) return;
+    if (_closed || _ended) return;
     await GuideOverlayPlatform.setEnabled(
       _overlayEnabled,
       opacity: overlayOpacity,
@@ -276,7 +286,7 @@ class GuideSession extends ChangeNotifier {
     } else {
       if (!await SettingsStore.loadVoiceGuide()) return;
       _speaker = await TtsSpeaker.create();
-      if (_closed) return;
+      if (_closed || _ended) return;
       if (_speaker == null) {
         _set(() => _status = '안내 중 · 음성 엔진 없음');
         return;
@@ -295,7 +305,7 @@ class GuideSession extends ChangeNotifier {
       if (perm == ActivityPermission.DENIED) {
         perm = await ar.requestPermission();
       }
-      if (_closed || perm != ActivityPermission.GRANTED) return;
+      if (_closed || _ended || perm != ActivityPermission.GRANTED) return;
       // 판정이 바뀔 때만 오는 스트림. 확정·정지 감쇠는 settle 시점(위치 샘플과 10초 주기 점검)에 한다.
       _activities = ar.activityStream.listen((a) {
         if (_closed) return;
@@ -327,8 +337,9 @@ class GuideSession extends ChangeNotifier {
       _offRoute.reset();
       _enterLeg(arrived: true);
     } else {
-      // 대중교통에서 내리기 전(탈것 안)에는 위치로 도보 안내 단계를 넘기지 않는다.
-      if (!tracker.riding(_activity.ridingView(at)) &&
+      // 경유지 체류 중이거나 대중교통에서 내리기 전(탈것 안)에는 위치로 도보 안내 단계를 넘기지 않는다.
+      if (_stayUntil == null &&
+          !tracker.riding(_activity.ridingView(at)) &&
           _steps.update(p.latitude, p.longitude, accuracyM: p.accuracy)) {
         refreshLandmarks = true;
       }
@@ -399,7 +410,7 @@ class GuideSession extends ChangeNotifier {
       return;
     }
     final at = now();
-    // 위치가 아예 끊긴 지하에서도 활동 판정이 흐르게 한다 — 그러지 않으면 정지 감쇠가 멈춰 직전 활동이 화면에 박힌다.
+    // 위치가 아예 끊긴 지하에서도 활동 판정이 흐르게 한다.
     _activity.settle(at);
     _checkStayOver(at);
     if (_stayUntil == null && tracker.tick(at, activity: _activity.ridingView(at))) _enterLeg(arrived: true);
@@ -546,7 +557,7 @@ class GuideSession extends ChangeNotifier {
 
   /// 체류를 끝내고 경유지 다음 구간 안내로 돌아간다(체류 시각이 됐거나 사용자가 "지금 출발"을 눌렀을 때).
   void endStay() {
-    if (_stayUntil == null || _ending || _closed) return;
+    if (_stayUntil == null || _ending || _ended || _closed) return;
     _stayUntil = null;
     _shiftFrom(now());
     _stops = StopTracker(tracker.current, tracker.currentPoints, shift: tracker.shift);
@@ -599,7 +610,7 @@ class GuideSession extends ChangeNotifier {
 
   /// 사용자가 손으로 앞뒤 구간을 맞춘다.
   void prevLeg() {
-    if (tracker.index == 0 || _ending) return;
+    if (tracker.index == 0 || _ending || _ended) return;
     tracker.prev(now: now());
     _offRoute.reset();
     _voice.forget('L${tracker.index}:');
@@ -608,7 +619,7 @@ class GuideSession extends ChangeNotifier {
   }
 
   void nextLeg() {
-    if (tracker.isLast || _ending) return;
+    if (tracker.isLast || _ending || _ended) return;
     tracker.next(now: now());
     _offRoute.reset();
     _voice.forget('L${tracker.index}:');
@@ -669,9 +680,9 @@ class GuideSession extends ChangeNotifier {
     await (pending ?? _prefetchLandmarks());
     if (_closed || _ending) return;
     final after = _buildInstruction();
-    // 같은 회전인데 랜드마크 이름이 새로 붙었을 때만 다시 읽는다. 거리(now)는 걷기만 해도 바뀌므로 비교 기준이 못 된다 —
-    // 결과가 null 이거나 실패한 늦은 조회는 같은 문장을 두 번 읽게 했다.
-    if (after.cueKey != before.cueKey || hadLandmark || _currentTurnLandmark().isEmpty) return;
+    // 같은 회전인데 랜드마크 이름이 새로 붙었을 때만 다시 읽는다. 거리(now)는 걷기만 해도 바뀌므로 비교 기준이 못 된다.
+    // 체류 중에는 체류 문구에 랜드마크가 들어가지 않으므로 다시 읽지 않는다.
+    if (_stayUntil != null || after.cueKey != before.cueKey || hadLandmark || _currentTurnLandmark().isEmpty) return;
     _instr = after;
     // 현재 회전 조회가 늦게 끝난 경우에만 보강 문장을 한 번 읽는다. 평소에는 앞선 단계에서 미리 받아 이 경로를 타지 않는다.
     await _voice.say(after.utterance, cueKey: '${after.cueKey}:landmark');
@@ -729,6 +740,8 @@ class GuideSession extends ChangeNotifier {
     _ending = true;
     _set(() => _status = '샘플 전송 중…');
     final up = _uploader;
+    // 사용자가 누른 종료가 실패하면 안내가 이어지므로 음성을 끄기 전 상태로 되돌린다(_resumeAfterFailedEnd).
+    final voiceWas = !keepSpeech && _voice.enabled;
     _voice.enabled = false;
     if (!keepSpeech) await _speaker?.stop();
     // 위치 스트림·10초 점검·알림은 _finished 에서 끊는다(서버 종료가 성공한 뒤). 위치 스트림이 포그라운드 서비스라
@@ -739,6 +752,7 @@ class GuideSession extends ChangeNotifier {
     }
     await up.flush();
     if (up.pending > 0) {
+      _resumeAfterFailedEnd(voiceWas);
       _set(() {
         _ending = false;
         _status =
@@ -757,12 +771,21 @@ class GuideSession extends ChangeNotifier {
         await _finished();
         return const {};
       }
+      _resumeAfterFailedEnd(voiceWas);
       _endFailed(e);
       return null;
     } catch (e) {
+      _resumeAfterFailedEnd(voiceWas);
       _endFailed(e);
       return null;
     }
+  }
+
+  /// 종료가 실패해 안내가 이어질 때 end() 가 끈 음성과 주기 업로드를 다시 켠다.
+  void _resumeAfterFailedEnd(bool voiceWas) {
+    if (_closed) return;
+    if (voiceWas) _voice.enabled = true;
+    _uploader?.start();
   }
 
   void _endFailed(Object e) => _set(() {

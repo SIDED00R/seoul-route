@@ -42,7 +42,7 @@ type TransitMode struct {
 type Request struct {
 	Origin, Destination Coord
 	// OriginStop/DestStop 이 있으면 좌표 대신 역(gtfsId, 예 "seoul:ST_서울")으로 요청한다. OTP 가 역 안에서
-	// 여정에 맞는 stop 을 고르므로 역사 좌표가 엉뚱한 도로에 붙는 문제를 피한다.
+	// 여정에 맞는 stop 을 고른다.
 	OriginStop, DestStop string
 	Via                  []Coord
 	ViaStops             []string // Via 와 같은 길이. 비어 있지 않은 항목은 좌표 대신 그 역 ID 로 경유한다
@@ -88,7 +88,7 @@ type Leg struct {
 	// 탑승 차량이 정류장에 내거는 행선지(대중교통 leg). 2호선 본선은 순환 방향 + 주요역("내선순환 잠실·강남") 또는
 	// 성수행이 아니면 종착역("내선순환 서울대입구")(line2_direction.go).
 	Headsign string `json:"headsign,omitempty"`
-	// 노선 색(생성 GTFS routes.txt, # 없는 6자리 16진수). 앱이 구간 칩·경로선을 이 색으로 칠한다(route/plan.go 가 붙인다).
+	// 노선 색(생성 GTFS routes.txt, # 없는 6자리 16진수). 앱이 구간 칩·경로선을 이 색으로 칠한다.
 	Color     string `json:"color,omitempty"`
 	TextColor string `json:"text_color,omitempty"`
 	Steps     []Step `json:"steps,omitempty"` // 도보·자전거 leg 의 안내 단계
@@ -99,6 +99,9 @@ type Leg struct {
 	// (route/via_stay.go). 앱 안내가 이 leg 를 마치면 체류 상태로 들어간다.
 	StayVia int     `json:"stay_via,omitempty"`
 	StaySec float64 `json:"stay_sec,omitempty"`
+	// 이 leg 끝이 역 ID 로 앵커링된 경유지(체류 0)면 다음 구간 출발 전에 둔 환승 여유 초(route.ViaTransferSec).
+	// 실시간 보정이 탑승 가능 시각에 더한다. 응답에는 싣지 않는다.
+	ViaTransferSec float64 `json:"-"`
 }
 
 // Step 은 도보·자전거 leg 의 안내 단계. Dir 은 이 단계 시작점에서의 회전(OTP relativeDirection),

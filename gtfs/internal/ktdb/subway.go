@@ -16,7 +16,7 @@ type Row = map[string]string
 
 const utf8BOM = "\xef\xbb\xbf"
 
-// Subway 는 bbox 를 지나는 도시철도 trip 과 그 참조 행이다. 각 슬라이스는 원본 열 순서 그대로 담긴다.
+// Subway 는 bbox 를 지나는 도시철도 trip 과 그 참조 행이다.
 type Subway struct {
 	Header    map[string][]string // 파일명 → 헤더
 	Routes    []Row

@@ -48,8 +48,7 @@ class _RecentRoutesTabState extends State<RecentRoutesTab> {
     if (!old.ready || widget.refreshKey != old.refreshKey) _load();
   }
 
-  /// 조회 세대. 요청이 겹치면 마지막 것만 화면에 반영한다 — 계정이 바뀌는 순간 앞선 요청이 늦게 돌아와 이전 계정의
-  /// 기록을 다시 그리면 안 된다. 겹친다고 새 요청을 버리면 바뀐 계정을 아예 못 받는다.
+  /// 조회 세대. 요청이 겹치면 마지막 것만 화면에 반영한다.
   int _loadGen = 0;
 
   Future<void> _load() async {

@@ -4,6 +4,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/SIDED00R/seoul-route/backend/internal/auth"
@@ -34,7 +36,7 @@ type Server struct {
 
 	Planner        *route.Planner
 	GBFS           http.Handler // nil 이면 /gbfs/* 은 503
-	KakaoKey       string       // 비면 /places/search·/places/reverse 503
+	KakaoKey       string       // 비면 /places/search·/places/reverse·/places/landmark 503
 	KakaoBase      string       // 카카오 로컬 API 주소. 비면 KakaoBaseURL(테스트에서만 바꾼다)
 	VWorldKey      string       // 비면 /tiles/* 503, /places/reverse 는 VWorld 건물 이름 없이 답한다
 	VWorldBase     string       // VWorld API 주소. 비면 VWorldBaseURL(테스트에서만 바꾼다)
@@ -76,7 +78,6 @@ func (s *Server) Router() http.Handler {
 		r.With(short).Post("/users/me/favorites", s.handleCreateFavoritePlace)
 		r.With(short).Put("/users/me/favorites/{id}", s.handleUpdateFavoritePlace)
 		r.With(short).Delete("/users/me/favorites/{id}", s.handleDeleteFavoritePlace)
-		// 경로 탐색은 외부 OTP 호출을 포함하므로 별도 제한 시간을 사용한다.
 		r.With(middleware.Timeout(PlanTimeout)).Post("/routes/plan", s.handlePlan)
 		// 최근 경로: 성공한 검색을 기록하고(handlePlan) 홈의 "최근 경로" 탭이 읽는다. recent_routes_handler.go
 		r.With(short).Get("/routes/recent", s.handleGetRecentRoutes)
@@ -111,8 +112,15 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 		var deleted bool
 		err = s.DB.QueryRow(r.Context(),
 			`SELECT deleted_at IS NOT NULL FROM users WHERE id = $1`, userID).Scan(&deleted)
-		if err != nil || deleted {
+		if errors.Is(err, pgx.ErrNoRows) || err == nil && deleted {
 			writeError(w, http.StatusUnauthorized, "사용자 없음")
+			return
+		}
+		if err != nil {
+			if !errors.Is(err, context.Canceled) {
+				s.Log.Error("auth user lookup", "err", err)
+			}
+			writeError(w, http.StatusServiceUnavailable, "사용자 확인 실패")
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxUserID, userID)))
@@ -129,8 +137,13 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 		start := time.Now()
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 		next.ServeHTTP(ww, r)
-		// 쿼리스트링은 기록하지 않는다(키·토큰이 섞일 수 있다).
-		s.Log.Info("http", "method", r.Method, "path", r.URL.Path, "status", ww.Status(),
+		// 쿼리스트링은 기록하지 않는다. 경로는 라우트 패턴으로 남긴다.
+		// 라우트가 없는 요청(404·405)은 패턴이 비어 요청 경로를 남긴다.
+		path := chi.RouteContext(r.Context()).RoutePattern()
+		if path == "" {
+			path = r.URL.Path
+		}
+		s.Log.Info("http", "method", r.Method, "path", path, "status", ww.Status(),
 			"ms", time.Since(start).Milliseconds(), "req", middleware.GetReqID(r.Context()))
 	})
 }

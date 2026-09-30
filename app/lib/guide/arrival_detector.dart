@@ -9,7 +9,7 @@ class ArrivalDetector {
   int _near = 0;
 
   /// 목적지까지 거리가 distM 인 표본을 넣는다. 도착이 막 확정되면 true.
-  /// 한 번 true 를 준 뒤에는 다시 주지 않는다 — 종료가 실패해도 매 표본마다 다시 부르지 않게.
+  /// 한 번 true 를 준 뒤에는 다시 주지 않는다.
   bool _fired = false;
 
   bool update(double distM, double accuracyM) {

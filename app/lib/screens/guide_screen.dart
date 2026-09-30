@@ -93,8 +93,8 @@ class _GuideScreenState extends State<GuideScreen> {
   Future<void> _end() async {
     final res = await _session.end();
     if (res == null) return; // 못 보낸 샘플이 남았거나 trip 을 닫지 못했다. 사유는 세션 상태줄에 있고 다시 누르면 재시도한다
-    // 응답을 기다리는 동안 화면을 떠났어도 성공한 종료는 치운다 — 끝난 세션이 전역에 남고 활동 인식 구독도 살아
-    // 있게 된다. 그 사이 다른 안내를 시작했으면 그 세션을 지우면 안 되므로 같은 것일 때만 치운다.
+    // 응답을 기다리는 동안 화면을 떠났어도 성공한 종료는 치운다. 그 사이 다른 안내를 시작했으면 그 세션을
+    // 지우면 안 되므로 같은 것일 때만 치운다.
     if (identical(ActiveGuide.instance.current, _session)) ActiveGuide.instance.clear();
     if (!mounted) return;
     if (res.isNotEmpty) {
@@ -242,7 +242,6 @@ class _GuideScreenState extends State<GuideScreen> {
                 ),
             ]),
           ),
-          // 실기기(S23 울트라)의 시스템 내비게이션 바가 하단 패널을 덮으므로 아래 인셋만큼 띄운다(에뮬레이터에는 바가 없다).
           SafeArea(
             top: false,
             child: Padding(
@@ -263,12 +262,12 @@ class _GuideScreenState extends State<GuideScreen> {
                   Row(
                     children: [
                       OutlinedButton(
-                        onPressed: tracker.index > 0 && !s.ending ? s.prevLeg : null,
+                        onPressed: tracker.index > 0 && !s.ending && !s.ended ? s.prevLeg : null,
                         child: const Text('이전 구간'),
                       ),
                       const SizedBox(width: 8),
                       OutlinedButton(
-                        onPressed: !tracker.isLast && !s.ending ? s.nextLeg : null,
+                        onPressed: !tracker.isLast && !s.ending && !s.ended ? s.nextLeg : null,
                         child: const Text('다음 구간'),
                       ),
                       const Spacer(),

@@ -13,6 +13,10 @@ const (
 	StationExitSec  = 60.0
 )
 
+// ViaTransferSec 는 역 ID 로 앵커링된 경유지(체류 0)에서 구간별 탐색이 다음 구간 출발에 두는 환승 여유(초).
+// realtime.TransferSlackSec(OTP transferSlack)과 같은 값.
+const ViaTransferSec = 120
+
 // applyStationSlack 은 앵커링된 출발지의 여정 출발(Start)을 진입시간만큼 앞당기고(출입구에서 출발),
 // 앵커링된 도착지의 도착(End)을 이탈시간만큼 늦춘다(출입구 도착). Duration 은 그만큼 늘어난다.
 // leg 의 시각은 그대로라 첫 leg 앞·끝 leg 뒤에 그만큼 틈이 생긴다(실시간 보정은 그 틈을 접근시간으로 센다).

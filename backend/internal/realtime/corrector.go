@@ -64,9 +64,11 @@ func (c *Corrector) adjustOne(ctx context.Context, now time.Time, it otp.Itinera
 	if err != nil {
 		return it, false, false
 	}
-	var access float64 // 탑승 정류장까지 걸리는 시간(초): 접근 leg 합. 시간표상 대기는 넣지 않는다(그 사이 오는 차는 탄다)
+	// 탑승 정류장까지 걸리는 시간(초): 접근 leg 합 + 경유지 체류·앵커링 경유지 환승 여유. 시간표상 대기는 넣지 않는다
+	// (그 사이 오는 차는 탄다)
+	var access float64
 	for _, l := range it.Legs[:k] {
-		access += l.Duration
+		access += l.Duration + l.StaySec + l.ViaTransferSec
 	}
 	// 역 앵커링이 여정 Start 앞에 벌려 둔 역 진입 틈(route.applyStationSlack)도 접근시간이다.
 	if st, e1 := time.Parse(time.RFC3339, it.Start); e1 == nil {

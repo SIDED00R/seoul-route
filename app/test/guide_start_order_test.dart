@@ -91,7 +91,7 @@ void main() {
   const channel = MethodChannel('seoul_route/notification_permission');
 
   setUp(() {
-    // 안내는 앱에 하나뿐이라 테스트마다 치운다 — 안 그러면 앞 테스트의 안내를 이어받는다.
+    // 안내는 앱에 하나뿐이라 테스트마다 치운다.
     ActiveGuide.instance.clear();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async => true);

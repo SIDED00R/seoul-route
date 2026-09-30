@@ -134,7 +134,7 @@ func TestPadRows(t *testing.T) {
 	}
 }
 
-// 역 좌표가 선로에서 100m 넘게 떨어져 있으면 shape 가 역 좌표를 거친다(OTP 의 150m 검사에 걸리지 않게).
+// 역 좌표가 선로에서 100m 넘게 떨어져 있으면 shape 가 역 좌표를 거친다.
 func TestRailShapeVisitsFarStation(t *testing.T) {
 	ways, stopAt := railFixture()
 	stopAt["A"] = geo.Point{Lat: 37.5002, Lon: 126.9978} // 선로에서 서쪽으로 약 200m
