@@ -16,6 +16,7 @@ import '../util/hhmm.dart';
 import 'activity_classifier.dart';
 import 'arrival_detector.dart';
 import 'background_location.dart';
+import 'bike_return.dart';
 import 'geo.dart' as geo;
 import 'guide_overlay.dart';
 import 'guide_store.dart';
@@ -123,6 +124,7 @@ class GuideSession extends ChangeNotifier {
   final GuideStatusNotification _statusNotification = GuideStatusNotification();
   final ActivityClassifier _activity = ActivityClassifier();
   final OffRouteDetector _offRoute = OffRouteDetector();
+  final BikeReturnDetector _bikeReturn = BikeReturnDetector();
   final ArrivalDetector _arrival = ArrivalDetector();
 
   /// 도착을 확정한 시각. 구간이 바뀌면 지운다. 값이 있는 동안 표본을 서버에 올리지 않고, 경로 이탈 재탐색을
@@ -344,6 +346,7 @@ class GuideSession extends ChangeNotifier {
         refreshLandmarks = true;
       }
       _checkOffRoute(p, at);
+      _checkBikeReturned(p, at);
     }
     _remainingStops = tracker.current.transitLeg
         ? _stops.remaining(p.latitude, p.longitude, p.accuracy, at)
@@ -448,11 +451,78 @@ class GuideSession extends ChangeNotifier {
 
   /// 현재 위치에서 이 구간의 도착지까지 도보로 다시 찾아 구간을 갈아 끼운다. 뒤 구간은 그대로 둔다 —
   /// 다시 찾은 결과로 뒤 탑승을 놓치는 경우는 보지 않는다.
-  Future<void> _replanLeg(LatLng from) async {
+  Future<void> _replanLeg(LatLng from) => _replanOnFoot(
+        from,
+        count: 1,
+        searching: '경로를 벗어나 다시 찾는 중…',
+        found: '경로를 다시 찾았습니다',
+        utterance: '경로를 벗어나 다시 찾았습니다',
+      );
+
+  /// 따릉이 구간에서 계획과 다른 대여소에 반납하고 걷기 시작한 것으로 보이면 자전거 구간과 뒤 도보 구간을 걸어가는
+  /// 경로로 갈아 끼운다. 판정은 BikeReturnDetector. 자동 판정 없이도 안내 화면의 "다른 대여소에 반납" 으로 바로 한다.
+  void _checkBikeReturned(Position p, DateTime at) {
+    if (_rerouting || _ending || _arrivedAt != null || _stayUntil != null || tracker.current.mode != 'BICYCLE') {
+      _bikeReturn.reset();
+      return;
+    }
     final leg = tracker.current;
+    if (!_bikeReturn.update(
+      lat: p.latitude,
+      lon: p.longitude,
+      stationM: geo.distanceM(p.latitude, p.longitude, leg.toLat, leg.toLon),
+      routeM: geo.projectOnPolyline(p.latitude, p.longitude, tracker.currentPoints).distM,
+      speedMps: p.speed,
+      accuracyM: p.accuracy,
+      at: at,
+    )) {
+      return;
+    }
+    unawaited(_replanFromBikeReturn(LatLng(p.latitude, p.longitude)));
+  }
+
+  /// 따릉이 구간에서 "다른 대여소에 반납" 을 누를 수 있다. 재탐색·체류·종료 중에는 못 누른다.
+  bool get canReturnBike =>
+      tracker.current.mode == 'BICYCLE' && !_rerouting && !_ending && !_ended && _stayUntil == null;
+
+  /// 사용자가 계획과 다른 대여소에 반납했다. 현재 위치에서 걸어가는 경로로 자전거 구간과 뒤 도보 구간을 갈아 끼운다.
+  Future<void> returnBikeElsewhere() async {
+    if (!canReturnBike) return;
+    final here = _here;
+    if (here == null) {
+      _set(() => _status = '현재 위치를 아직 받지 못했습니다');
+      return;
+    }
+    await _replanFromBikeReturn(here);
+  }
+
+  /// 자전거 구간과 바로 뒤 도보 구간(있으면)을 현재 위치에서 그 도보 구간 끝(다음 탑승 정류장이나 목적지)까지 걷는 경로로
+  /// 갈아 끼운다.
+  Future<void> _replanFromBikeReturn(LatLng from) {
+    final i = tracker.index;
+    final count = i + 1 < tracker.legs.length && tracker.legs[i + 1].mode == 'WALK' ? 2 : 1;
+    return _replanOnFoot(
+      from,
+      count: count,
+      searching: '반납한 곳에서 걸어가는 경로를 찾는 중…',
+      found: '반납한 곳에서 걸어가는 경로로 안내합니다',
+      utterance: '따릉이를 반납한 곳에서 걸어가는 경로로 다시 안내합니다',
+    );
+  }
+
+  /// 현재 구간부터 count 개를 현재 위치에서 그 마지막 구간의 도착지까지 걷는 경로로 갈아 끼운다.
+  Future<void> _replanOnFoot(
+    LatLng from, {
+    required int count,
+    required String searching,
+    required String found,
+    required String utterance,
+  }) async {
+    final leg = tracker.current;
+    final target = tracker.legs[tracker.index + count - 1];
     _set(() {
       _rerouting = true;
-      _status = '경로를 벗어나 다시 찾는 중…';
+      _status = searching;
     });
     try {
       final res = await api.plan(
@@ -464,10 +534,10 @@ class GuideSession extends ChangeNotifier {
             lon: from.longitude,
           ),
           destination: Place(
-            name: leg.toName,
+            name: target.toName,
             address: '',
-            lat: leg.toLat,
-            lon: leg.toLon,
+            lat: target.toLat,
+            lon: target.toLon,
           ),
           segmentModes: const [SegmentMode.walk],
         ),
@@ -484,10 +554,10 @@ class GuideSession extends ChangeNotifier {
           : res.itineraries.first.legs;
       // 체류하는 경유지로 가던 구간이면 그 표식을 새 경로의 마지막 구간에 옮긴다(도보 재탐색 응답에는 없다).
       // raw 에도 넣어야 안내 저장본을 되살렸을 때 남는다.
-      if (leg.stayVia > 0 && fresh.isNotEmpty) {
+      if (target.stayVia > 0 && fresh.isNotEmpty) {
         fresh = [
           ...fresh.take(fresh.length - 1),
-          Leg.fromJson({...fresh.last.raw, 'stay_via': leg.stayVia, 'stay_sec': leg.staySec}),
+          Leg.fromJson({...fresh.last.raw, 'stay_via': target.stayVia, 'stay_sec': target.staySec}),
         ];
       }
       if (fresh.isEmpty) {
@@ -495,15 +565,16 @@ class GuideSession extends ChangeNotifier {
         _set(() => _status = '다시 찾은 경로가 없습니다 — 원래 경로로 안내합니다');
         return;
       }
-      tracker.replaceCurrent(fresh, now());
+      tracker.replaceCurrent(fresh, now(), count: count);
       _offRoute.reset();
+      _bikeReturn.reset();
       _voice.forget('L${tracker.index}:');
       await _voice.say(
-        '경로를 벗어나 다시 찾았습니다',
+        utterance,
         cueKey: 'reroute:${now().millisecondsSinceEpoch}',
       );
       _enterLeg();
-      _set(() => _status = '경로를 다시 찾았습니다');
+      _set(() => _status = found);
     } catch (e) {
       _offRoute.reset();
       if (_ending || _arrivedAt != null) return; // 종료 중이거나 도착했으면 그 상태 문구를 덮지 않는다
@@ -520,6 +591,7 @@ class GuideSession extends ChangeNotifier {
     final leg = tracker.current;
     _stayUntil = arrived ? _beginStay() : null;
     _arrival.reset(); // 마지막 구간을 벗어났거나 갈아 끼웠으면 도착 셈을 다시 시작한다
+    _bikeReturn.reset();
     _arrivedAt = null;
     _steps = _stepTrackerFor(leg);
     _stops = StopTracker(leg, tracker.currentPoints, shift: tracker.shift);
