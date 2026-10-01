@@ -186,7 +186,8 @@ def tmap_walk(key: str, o: dict, d: dict) -> tuple[float, list[tuple[float, floa
     req = urllib.request.Request(TMAP_URL, json.dumps(body).encode(),
                                  {"Content-Type": "application/json", "appKey": key})
     with urllib.request.urlopen(req, timeout=30) as r:
-        return parse_tmap(json.load(r))
+        # strict=False: 안내 문구 필드에 제어 문자가 그대로 든 응답이 있다(2026-10-01 299건 중 1건)
+        return parse_tmap(json.loads(r.read().decode("utf-8"), strict=False))
 
 
 def write_md(path: str, rows: list[dict], flagged: list[dict], args: argparse.Namespace) -> None:

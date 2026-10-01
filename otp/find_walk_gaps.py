@@ -152,8 +152,43 @@ def explain(ctx: Ctx, f: dict) -> dict:
 
 
 def point_line_m(lat: float, lon: float, line: list[tuple[float, float]]) -> float:
-    """(lat, lon) 에서 경로선 꼭짓점까지 최소 거리. 꼭짓점 간격이 촘촘한 TMap 선에는 충분하다."""
-    return min((fg.haversine(lat, lon, a, b) for a, b in line), default=math.inf)
+    """(lat, lon) 에서 경로선(꼭짓점 목록)까지 최소 거리(m). 선분까지 잰다 — TMap 선은 직선 구간에 꼭짓점이 드물다
+    (양평 나들목→테니스장 805m 에 37개)."""
+    if not line:
+        return math.inf
+    kx = 111_320 * math.cos(math.radians(lat))  # 위경도 → 이 점 기준 평면 m
+    ky = 110_540
+    best = math.inf
+    pts = [((lo - lon) * kx, (la - lat) * ky) for la, lo in line]
+    if len(pts) == 1:
+        return math.hypot(*pts[0])
+    for (ax, ay), (bx, by) in zip(pts, pts[1:]):
+        dx, dy = bx - ax, by - ay
+        t = 0.0 if dx == dy == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / (dx * dx + dy * dy)))
+        best = min(best, math.hypot(ax + t * dx, ay + t * dy))
+    return best
+
+
+TMAP_SAMPLE = 5.0  # 막힌 way 를 TMap 선과 대조할 때 way 위에 찍는 점 간격(m)
+TMAP_MIN_OVERLAP = 30.0  # 막힌 way 중 TMap 선에 TMAP_NEAR 안으로 겹치는 길이가 이것(또는 way 길이의 절반) 이상이면 지난다고 본다
+
+
+def on_tmap(ctx: Ctx, key: tuple, line: list[tuple[float, float]]) -> bool:
+    """후보가 TMap 경로선 위에 있는지. L 은 양끝이 모두 TMAP_NEAR 안, R 은 way 를 TMAP_SAMPLE 간격으로 찍은 점 중
+    TMAP_NEAR 안인 점의 길이 합이 min(TMAP_MIN_OVERLAP, way 길이 절반) 이상."""
+    g = ctx.g
+    if key[0] == "L":
+        return all(point_line_m(*g.coords[n], line) <= TMAP_NEAR for n in key[1:])
+    w = g.ways[key[1]]
+    near = 0.0
+    for a, b in zip(w.nodes, w.nodes[1:]):
+        (la1, lo1), (la2, lo2) = g.coords[a], g.coords[b]
+        n = max(1, int(fg.haversine(la1, lo1, la2, lo2) / TMAP_SAMPLE))
+        for i in range(n):
+            t = (i + 0.5) / n
+            if point_line_m(la1 + (la2 - la1) * t, lo1 + (lo2 - lo1) * t, line) <= TMAP_NEAR:
+                near += fg.haversine(la1, lo1, la2, lo2) / n
+    return near >= min(TMAP_MIN_OVERLAP, w.length_m / 2)
 
 
 SHORT_LINK = 20.0  # 이보다 짧고 큰길을 가로지르지 않는 L 은 등급 A(지도 그릴 때 덜 이은 것일 가능성이 크다)
@@ -198,8 +233,7 @@ def aggregate(ctx: Ctx, flagged: list[dict], results: list[dict]) -> list[dict]:
                 c["example"] = {"o": [f["o_lat"], f["o_lon"], f["o_name"]], "d": [f["d_lat"], f["d_lon"], f["d_name"]],
                                 "otp_m": round(f["otp_m"]), "fixed_m": r["fixed_m"], "set_size": len(r["set"])}
             if f.get("tmap_line"):
-                near = point_line_m(c["lat"], c["lon"], f["tmap_line"]) <= TMAP_NEAR
-                c["tmap_on" if near else "tmap_off"] += 1
+                c["tmap_on" if on_tmap(ctx, k, f["tmap_line"]) else "tmap_off"] += 1
     return sorted(agg.values(), key=lambda c: (-c["pairs"] * c["best_saving_m"], c["length_m"]))
 
 
