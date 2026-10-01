@@ -63,6 +63,7 @@ Copy-Item .env.example .env
 | `GOOGLE_OAUTH_CLIENT_ID` | Google 로그인 |
 | `AUTH_ALLOWED_EMAILS` | Google 로그인 허용 계정(쉼표 구분). 비우면 전부 허용, 목록 밖은 403 |
 | `ODSAY_API_KEY` | 경로 정확도 대조 |
+| `TMAP_APP_KEY` | 도보 우회 대조(선택, `otp/walk_detour_scan.py`만 읽음) |
 
 값에 `$`가 있으면 Compose 보간을 막도록 작은따옴표로 감쌉니다. `.env`, API 키, OTP jar, 원천 데이터와 생성물은 커밋하지 않습니다.
 
@@ -72,7 +73,7 @@ OTP jar, South Korea OSM PBF, 국가교통DB GTFS 파일럿을 `otp/data/`에 �
 
 ```powershell
 python otp/extract_seoul.py
-python otp/patch_osm.py           # otp/osm-overrides.json 의 way 태그 오버라이드(낡은 OSM 태그 보정). 추출 뒤 매번
+python otp/patch_osm.py           # otp/osm-overrides.json 의 오버라이드(낡은 OSM 태그·끊긴 길 보정). 추출 뒤 매번
 python otp/extract_entrances.py
 python otp/extract_crossings.py
 python otp/extract_rail.py
@@ -186,6 +187,7 @@ DB 통합 테스트는 `TEST_DATABASE_URL`이 없으면 완전한 검증이 아�
 
 - [GTFS 생성](docs/gtfs-generator.md)
 - [경로 정확도 평가](docs/routing-accuracy.md)
+- [도보 OSM 결함 점검](docs/walk-audit.md)
 - [자전거 라우팅](docs/bicycle-routing.md)
 - [횡단보도 대기](docs/crossing-wait.md)
 - [안내·경로 이탈](docs/guide-navigation.md)

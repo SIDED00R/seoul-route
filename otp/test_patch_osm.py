@@ -38,7 +38,8 @@ class ApplyTest(unittest.TestCase):
         write_pbf(self.src)
 
     def test_overrides_listed_way_only(self):
-        applied, missing = patch_osm.apply(self.src, self.dst, Overrides(tags={10: {"foot": "yes", "name": "산책로"}}))
+        applied, missing, _ = patch_osm.apply(self.src, self.dst,
+                                              Overrides(tags={10: {"foot": "yes", "name": "산책로"}}))
         self.assertEqual((applied, missing), ({10}, set()))
         ways = read_ways(self.dst)
         self.assertEqual(ways[10], ([1, 2], {"highway": "service", "foot": "yes", "name": "산책로"}))
@@ -47,13 +48,13 @@ class ApplyTest(unittest.TestCase):
         self.assertEqual(count(self.dst, osmium.osm.RELATION), 1)
 
     def test_missing_way_is_reported_not_applied(self):
-        applied, _ = patch_osm.apply(self.src, self.dst, Overrides(tags={99: {"foot": "yes"}}))
+        applied, _, _ = patch_osm.apply(self.src, self.dst, Overrides(tags={99: {"foot": "yes"}}))
         self.assertEqual(applied, set())
         self.assertEqual(read_ways(self.dst)[10][1]["foot"], "no")
 
     def test_add_way_links_existing_nodes(self):
         ov = Overrides(add={900000000001: ([4, 1], {"highway": "footway"})})
-        applied, missing = patch_osm.apply(self.src, self.dst, ov)
+        applied, missing, _ = patch_osm.apply(self.src, self.dst, ov)
         self.assertEqual((applied, missing), (set(), set()))
         ways = read_ways(self.dst)
         self.assertEqual(ways[900000000001], ([4, 1], {"highway": "footway"}))
@@ -73,7 +74,7 @@ class ApplyTest(unittest.TestCase):
 
     def test_add_way_reports_missing_nodes(self):
         ov = Overrides(add={900000000001: ([1, 77], {"highway": "footway"})})
-        _, missing = patch_osm.apply(self.src, self.dst, ov)
+        _, missing, _ = patch_osm.apply(self.src, self.dst, ov)
         self.assertEqual(missing, {77})
 
     def test_add_way_replaces_way_from_previous_patch(self):
@@ -94,6 +95,45 @@ class ApplyTest(unittest.TestCase):
         self.assertEqual(read_ways(self.dst), read_ways(again))
 
 
+class RuleTest(unittest.TestCase):
+    """way 40 출입로 자전거길(foot 없음)·41 본선 자전거길·42 foot=no 나들목·43 출입로 footway."""
+
+    RULE = patch_osm.Rule({"highway": "cycleway"}, patch_osm.re.compile("출입로|나들목"), ["foot"], {"foot": "yes"})
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.src = os.path.join(self.dir, "src.osm.pbf")
+        self.dst = os.path.join(self.dir, "dst.osm.pbf")
+        with osmium.SimpleWriter(self.src) as w:
+            for nid in range(1, 6):
+                w.add(osmium.osm.mutable.Node(id=nid, location=(126.9 + nid / 1000, 37.5), tags={}))
+            w.add(osmium.osm.mutable.Way(id=40, nodes=[1, 2], tags={"highway": "cycleway", "name": "중랑천 자전거길 출입로"}))
+            w.add(osmium.osm.mutable.Way(id=41, nodes=[2, 3], tags={"highway": "cycleway", "name": "한강남자전거길"}))
+            w.add(osmium.osm.mutable.Way(id=42, nodes=[3, 4],
+                                         tags={"highway": "cycleway", "name": "잠원나들목", "foot": "no"}))
+            w.add(osmium.osm.mutable.Way(id=43, nodes=[4, 5], tags={"highway": "footway", "name": "출입로"}))
+
+    def test_rule_sets_only_matching_ways(self):
+        _, _, hits = patch_osm.apply(self.src, self.dst, Overrides(rules=[self.RULE]))
+        self.assertEqual(hits, [1])
+        ways = read_ways(self.dst)
+        self.assertEqual(ways[40][1].get("foot"), "yes")
+        self.assertNotIn("foot", ways[41][1])  # 이름이 안 맞는다
+        self.assertEqual(ways[42][1]["foot"], "no")  # 명시된 보행 금지는 둔다
+        self.assertNotIn("foot", ways[43][1])  # highway 가 안 맞는다
+
+    def test_rerun_counts_already_applied(self):
+        patch_osm.apply(self.src, self.dst, Overrides(rules=[self.RULE]))
+        again = os.path.join(self.dir, "again.osm.pbf")
+        _, _, hits = patch_osm.apply(self.dst, again, Overrides(rules=[self.RULE]))
+        self.assertEqual(hits, [1])
+        self.assertEqual(read_ways(self.dst), read_ways(again))
+
+    def test_way_override_wins_over_rule(self):
+        patch_osm.apply(self.src, self.dst, Overrides(tags={40: {"foot": "designated"}}, rules=[self.RULE]))
+        self.assertEqual(read_ways(self.dst)[40][1]["foot"], "designated")
+
+
 class LoadOverridesTest(unittest.TestCase):
     def write(self, items) -> str:
         path = os.path.join(tempfile.mkdtemp(), "o.json")
@@ -101,12 +141,16 @@ class LoadOverridesTest(unittest.TestCase):
             json.dump(items, f)
         return path
 
-    def test_parses_both_kinds(self):
+    def test_parses_all_kinds(self):
         path = self.write([{"way": 10, "tags": {"foot": "yes"}, "reason": "r", "checked": "2026-10-01"},
-                           {"add_way": 900000000001, "nodes": [1, 2], "tags": {"highway": "footway"}}])
+                           {"add_way": 900000000001, "nodes": [1, 2], "tags": {"highway": "footway"}},
+                           {"rule": {"match": {"highway": "cycleway"}, "name_regex": "출입로", "unset": ["foot"]},
+                            "tags": {"foot": "yes"}}])
         ov = patch_osm.load_overrides(path)
         self.assertEqual(ov.tags, {10: {"foot": "yes"}})
         self.assertEqual(ov.add, {900000000001: ([1, 2], {"highway": "footway"})})
+        self.assertEqual(len(ov.rules), 1)
+        self.assertTrue(ov.rules[0].matches({"highway": "cycleway", "name": "홍제천 자전거길 출입로"}))
 
     def test_rejects_bad_entries(self):
         bad = [
@@ -116,6 +160,8 @@ class LoadOverridesTest(unittest.TestCase):
             [{"add_way": 1, "nodes": [5], "tags": {"highway": "footway"}}],  # 노드 1개
             [{"add_way": 1, "nodes": [5, 6], "tags": {}}],
             [{"tags": {"a": "b"}}],  # 종류 없음
+            [{"rule": {"match": {}}, "tags": {"foot": "yes"}}],  # 빈 match 는 모든 way 에 걸린다
+            [{"rule": {"match": {"highway": "cycleway"}}, "tags": {}}],
         ]
         for items in bad:
             with self.assertRaises(ValueError, msg=str(items)):
