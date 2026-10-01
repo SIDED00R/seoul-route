@@ -22,10 +22,11 @@ import android.widget.TextView
 import kotlin.math.roundToInt
 
 /**
- * 미니 지도(터치 통과 창) 오른쪽 위의 손잡이(⚙)와, 탭하면 그 자리에 펼쳐지는 진하기 슬라이더 띠.
+ * 미니 지도(터치 통과 창) 위의 손잡이(⚙)와, 탭하면 손잡이 높이에 펼쳐지는 진하기 슬라이더 띠.
  * 미니 지도 창은 터치를 못 받으므로 이 작은 창이 대신 입력을 받는다 — 손잡이 32dp(펼치면 띠 56dp 한 줄) 밖은
  * FLAG_NOT_TOUCH_MODAL 로 뒤 앱에 그대로 간다. 끄는 동안 [onPreview] 로 미니 지도에 바로 반영하고, 손을 떼면
  * [onCommit] 으로 설정에 저장한다. 바깥을 누르거나(FLAG_WATCH_OUTSIDE_TOUCH) 4초 동안 입력이 없으면 손잡이로 접힌다.
+ * 손잡이는 처음엔 오른쪽 위에 뜨고, 길게 눌러 끌면 옮겨지며 놓은 자리를 [GuideOverlayHandleStore] 에 저장한다.
  */
 class GuideOverlayControls(
     private val appContext: Context,
@@ -39,6 +40,10 @@ class GuideOverlayControls(
     private var opacity = 0.5f
     private val handler = Handler(Looper.getMainLooper())
     private val collapse = Runnable { if (expanded) show(expanded = false) }
+    private val store = GuideOverlayHandleStore(appContext)
+    private var handleAt: HandleOffset? = null // 이번 실행에서 정한 손잡이 위치(px). 없으면 저장값·기본값
+    private var drag: GuideOverlayHandleDrag? = null
+    private var dragStart = HandleOffset(0, 0)
 
     /** 손잡이 상태로 띄운다(미니 지도가 뜰 때). */
     fun show(opacity: Float) {
@@ -54,6 +59,8 @@ class GuideOverlayControls(
 
     fun hide() {
         handler.removeCallbacks(collapse)
+        drag?.release()
+        drag = null
         root?.let { view ->
             try {
                 windowManager?.removeView(view)
@@ -79,6 +86,8 @@ class GuideOverlayControls(
         }
         root = null
         label = null
+        drag?.release()
+        drag = null
         this.expanded = expanded
         val view = if (expanded) buildStrip() else buildHandle()
         try {
@@ -112,8 +121,45 @@ class GuideOverlayControls(
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.END
-            x = if (expanded) 0 else dp(MARGIN_DP)
-            y = statusBarHeightPx() + dp(MARGIN_DP) // 미니 지도 창의 오른쪽 위(상태 표시줄 아래)
+            val at = handleOffset()
+            x = if (expanded) 0 else at.right
+            y = if (expanded) {
+                HandlePlacement.stripTop(at.top, dp(STRIP_DP), screenHeightPx(), statusBarHeightPx())
+            } else {
+                at.top
+            }
+        }
+    }
+
+    /** 손잡이 위치(px): 이번에 끈 자리 > 저장된 자리 > 오른쪽 위(상태 표시줄 아래) 순, 지금 화면 안으로 자른다. */
+    private fun handleOffset(): HandleOffset {
+        val default = HandleOffset(dp(MARGIN_DP), statusBarHeightPx() + dp(MARGIN_DP))
+        val at = handleAt ?: store.load() ?: default
+        val width = appContext.resources.displayMetrics.widthPixels
+        return HandlePlacement.clamp(at, width, screenHeightPx(), dp(HANDLE_DP), statusBarHeightPx())
+    }
+
+    /** 손잡이·띠가 내려갈 수 있는 아래 끝 = 화면 높이 − 내비게이션 바. 그 아래(제스처 막대 영역)를 가로로 밀면 앱 전환
+     *  제스처가 된다. */
+    private fun screenHeightPx(): Int {
+        val res = appContext.resources
+        val id = res.getIdentifier("navigation_bar_height", "dimen", "android")
+        val nav = if (id > 0) res.getDimensionPixelSize(id) else 0
+        return res.displayMetrics.heightPixels - nav
+    }
+
+    private fun moveHandle(to: HandleOffset) {
+        val view = root ?: return
+        val wm = windowManager ?: return
+        val params = view.layoutParams as? WindowManager.LayoutParams ?: return
+        handleAt = to
+        val at = handleOffset()
+        params.x = at.right
+        params.y = at.top
+        try {
+            wm.updateViewLayout(view, params)
+        } catch (_: IllegalArgumentException) {
+            // 창이 이미 제거됐다.
         }
     }
 
@@ -130,17 +176,32 @@ class GuideOverlayControls(
             val pad = dp(6)
             setPadding(pad, pad, pad, pad)
         }
+        val bg = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(HANDLE_COLOR)
+        }
         return FrameLayout(appContext).apply {
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(0xB3000000.toInt())
-            }
-            contentDescription = "미니 지도 진하기"
+            background = bg
+            contentDescription = "미니 지도 진하기(길게 눌러 옮기기)"
             addView(
                 icon,
                 FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT),
             )
             setOnClickListener { show(expanded = true) }
+            val listener = GuideOverlayHandleDrag(
+                this,
+                onDragStart = {
+                    dragStart = handleOffset()
+                    bg.setColor(HANDLE_DRAG_COLOR)
+                },
+                onDrag = { dx, dy -> moveHandle(HandlePlacement.dragged(dragStart, dx, dy)) },
+                onDrop = {
+                    bg.setColor(HANDLE_COLOR)
+                    store.save(handleOffset())
+                },
+            )
+            drag = listener
+            setOnTouchListener(listener)
         }
     }
 
@@ -223,6 +284,8 @@ class GuideOverlayControls(
         private const val STRIP_DP = 56
         private const val MARGIN_DP = 8
         private const val COLLAPSE_MS = 4000L
+        private const val HANDLE_COLOR = 0xB3000000.toInt()
+        private const val HANDLE_DRAG_COLOR = 0xE61E88E5.toInt() // 끄는 중임을 알리는 파란색
         // 화면은 5~100%, 알파는 퍼센트 × MAX_ALPHA(앱 Settings.overlayAlphaOf 와 같은 식). 0.8 은 Android 터치 차단 상한.
         private const val MIN_PERCENT = 5
         private const val MAX_PERCENT = 100
