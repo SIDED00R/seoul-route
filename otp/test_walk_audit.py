@@ -238,8 +238,22 @@ class GapTest(unittest.TestCase):
         c = cands[0]
         self.assertEqual((c["type"], c["way"], c["pairs"], c["solo"]), ("R", 10, 3, 3))
         self.assertEqual(c["best_saving_m"], round(7000 - rs[0]["fixed_m"]))
-        # 막힌 way 의 대표점(노드 2)은 f2 의 TMap 선 위, f3 의 선(북쪽 3km)에서는 멀다
+        # 막힌 way(노드 1→2)는 f2 의 TMap 선과 겹치고, f3 의 선(북쪽 3km)에서는 멀다
         self.assertEqual((c["tmap_on"], c["tmap_off"]), (1, 1))
+
+    def test_point_line_measures_to_segment_not_vertex(self):
+        line = [pt(0, 0), pt(500, 0)]  # 꼭짓점 2개, 500m
+        self.assertAlmostEqual(fw.point_line_m(*pt(250, 10), line), 10, delta=1)  # 가운데 위 10m
+        self.assertAlmostEqual(fw.point_line_m(*pt(600, 0), line), 100, delta=2)  # 끝 너머는 끝점까지
+        self.assertEqual(fw.point_line_m(*pt(0, 0), []), math.inf)
+
+    def test_on_tmap_link_needs_both_ends_and_way_needs_overlap(self):
+        line = [pt(0, -10), pt(0, 3000)]  # 서쪽 끝(x=0)을 따라 북쪽으로
+        self.assertFalse(fw.on_tmap(self.ctx, ("R", 10), line))  # 막힌 way 1→2 는 x 0~500, 선과 겹치는 건 끝 25m 뿐
+        self.assertTrue(fw.on_tmap(self.ctx, ("R", 10), [pt(-10, 3), pt(510, 3)]))  # 나란히 3m 옆
+        self.assertTrue(fw.on_tmap(self.ctx, ("L", 50001, 50002), [pt(5100, 5), pt(5300, 5)]))
+        # 남북으로 지나는 선이 끝 50001(x 5200)에서 15m, 50002(x 5215)에서 30m — 한쪽 끝만 가깝다
+        self.assertFalse(fw.on_tmap(self.ctx, ("L", 50001, 50002), [pt(5185, -100), pt(5185, 100)]))
 
 
 class DetourScanTest(unittest.TestCase):
