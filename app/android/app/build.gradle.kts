@@ -57,3 +57,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // 안드로이드 의존 없는 Kotlin 로직(미니 지도 손잡이 손짓·위치) 단위 테스트: gradlew testDevDebugUnitTest
+    testImplementation("junit:junit:4.13.2")
+}

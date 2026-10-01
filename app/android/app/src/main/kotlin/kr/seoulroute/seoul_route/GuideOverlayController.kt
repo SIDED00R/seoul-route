@@ -221,7 +221,7 @@ class GuideOverlayController(private val appContext: Context) {
     companion object {
         const val DATA_CHANNEL = "seoul_route/guide_overlay_data"
         private const val TAG = "GuideOverlay"
-        private const val OVERLAY_HEIGHT_DP = 260 // 미니 지도 창 높이. 손잡이 창(GuideOverlayControls)은 이 창 안쪽 오른쪽 위에 따로 뜬다
+        private const val OVERLAY_HEIGHT_DP = 260 // 미니 지도 창 높이. 손잡이 창(GuideOverlayControls)은 따로 뜨고 사용자가 옮길 수 있다
         // 앱이 setEnabled 로 설정값을 넘기기 전 기본. Settings.defaultOverlayOpacity 와 같다(화면 50%).
         private const val DEFAULT_OPACITY = 0.4f
     }
