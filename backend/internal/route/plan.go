@@ -42,6 +42,8 @@ type Point struct {
 	Name string  `json:"name,omitempty"`
 	// StayMin 은 경유지에서 머무는 분(0 = 바로 통과). 경유지에만 쓰고 출발지·도착지 값은 무시한다.
 	StayMin int `json:"stay_min,omitempty"`
+	// OnBoard 는 출발지가 열차 안이라는 뜻이다(앱 안내가 열차로 계획과 다르게 간다고 볼 때). 출발지에만 쓴다. 규칙은 on_board.go
+	OnBoard bool `json:"on_board,omitempty"`
 }
 
 type PlanRequest struct {
@@ -91,6 +93,9 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) ([]otp.Itinerary, e
 	if err := validateArrive(req, p.now()); err != nil {
 		return nil, err
 	}
+	if req.Origin.OnBoard && p.anchor(req.Origin) == "" {
+		return nil, fmt.Errorf("%w: 열차 안 출발지 %dm 안에 역이 없습니다", otp.ErrNoRoute, OnBoardRadiusM)
+	}
 	if req.WalkSpeed <= 0 {
 		req.WalkSpeed = DefaultWalk
 	}
@@ -137,7 +142,8 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) ([]otp.Itinerary, e
 		}
 		base = &b
 	}
-	applyStationSlack(its, anchorsSegment(req.Modes[0]) && p.anchor(req.Origin) != "", destAnchored, base)
+	applyStationSlack(its, anchorsSegment(req.Modes[0]) && p.anchor(req.Origin) != "" && entersStation(req.Origin),
+		destAnchored, base)
 	timed := req.Depart
 	if req.Arrive != nil {
 		timed = req.Arrive

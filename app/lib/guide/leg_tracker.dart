@@ -210,4 +210,18 @@ class LegTracker {
     final late = now.add(Duration(seconds: sec.round())).difference(plannedEnd);
     if (late > shift) shift = late;
   }
+
+  /// 남은 여정을 다시 찾은 여정의 구간들로 갈아 끼우고 index 를 첫 새 구간에 둔다(지하철에서 계획과 다르게 움직였을 때).
+  /// keepCurrent 면 현재 구간은 마친 것으로 남기고 그 뒤를(지하철에서 내렸다), 아니면 현재 구간부터(다른 열차로 간다)
+  /// 갈아 끼운다. 새 구간의 시각은 지금 기준으로 다시 잡힌 값이라 밀린 시간은 0 이다.
+  void replaceRest(List<Leg> fresh, DateTime now, {bool keepCurrent = false}) {
+    if (fresh.isEmpty) return;
+    if (keepCurrent) index++;
+    legs.replaceRange(index, legs.length, fresh);
+    points.replaceRange(index, points.length, _decode(fresh));
+    _hits = 0;
+    _hitLeg = -1;
+    _lastGoodFix = now;
+    shift = Duration.zero;
+  }
 }
