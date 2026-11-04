@@ -10,9 +10,13 @@ import (
 // AnchorRadiusM 은 장소명과 같은 부모역을 찾는 반경이다.
 const AnchorRadiusM = 1000
 
-// anchor 는 장소명이 역이면 그 역의 gtfsId 를, 아니면 "" 를 돌려준다.
+// anchor 는 장소명이 역이면 그 역의 gtfsId 를, 아니면 "" 를 돌려준다. 열차 안 출발지는 이름 대신 가장 가까운 역이다
+// (on_board.go).
 // 역 ID를 사용하면 OTP가 여정에 맞는 정차점을 고른다.
 func (p *Planner) anchor(pt Point) string {
+	if pt.OnBoard {
+		return p.nearestStation(pt, OnBoardRadiusM)
+	}
 	base := stationBase(pt.Name)
 	if base == "" {
 		return ""

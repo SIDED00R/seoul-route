@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:seoul_route/api/client.dart';
+import 'package:seoul_route/guide/guide_session.dart';
 import 'package:seoul_route/guide/guide_store.dart';
 import 'package:seoul_route/models/itinerary.dart';
 import 'package:seoul_route/models/place.dart';
 import 'package:seoul_route/models/plan_request.dart';
 
-Map<String, dynamic> _legJson(String to, double toLat) => {
+Map<String, dynamic> _legJson(String to, double toLat, {String polyline = 'abc'}) => {
       'mode': 'WALK',
       'duration_sec': 300,
       'distance_m': 222,
@@ -18,7 +20,7 @@ Map<String, dynamic> _legJson(String to, double toLat) => {
       'from_lon': 127.0,
       'to_lat': toLat,
       'to_lon': 127.0,
-      'polyline': 'abc',
+      'polyline': polyline,
       'start': '2026-09-20T09:00:00+09:00',
       'end': '2026-09-20T09:05:00+09:00',
       'crossings': 2,
@@ -44,8 +46,9 @@ final _request = PlanRequest(
   segmentModes: const [SegmentMode.walk, SegmentMode.bike],
 );
 
-GuideSnapshot _snap(DateTime startedAt, {int legIndex = 1}) {
-  final legs = [_legJson('경유', 37.501), _legJson('도착지', 37.502)];
+/// polyline 은 저장·되읽기만 볼 때는 아무 값이나 되지만, 안내로 이어받으려면 디코딩되는 값(빈 값 = 양끝 직선)이어야 한다.
+GuideSnapshot _snap(DateTime startedAt, {int legIndex = 1, DateTime? eta, String polyline = 'abc'}) {
+  final legs = [_legJson('경유', 37.501, polyline: polyline), _legJson('도착지', 37.502, polyline: polyline)];
   return GuideSnapshot(
     tripId: 'T1',
     request: _request,
@@ -54,6 +57,7 @@ GuideSnapshot _snap(DateTime startedAt, {int legIndex = 1}) {
     legIndex: legIndex,
     shift: const Duration(seconds: 95),
     startedAt: startedAt,
+    eta: eta,
   );
 }
 
@@ -82,6 +86,24 @@ void main() {
     expect(got.legs[1].steps.single.street, '테헤란로');
     expect(got.itinerary.legs.length, 2);
     expect(got.itinerary.durationSec, 300);
+  });
+
+  test('남은 여정을 다시 찾은 도착 시각은 저장본에 남고, 이어받은 안내의 도착 예정이 그 값을 기준으로 한다', () async {
+    final api = ApiClient(baseUrl: 'http://x', token: 't');
+    final replanned = DateTime.parse('2026-09-20T10:40:00+09:00');
+    await store.save(_snap(now.subtract(const Duration(minutes: 20)), eta: replanned, polyline: ''));
+    final got = (await store.load(now: now))!;
+    expect(got.eta, replanned);
+    // start() 를 부르지 않은 세션이라 위치 스트림·타이머가 없어 놓을 것이 없다.
+    final resumed = GuideSession.resume(got, api: api);
+    expect(resumed.eta, replanned.add(const Duration(seconds: 95)));
+
+    // 이 값이 없는(다시 찾지 않은·이전 형식) 저장본은 원래 여정의 도착을 쓴다.
+    await store.save(_snap(now.subtract(const Duration(minutes: 20)), polyline: ''));
+    final old = (await store.load(now: now))!;
+    expect(old.eta, isNull);
+    final plain = GuideSession.resume(old, api: api);
+    expect(plain.eta, DateTime.parse('2026-09-20T09:05:00+09:00').add(const Duration(seconds: 95)));
   });
 
   test('시작한 지 오래된 안내는 되살리지 않고 지운다', () async {

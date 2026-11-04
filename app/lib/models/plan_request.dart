@@ -22,6 +22,7 @@ class PlanRequest {
     this.bikeLimitMin = 0,
     this.depart,
     this.arrive,
+    this.originOnBoard = false,
   });
 
   final Place origin;
@@ -33,6 +34,10 @@ class PlanRequest {
   final DateTime? depart; // 이 시각에 출발. depart·arrive 둘 다 없으면 지금 출발
   final DateTime? arrive; // 이 시각까지 도착(서버는 경유지·구간 수단 고정이 없을 때만 받는다)
 
+  /// 출발지가 열차 안이다(안내가 열차로 계획과 다르게 간다고 보고 다시 찾을 때만 쓴다). 서버는 출발지 근처 역에서 열차를
+  /// 타고 있는 것으로 찾는다. 다시 찾기 요청은 안내 저장본에 남지 않으므로 fromJson 은 읽지 않는다.
+  final bool originOnBoard;
+
   /// i 번째 경유지 체류(분).
   int stayAt(int i) => i < viaStayMin.length ? viaStayMin[i] : 0;
 
@@ -43,7 +48,7 @@ class PlanRequest {
   static Map<String, dynamic> _pt(Place p) => {'lat': p.lat, 'lon': p.lon, 'name': p.name};
 
   Map<String, dynamic> toJson() => {
-        'origin': _pt(origin),
+        'origin': {..._pt(origin), if (originOnBoard) 'on_board': true},
         'destination': _pt(destination),
         if (via.isNotEmpty)
           'via': [

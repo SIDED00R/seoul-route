@@ -84,7 +84,7 @@ func (p *Planner) single(ctx context.Context, req PlanRequest) ([]otp.Itinerary,
 		t := *req.Arrive
 		base.Arrive = &t
 	}
-	if base.OriginStop != "" && req.Arrive == nil {
+	if base.OriginStop != "" && req.Arrive == nil && entersStation(req.Origin) {
 		base.Depart = entryDepart(req.Depart, p.now())
 	}
 	for _, via := range req.Via {
@@ -231,7 +231,7 @@ func (p *Planner) extend(ctx context.Context, req PlanRequest, points []Point, s
 	}
 	if segment == 0 {
 		request.Depart = req.Depart
-		if request.OriginStop != "" {
+		if request.OriginStop != "" && entersStation(req.Origin) {
 			request.Depart = entryDepart(req.Depart, p.now())
 		}
 	} else {

@@ -27,6 +27,7 @@ import 'status_notification.dart';
 import 'step_tracker.dart';
 import 'stop_tracker.dart';
 import 'trace_uploader.dart';
+import 'transit_deviation.dart';
 import 'tts_speaker.dart';
 import 'via_stay_instruction.dart';
 import 'voice_guide.dart';
@@ -67,6 +68,7 @@ class GuideSession extends ChangeNotifier {
       shift: snap.shift,
     );
     _stayUntil = snap.stayUntil;
+    _replannedEnd = snap.eta;
     _initTrackers();
   }
 
@@ -80,6 +82,7 @@ class GuideSession extends ChangeNotifier {
     _remainingStops = tracker.current.transitLeg
         ? tracker.current.stops.length + 1
         : 0;
+    _startTransitDeviation(trustBoard: false);
     _instr = _buildInstruction();
   }
 
@@ -125,6 +128,7 @@ class GuideSession extends ChangeNotifier {
   final ActivityClassifier _activity = ActivityClassifier();
   final OffRouteDetector _offRoute = OffRouteDetector();
   final BikeReturnDetector _bikeReturn = BikeReturnDetector();
+  final TransitDeviationDetector _transitDeviation = TransitDeviationDetector();
   final ArrivalDetector _arrival = ArrivalDetector();
 
   /// 도착을 확정한 시각. 구간이 바뀌면 지운다. 값이 있는 동안 표본을 서버에 올리지 않고, 경로 이탈 재탐색을
@@ -136,6 +140,9 @@ class GuideSession extends ChangeNotifier {
   DateTime? _stayUntil;
   final VoiceGuide _voice = VoiceGuide(enabled: false);
   late final DateTime? _eta = DateTime.tryParse(itinerary.end);
+
+  /// 남은 여정을 통째로 다시 찾았으면 그 여정의 도착 시각(밀린 시간 더하기 전). 도착 예정은 _eta 대신 이 값을 기준으로 한다.
+  DateTime? _replannedEnd;
   Timer? _ticker;
   TtsSpeaker? _speaker;
   TraceUploader? _uploader;
@@ -179,7 +186,7 @@ class GuideSession extends ChangeNotifier {
       ActivityClassifier.mismatch(tracker.mode, _activity.current);
 
   /// 도착 예정 시각. 놓친 열차만큼 밀린 시간(LegTracker.shift)을 더한다.
-  DateTime? get eta => _eta?.add(tracker.shift);
+  DateTime? get eta => (_replannedEnd ?? _eta)?.add(tracker.shift);
 
   /// 남은 시간(분). 도착 예정 시각까지 남은 값이다.
   int get remainMin {
@@ -345,6 +352,8 @@ class GuideSession extends ChangeNotifier {
           _steps.update(p.latitude, p.longitude, accuracyM: p.accuracy)) {
         refreshLandmarks = true;
       }
+      // 열차로 가는 중이면 걷는 사람 기준의 도보 이탈 재탐색보다 먼저 판정한다(시작한 재탐색이 도보 이탈을 막는다).
+      _checkTransitDeviation(p, at);
       _checkOffRoute(p, at);
       _checkBikeReturned(p, at);
     }
@@ -427,9 +436,16 @@ class GuideSession extends ChangeNotifier {
 
   /// 도보 구간에서 경로를 벗어났으면 그 구간을 현재 위치에서 다시 찾는다. 대중교통은 정해진 노선을 따라가고
   /// 자전거는 양끝이 대여소로 묶여 있어(어디로 달리든 대여소에 반납한다) 둘 다 경로 이탈이 성립하지 않는다.
+  /// 역 안 환승 통로도 보지 않는다 — 지하 위치는 정차 1분 안에 최대 121m 흔들려(2026-11-04·10-09 운영 궤적) 이탈 기준
+  /// 60m 를 넘는다. 거기서 다른 열차를 타거나 역 밖으로 나오는 것은 _checkTransitDeviation 이 맡는다.
   /// 대중교통 바로 뒤 도보 구간인데 아직 탈것 안(활동 인식 vehicle)이면 판정하지 않는다.
   void _checkOffRoute(Position p, DateTime at) {
-    if (_rerouting || _ending || _arrivedAt != null || _stayUntil != null || tracker.current.mode != 'WALK') {
+    if (_rerouting ||
+        _ending ||
+        _arrivedAt != null ||
+        _stayUntil != null ||
+        tracker.current.mode != 'WALK' ||
+        tracker.current.inStation) {
       return;
     }
     if (tracker.riding(_activity.ridingView(at))) {
@@ -448,6 +464,107 @@ class GuideSession extends ChangeNotifier {
     _lastReroute = at;
     _replanLeg(LatLng(p.latitude, p.longitude));
   }
+
+  /// 열차로 가는 동안 계획과 다르게 움직이면(다른 역에서 내려 걷거나, 다른 열차를 탔거나, 내릴 역을 지나쳤으면) 남은
+  /// 여정을 지금 자리에서 다시 찾는다. 판정은 TransitDeviationDetector 로, 지하철·철도 구간과 역 안 환승 통로에서는 둘 다,
+  /// 지하철·철도에서 내려서 걷는 구간에서는 다른 열차만 본다(정차 중 하차역 40m 안에 들어 구간이 먼저 넘어가도 열차에
+  /// 남아 있을 수 있다). 경유지가 있는 안내는 지금이 어느 경유지 앞 구간인지 알 수 없어(체류 없는 경유지는 구간에 표시가
+  /// 없다) 하지 않는다.
+  void _checkTransitDeviation(Position p, DateTime at) {
+    final leg = tracker.current;
+    final i = tracker.index;
+    final watchWalk = _ridesRail(leg) || leg.inStation;
+    final afterRail = leg.mode == 'WALK' && i > 0 && _ridesRail(tracker.legs[i - 1]);
+    if (_rerouting ||
+        _ending ||
+        _arrivedAt != null ||
+        _stayUntil != null ||
+        !(watchWalk || afterRail) ||
+        request.via.isNotEmpty) {
+      return;
+    }
+    final deviation = _transitDeviation.update(
+      lat: p.latitude,
+      lon: p.longitude,
+      accuracyM: p.accuracy,
+      at: at,
+      pathM: _railPathM(p.latitude, p.longitude),
+      boardM: geo.distanceM(p.latitude, p.longitude, leg.fromLat, leg.fromLon),
+      alightM: geo.distanceM(p.latitude, p.longitude, leg.toLat, leg.toLon),
+      riding: tracker.riding(_activity.ridingView(at)),
+      watchWalk: watchWalk,
+    );
+    if (deviation == TransitDeviation.none) return;
+    final last = _lastReroute;
+    // 제한에 걸린 판정은 버린다(판정기는 이미 셈을 지웠다). 다음 표본부터 다시 센다.
+    if (last != null && at.difference(last) < rerouteMinGap) return;
+    _lastReroute = at;
+    unawaited(_replanTrip(LatLng(p.latitude, p.longitude), onBoard: deviation == TransitDeviation.otherTrain));
+  }
+
+  static bool _ridesRail(Leg leg) => leg.transitLeg && (leg.mode == 'SUBWAY' || leg.mode == 'RAIL');
+
+  /// 계획 경로까지 거리 — 지금 구간과 여정의 모든 지하철·철도·역 안 구간 경로선 중 가장 가까운 것. 지난 구간을 넣어야
+  /// 지난 역 자리가 다시 찍히는 튐을, 뒤 구간을 넣어야 구간이 늦게 따라온 표본을 계획 밖으로 보지 않는다.
+  double _railPathM(double lat, double lon) {
+    var best = double.infinity;
+    for (var k = 0; k < tracker.legs.length; k++) {
+      final l = tracker.legs[k];
+      if (k != tracker.index && !_ridesRail(l) && !l.inStation) continue;
+      final d = geo.projectOnPolyline(lat, lon, tracker.points[k]).distM;
+      if (d < best) best = d;
+    }
+    return best;
+  }
+
+  /// 구간에 들어올 때 열차 이탈 판정의 기준을 다시 잡는다. 위치·시간표로 넘어왔거나 다시 찾았으면(trustBoard) 이 구간
+  /// 탑승역·지금이 기준점이다. 안내를 시작·이어받았거나 손으로 구간을 옮겼으면 마지막 위치가 탑승역 offLineM 안일 때만
+  /// 그렇고, 아니면 기준점 없이 시작한다 — 역에서 먼 곳의 첫 표본들을 탑승역에서 열차 속도로 온 것으로 보지 않게.
+  void _startTransitDeviation({bool trustBoard = true}) {
+    final leg = tracker.current;
+    final here = _here;
+    final atBoard = trustBoard ||
+        (here != null &&
+            geo.distanceM(here.latitude, here.longitude, leg.fromLat, leg.fromLon) <=
+                TransitDeviationDetector.offLineM);
+    _transitDeviation.start(
+      at: now(),
+      boardLat: atBoard ? leg.fromLat : null,
+      boardLon: atBoard ? leg.fromLon : null,
+    );
+  }
+
+  /// 남은 여정을 지금 자리에서 목적지까지 다시 찾은 여정으로 갈아 끼운다. onBoard 면 서버가 가까운 역에서 열차를 타고
+  /// 있는 것으로 찾고, 그 역에서 지하철·철도를 바로 타는 여정을 고른다(없으면 첫 여정). 서버 순서는 추천순이다.
+  /// 내려서 걸으면(onBoard 아님) 지금 구간은 마친 것으로 남기고 그 뒤를, 열차로 가면 지금 구간부터 갈아 끼운다.
+  Future<void> _replanTrip(LatLng from, {required bool onBoard}) => _replan(
+        PlanRequest(
+          origin: Place(name: '현재 위치', address: '', lat: from.latitude, lon: from.longitude),
+          originOnBoard: onBoard,
+          destination: request.destination,
+          segmentModes: request.segmentModes,
+          bikeLimitMin: request.bikeLimitMin,
+        ),
+        searching: onBoard ? '열차 안에서 다시 찾는 중…' : '지하철에서 내린 것 같아 다시 찾는 중…',
+        found: onBoard ? '타고 있는 열차 기준으로 다시 찾았습니다' : '내린 곳에서 다시 찾았습니다',
+        utterance: onBoard
+            ? '계획과 다른 열차로 가고 있는 것 같아 경로를 다시 찾았습니다'
+            : '지하철에서 내린 것 같아 지금 위치에서 경로를 다시 찾았습니다',
+        apply: (res) {
+          final its = res.itineraries.where((it) => it.legs.isNotEmpty).toList();
+          if (its.isEmpty) return false;
+          final chosen =
+              onBoard ? its.firstWhere((it) => _ridesRail(it.legs.first), orElse: () => its.first) : its.first;
+          final before = tracker.legs.length;
+          tracker.replaceRest(_fromHere(chosen.legs), now(), keepCurrent: !onBoard);
+          _replannedEnd = DateTime.tryParse(chosen.end);
+          final after = tracker.legs.length;
+          for (var k = tracker.index; k < (before > after ? before : after); k++) {
+            _voice.forget('L$k:');
+          }
+          return true;
+        },
+      );
 
   /// 현재 위치에서 이 구간의 도착지까지 도보로 다시 찾아 구간을 갈아 끼운다. 뒤 구간은 그대로 둔다 —
   /// 다시 찾은 결과로 뒤 탑승을 놓치는 경우는 보지 않는다.
@@ -517,31 +634,71 @@ class GuideSession extends ChangeNotifier {
     required String searching,
     required String found,
     required String utterance,
+  }) {
+    final target = tracker.legs[tracker.index + count - 1];
+    return _replan(
+      PlanRequest(
+        origin: Place(
+          name: '현재 위치',
+          address: '',
+          lat: from.latitude,
+          lon: from.longitude,
+        ),
+        destination: Place(
+          name: target.toName,
+          address: '',
+          lat: target.toLat,
+          lon: target.toLon,
+        ),
+        segmentModes: const [SegmentMode.walk],
+      ),
+      searching: searching,
+      found: found,
+      utterance: utterance,
+      apply: (res) {
+        var fresh = res.itineraries.isEmpty
+            ? const <Leg>[]
+            : _fromHere(res.itineraries.first.legs);
+        // 체류하는 경유지로 가던 구간이면 그 표식을 새 경로의 마지막 구간에 옮긴다(도보 재탐색 응답에는 없다).
+        // raw 에도 넣어야 안내 저장본을 되살렸을 때 남는다.
+        if (target.stayVia > 0 && fresh.isNotEmpty) {
+          fresh = [
+            ...fresh.take(fresh.length - 1),
+            Leg.fromJson({...fresh.last.raw, 'stay_via': target.stayVia, 'stay_sec': target.staySec}),
+          ];
+        }
+        if (fresh.isEmpty) return false;
+        tracker.replaceCurrent(fresh, now(), count: count);
+        _voice.forget('L${tracker.index}:');
+        return true;
+      },
+    );
+  }
+
+  /// 다시 찾은 첫 구간의 출발 이름을 "현재 위치" 로 고친다. 서버는 "Origin" 으로 주고 legEndpointName 은 그것을 안내 요청
+  /// 지점(출발·경유·도착) 중 가장 가까운 이름으로 바꾸는데, 다시 찾은 출발은 그 지점들이 아니다. raw 에도 넣어야 안내
+  /// 저장본을 되살렸을 때 남는다. 코드로 만든 구간(raw 가 빈 테스트용)은 그대로 둔다.
+  static List<Leg> _fromHere(List<Leg> fresh) {
+    if (fresh.isEmpty || fresh.first.fromName != 'Origin' || fresh.first.raw.isEmpty) return fresh;
+    return [Leg.fromJson({...fresh.first.raw, 'from_name': '현재 위치'}), ...fresh.skip(1)];
+  }
+
+  /// 다시 찾기 공통 흐름. plan 으로 다시 찾고 apply 가 결과를 구간에 갈아 끼우면(false 면 쓸 결과가 없다) 다시 찾았다고
+  /// 알린다. 쓸 결과가 없거나 실패하면 원래 경로로 이어 간다.
+  Future<void> _replan(
+    PlanRequest plan, {
+    required String searching,
+    required String found,
+    required String utterance,
+    required bool Function(PlanResult res) apply,
   }) async {
     final leg = tracker.current;
-    final target = tracker.legs[tracker.index + count - 1];
     _set(() {
       _rerouting = true;
       _status = searching;
     });
     try {
-      final res = await api.plan(
-        PlanRequest(
-          origin: Place(
-            name: '현재 위치',
-            address: '',
-            lat: from.latitude,
-            lon: from.longitude,
-          ),
-          destination: Place(
-            name: target.toName,
-            address: '',
-            lat: target.toLat,
-            lon: target.toLon,
-          ),
-          segmentModes: const [SegmentMode.walk],
-        ),
-      );
+      final res = await api.plan(plan);
       if (_closed || _ending || _arrivedAt != null) return;
       // 기다리는 동안 구간이 넘어갔으면(자동 인계·버튼) 이 결과는 남의 구간 것이다. 이탈 셈은 구간이 바뀔 때
       // 이미 지워졌다.
@@ -549,26 +706,13 @@ class GuideSession extends ChangeNotifier {
         _set(() => _status = '안내 중');
         return;
       }
-      var fresh = res.itineraries.isEmpty
-          ? const <Leg>[]
-          : res.itineraries.first.legs;
-      // 체류하는 경유지로 가던 구간이면 그 표식을 새 경로의 마지막 구간에 옮긴다(도보 재탐색 응답에는 없다).
-      // raw 에도 넣어야 안내 저장본을 되살렸을 때 남는다.
-      if (target.stayVia > 0 && fresh.isNotEmpty) {
-        fresh = [
-          ...fresh.take(fresh.length - 1),
-          Leg.fromJson({...fresh.last.raw, 'stay_via': target.stayVia, 'stay_sec': target.staySec}),
-        ];
-      }
-      if (fresh.isEmpty) {
+      if (!apply(res)) {
         _offRoute.reset();
         _set(() => _status = '다시 찾은 경로가 없습니다 — 원래 경로로 안내합니다');
         return;
       }
-      tracker.replaceCurrent(fresh, now(), count: count);
       _offRoute.reset();
       _bikeReturn.reset();
-      _voice.forget('L${tracker.index}:');
       await _voice.say(
         utterance,
         cueKey: 'reroute:${now().millisecondsSinceEpoch}',
@@ -586,8 +730,8 @@ class GuideSession extends ChangeNotifier {
 
   /// 구간이 바뀌었을 때(자동·버튼 공통) 단계·정차 추적을 새 구간으로 갈아 끼우고 문구를 다시 만든다.
   /// arrived 는 앞 구간을 마치고 넘어왔다는 뜻이다(자동 넘김·"다음 구간"). 그 앞 구간 끝이 체류하는 경유지면 체류를
-  /// 시작한다. 뒤로 가거나 구간을 갈아 끼웠으면 체류를 끝낸다.
-  void _enterLeg({bool arrived = false}) {
+  /// 시작한다. 뒤로 가거나 구간을 갈아 끼웠으면 체류를 끝낸다. manual 은 사용자가 버튼으로 옮겼다는 뜻이다.
+  void _enterLeg({bool arrived = false, bool manual = false}) {
     final leg = tracker.current;
     _stayUntil = arrived ? _beginStay() : null;
     _arrival.reset(); // 마지막 구간을 벗어났거나 갈아 끼웠으면 도착 셈을 다시 시작한다
@@ -596,6 +740,7 @@ class GuideSession extends ChangeNotifier {
     _steps = _stepTrackerFor(leg);
     _stops = StopTracker(leg, tracker.currentPoints, shift: tracker.shift);
     _remainingStops = leg.transitLeg ? leg.stops.length + 1 : 0;
+    _startTransitDeviation(trustBoard: !manual);
     _instr = _buildInstruction();
     unawaited(_refreshLandmarks());
     _announce();
@@ -654,6 +799,7 @@ class GuideSession extends ChangeNotifier {
           shift: tracker.shift,
           startedAt: startedAt,
           stayUntil: _stayUntil,
+          eta: _replannedEnd,
         ),
       ),
     );
@@ -686,7 +832,7 @@ class GuideSession extends ChangeNotifier {
     tracker.prev(now: now());
     _offRoute.reset();
     _voice.forget('L${tracker.index}:');
-    _enterLeg();
+    _enterLeg(manual: true);
     _notify();
   }
 
@@ -695,7 +841,7 @@ class GuideSession extends ChangeNotifier {
     tracker.next(now: now());
     _offRoute.reset();
     _voice.forget('L${tracker.index}:');
-    _enterLeg(arrived: true);
+    _enterLeg(arrived: true, manual: true);
     _notify();
   }
 
